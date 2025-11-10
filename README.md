@@ -1,16 +1,40 @@
-# shopmate
+# 🚀 ShopMate POS
 
-A new Flutter project.
+**ShopMate POS** is a full-featured Point of Sale (POS) system built with **Flutter** and **Dart**, designed for efficient sales and inventory management with barcode scanning support.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## ✨ Features
 
-A few resources to get you started if this is your first Flutter project:
+- 🛒 **Product Management:** Add, edit, delete products, and track inventory.
+- 💵 **Sales Operations:** Support for cash and credit sales directly from the sales interface.
+- 🧾 **Invoices:** Automatic generation of invoices for each sale.
+- 📊 **Financial Reports:** Daily, monthly, and yearly reports with profit tracking.
+- 👥 **Customer Management:** Track customers and manage credit balances.
+- ⚙️ **System Settings:** Admin and Cashier roles with configurable permissions.
+- 💾 **Database:** Local storage using **SQLite** for offline functionality.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+---
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 🛠 Technologies
+
+- **Programming Language:** Dart
+- **Framework:** Flutter
+- **Database:** SQLite
+- **Additional Tools:** Barcode Scanner integration
+
+---
+
+## 🎯 Project Goal
+
+To provide a **user-friendly and complete POS system** for managing products, sales, customers, and financial reports efficiently.
+
+---
+
+## 🚀 How to Run
+
+1. Clone the repository and open it in **Flutter IDE** (Android Studio / VS Code).
+2. Install required packages:
+   ```bash
+   flutter pub get
+   ```
