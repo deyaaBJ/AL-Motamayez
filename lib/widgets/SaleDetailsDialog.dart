@@ -1,6 +1,8 @@
 // widgets/sale_details_dialog.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shopmate/models/customer.dart';
+import 'package:shopmate/providers/auth_provider.dart';
 import 'package:shopmate/widgets/customer_selection_dialog.dart';
 import '../models/sale.dart';
 import '../providers/sales_provider.dart';
@@ -348,6 +350,8 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
   }
 
   Widget _buildInvoiceInfo(BuildContext context, Sale sale) {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final role = auth.role;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -365,8 +369,7 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
             valueColor: Colors.blue,
           ),
           const SizedBox(height: 12),
-
-          _buildEditShowForTax(context, sale),
+          if (role != 'tax') _buildEditShowForTax(context, sale),
         ],
       ),
     );
@@ -436,7 +439,7 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
               ),
               const SizedBox(height: 2),
               Text(
-                sale.showForTax ? 'مضمنه بالضرائب ✅' : 'عدم مضمنه بالضرائب ❌',
+                sale.showForTax ? 'مضمنه بالضرائب ✅' : 'غير مضمنه بالضرائب ❌',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,

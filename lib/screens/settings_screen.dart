@@ -129,6 +129,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildContactSection(),
             const SizedBox(height: 20),
 
+            _buildTaxSettingsSection(),
+            const SizedBox(height: 20),
             // قسم إعدادات المخزون
             _buildStockSettingsSection(),
             const SizedBox(height: 20),
@@ -651,9 +653,139 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  bool _obscureCurrent = true;
-  bool _obscureNew = true;
-  bool _obscureConfirm = true;
+  // قسم إعدادات الضريبة
+  Widget _buildTaxSettingsSection() {
+    return Consumer<SettingsProvider>(
+      builder: (context, settingsProvider, child) {
+        // طباعة القيمة الحالية للمساعدة في التصحيح
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // العنوان
+              Row(
+                children: [
+                  Icon(Icons.receipt_long, color: Colors.blue[700], size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'الإعدادات الضريبية',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // إعداد الضريبة الافتراضي
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'الضريبة الافتراضية للمبيعات',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'تحدد إذا كانت الضريبة مضمنة تلقائياً في الفواتير الجديدة',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Container(
+                    width: 180,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: settingsProvider.defaultTaxSetting,
+                        isExpanded: true,
+                        items: [
+                          DropdownMenuItem(
+                            value: 0,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: Text(
+                                'غير مضمنه بالضرائب',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 1,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: Text(
+                                'مضمنه بالضرائب',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        onChanged: (int? newValue) {
+                          // استدعاء دالة التحديث في البروفايدر
+                          settingsProvider.updateDefaultTaxSetting(newValue!);
+                        },
+                        icon: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   void _showChangePasswordDialog() {
     showDialog(

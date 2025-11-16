@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shopmate/models/cart_item.dart';
 import 'package:shopmate/models/customer.dart';
 import 'package:shopmate/models/product.dart';
+import 'package:shopmate/providers/auth_provider.dart';
 import 'package:shopmate/providers/customer_provider.dart';
 import 'package:shopmate/providers/product_provider.dart';
 import 'package:shopmate/widgets/cart_item_widget.dart';
@@ -486,8 +487,14 @@ class _PosScreenState extends State<PosScreen> {
 
   Future<void> _processSaleWithValidation({bool printInvoice = false}) async {
     try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final role = auth.role ?? '';
       // محاولة إتمام البيع مع التحقق من الكميات
-      await _provider.addSale(cartItems: _cartItems, totalAmount: _totalAmount);
+      await _provider.addSale(
+        cartItems: _cartItems,
+        totalAmount: _totalAmount,
+        userRole: role,
+      );
 
       // إذا نجحت العملية بدون أخطاء، نكمل
       if (printInvoice) {
@@ -572,11 +579,14 @@ class _PosScreenState extends State<PosScreen> {
 
   Future<void> _handleSaleCompletion(Customer customer) async {
     try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final role = auth.role ?? '';
       await _provider.addSale(
         cartItems: _cartItems,
         totalAmount: _totalAmount,
         paymentType: 'credit',
         customerId: customer.id,
+        userRole: role,
       );
 
       await _showSaleConfirmationDialog();

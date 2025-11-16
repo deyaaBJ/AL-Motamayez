@@ -1,6 +1,7 @@
 // screens/sales_history_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shopmate/providers/auth_provider.dart';
 import '../providers/sales_provider.dart';
 import '../widgets/SaleDetailsDialog.dart';
 import '../models/sale.dart';
@@ -65,6 +66,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   }
 
   Widget _buildCompactFiltersSection() {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final role = auth.role;
+
     return Consumer<SalesProvider>(
       builder: (context, provider, _) {
         return Container(
@@ -87,19 +91,20 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
               // الفلاتر في صف واحد
               Row(
                 children: [
-                  // فلتر نوع البيع
                   Expanded(child: _buildCompactPaymentFilter(provider)),
-                  const SizedBox(width: 12), // مسافة أكبر
-                  // فلتر اسم المشتري
+                  const SizedBox(width: 12),
+
                   Expanded(child: _buildCompactCustomerFilter(provider)),
-                  const SizedBox(width: 12), // مسافة أكبر
-                  // فلتر التاريخ
+                  const SizedBox(width: 12),
+
                   Expanded(child: _buildCompactDateFilter(provider)),
-                  const SizedBox(width: 12), // مسافة أكبر
-                  // فلتر نوع الضريبة
-                  Expanded(child: _buildCompactTaxFilter(provider)),
-                  //
-                  // زر المسح
+                  const SizedBox(width: 12),
+
+                  if (role != 'tax') ...[
+                    Expanded(child: _buildCompactTaxFilter(provider)),
+                    const SizedBox(width: 12),
+                  ],
+
                   _buildCompactClearButton(provider),
                 ],
               ),

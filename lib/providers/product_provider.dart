@@ -139,8 +139,35 @@ class ProductProvider with ChangeNotifier {
     required double totalAmount,
     String paymentType = 'cash',
     int? customerId,
+    required String userRole, // إضافة دور المستخدم
   }) async {
     final db = await _dbHelper.db;
+
+    // 🔹 تحديد قيمة showForTax بناءً على المنطق المطلوب
+    int showForTax;
+
+    if (userRole == 'tax') {
+      // إذا كان المستخدم من قسم الضرائب، الفاتورة دائماً مضمنة
+      showForTax = 1;
+      print('🎯 مستخدم ضريبي - الفاتورة مضمنة بالضرائب');
+    } else {
+      // إذا لم يكن، نستخدم الإعداد الافتراضي
+      final settings = await db.query('settings', limit: 1);
+      if (settings.isNotEmpty) {
+        dynamic taxSetting = settings.first['defaultTaxSetting'];
+        if (taxSetting is String) {
+          showForTax = int.tryParse(taxSetting) ?? 0;
+        } else if (taxSetting is int) {
+          showForTax = taxSetting;
+        } else {
+          showForTax = 0;
+        }
+      } else {
+        showForTax = 0;
+      }
+
+      print('🎯 إعداد افتراضي - showForTax: $showForTax');
+    }
 
     // التحقق من الكميات قبل بدء المعاملة
     for (var item in cartItems) {
@@ -171,13 +198,14 @@ class ProductProvider with ChangeNotifier {
 
     // إذا كل المنتجات كافية، نكمل العملية
     await db.transaction((txn) async {
-      // 1️⃣ إضافة صف في جدول sales مع دعم credit و customer_id
+      // 1️⃣ إضافة صف في جدول sales مع حقل showForTax
       final saleId = await txn.insert('sales', {
         'date': DateTime.now().toIso8601String(),
         'total_amount': totalAmount,
         'total_profit': 0.0,
         'customer_id': customerId,
         'payment_type': paymentType,
+        'show_for_tax': showForTax, // الحقل الجديد
       });
 
       double totalProfit = 0.0;
@@ -221,6 +249,7 @@ class ProductProvider with ChangeNotifier {
       );
     });
 
+    print('✅ تم إضافة الفاتورة بنجاح - showForTax: $showForTax');
     notifyListeners();
   }
 }

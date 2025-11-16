@@ -36,6 +36,18 @@ class _MainScreenState extends State<MainScreen> {
         role == 'admin'
             ? _sections
             : _sections.where((section) {
+              if (role == 'cashier') {
+                // الكاشير → المنتجات فقط
+                return section.title == 'المنتجات';
+              }
+
+              if (role == 'tax') {
+                // حساب الضريبة → المنتجات + المبيعات
+                return section.title == 'المنتجات' ||
+                    section.title == 'المبيعات';
+              }
+
+              // أي دور آخر (لو موجود)
               return section.title == 'المنتجات';
             }).toList();
 

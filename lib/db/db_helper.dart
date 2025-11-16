@@ -66,6 +66,13 @@ class DBHelper {
       'role': 'cashier',
     });
 
+    await db.insert('users', {
+      'name': 'Deyaa',
+      'email': 'deyaa@system.com',
+      'password': '123456',
+      'role': 'tax',
+    });
+
     // 🧾 جدول الفواتير
     await db.execute('''
  CREATE TABLE sales (
@@ -75,7 +82,7 @@ class DBHelper {
     total_profit REAL NOT NULL DEFAULT 0,
     customer_id INTEGER, 
     payment_type TEXT NOT NULL DEFAULT 'cash', 
-    show_for_tax INTEGER NOT NULL DEFAULT 0,
+    show_for_tax INTEGER,
     FOREIGN KEY (customer_id) REFERENCES customers (id)
   );
 
@@ -110,10 +117,15 @@ class DBHelper {
   CREATE TABLE settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     lowStockThreshold INTEGER,
-    marketName TEXT
+    marketName TEXT,
+    defaultTaxSetting INTEGER NOT NULL DEFAULT 0
   )
 ''');
 
-    await db.insert('settings', {'lowStockThreshold': 5, 'marketName': null});
+    await db.insert('settings', {
+      'lowStockThreshold': 5,
+      'marketName': null,
+      'defaultTaxSetting': 0,
+    });
   }
 }
