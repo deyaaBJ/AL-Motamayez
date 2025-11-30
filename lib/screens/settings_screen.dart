@@ -1,6 +1,7 @@
 // screens/settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/constant/constant.dart';
 import 'package:shopmate/providers/auth_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
@@ -116,25 +117,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F5FF),
-      appBar: AppBar(
-        title: const Text(
-          'الإعدادات',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+    return Directionality(
+      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      child: BaseLayout(
+        currentPage: 'settings', // اسم الصفحة للسايدبار
+        showAppBar: true,
+        title: 'الإعدادات',
+        actions: [
+          IconButton(
+            onPressed: () {
+              // أي عملية تحديث إذا احتجت
+            },
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: _buildResponsiveLayout(constraints.maxWidth),
+            );
+          },
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF6A3093),
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: _buildResponsiveLayout(constraints.maxWidth),
-          );
-        },
       ),
     );
   }

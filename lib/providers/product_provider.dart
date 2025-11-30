@@ -59,8 +59,8 @@ class ProductProvider with ChangeNotifier {
 
     final result = await db.query(
       'products',
-      where: 'barcode LIKE ?',
-      whereArgs: ['%$barcode%'],
+      where: 'barcode = ?', // 🔹 مطابقة كاملة
+      whereArgs: [barcode], // لا نضع % لأنها للبحث الجزئي
     );
 
     return result.map((map) => Product.fromMap(map)).toList();

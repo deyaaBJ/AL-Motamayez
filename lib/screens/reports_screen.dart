@@ -1,6 +1,7 @@
 // screens/reports_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/providers/settings_provider.dart';
 import '../providers/reports_provider.dart'; // تأكد من استخدام ReportsProvider
 
@@ -22,54 +23,52 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text(
-          'التقارير والإحصائيات',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
+    return Directionality(
+      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      child: BaseLayout(
+        currentPage: 'التقارير', // اسم الصفحة للسايدبار
+        showAppBar: true, // إظهار AppBar
+        title: 'التقارير والإحصائيات',
+        actions: [
+          IconButton(
+            onPressed: () {
+              // أي عملية تحديث
+            },
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+        floatingActionButton: null, // إذا ما في FAB، ضع null
+        child: Consumer<ReportsProvider>(
+          builder: (context, provider, _) {
+            if (provider.isLoadingReports) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildPeriodFilter(provider),
+                  const SizedBox(height: 20),
+
+                  _buildStatsCards(provider),
+                  const SizedBox(height: 24),
+
+                  _buildWeeklySalesTable(provider),
+                  const SizedBox(height: 24),
+
+                  _buildDetailedStats(provider),
+                  const SizedBox(height: 24),
+
+                  _buildTopProducts(provider),
+                  const SizedBox(height: 24),
+
+                  _buildTopCustomers(provider),
+                ],
+              ),
+            );
+          },
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.blue[800],
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: Consumer<ReportsProvider>(
-        builder: (context, provider, _) {
-          if (provider.isLoadingReports) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // فلتر الفترة الزمنية
-                _buildPeriodFilter(provider),
-                const SizedBox(height: 20),
-
-                // بطاقات الإحصائيات الرئيسية
-                _buildStatsCards(provider),
-                const SizedBox(height: 24),
-
-                // منحنى تطور الأرباح والمبيعات (ثابت - آخر 7 أيام)
-                _buildWeeklySalesTable(provider), // تغيير الاسم للتوضيح
-                const SizedBox(height: 24),
-
-                // الإحصائيات التفصيلية
-                _buildDetailedStats(provider),
-                const SizedBox(height: 24),
-
-                // المنتجات الأكثر مبيعاً
-                _buildTopProducts(provider),
-                const SizedBox(height: 24),
-
-                // العملاء الأكثر شراءً
-                _buildTopCustomers(provider),
-              ],
-            ),
-          );
-        },
       ),
     );
   }
@@ -115,9 +114,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
         int crossAxisCount = 3;
         double screenWidth = constraints.maxWidth;
 
-        if (screenWidth < 600) {
+        if (screenWidth < 400) {
           crossAxisCount = 1;
-        } else if (screenWidth < 1100) {
+        } else if (screenWidth < 700) {
           crossAxisCount = 2;
         }
 

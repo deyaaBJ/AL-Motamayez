@@ -1,6 +1,7 @@
 // screens/customers_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/providers/settings_provider.dart';
 import '../models/customer.dart';
 import '../providers/customer_provider.dart';
@@ -26,22 +27,34 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F5FF),
-      appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          // شريط البحث والإحصائيات
-          _buildHeaderSection(),
-
-          // جدول العملاء
-          Expanded(child: _buildCustomersTable()),
+    return Directionality(
+      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      child: BaseLayout(
+        currentPage: 'العملاء', // اسم الصفحة للسايدبار
+        showAppBar: true,
+        title: 'إدارة العملاء',
+        actions: [
+          IconButton(
+            onPressed: () {
+              // عملية تحديث أو إعادة تحميل
+            },
+            icon: const Icon(Icons.refresh),
+          ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addNewCustomer,
-        backgroundColor: const Color(0xFF6A3093),
-        child: const Icon(Icons.person_add, color: Colors.white, size: 28),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _addNewCustomer,
+          backgroundColor: const Color(0xFF6A3093),
+          child: const Icon(Icons.person_add, color: Colors.white, size: 28),
+        ),
+        child: Column(
+          children: [
+            // شريط البحث والإحصائيات
+            _buildHeaderSection(),
+
+            // جدول العملاء
+            Expanded(child: _buildCustomersTable()),
+          ],
+        ),
       ),
     );
   }

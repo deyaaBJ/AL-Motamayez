@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/models/product.dart';
 import 'package:shopmate/models/product_unit.dart';
 import 'package:shopmate/providers/product_provider.dart';
@@ -96,33 +97,26 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Widget build(BuildContext context) {
     final bool isDesktop = MediaQuery.of(context).size.width > 600;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F5FF),
-      appBar: _buildAppBar(),
-      body: Padding(
-        padding:
-            isDesktop
-                ? const EdgeInsets.fromLTRB(40, 70, 40, 0)
-                : const EdgeInsets.all(20),
-        child: _buildBody(isDesktop),
-      ),
-    );
-  }
-
-  AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 2,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Color(0xFF6A3093)),
-        onPressed: () => Navigator.pop(context),
-      ),
-      title: Text(
-        _isNewProduct ? 'إضافة منتج جديد' : 'تحديث المنتج',
-        style: const TextStyle(
-          color: Color(0xFF6A3093),
-          fontSize: 22,
-          fontWeight: FontWeight.bold,
+    return Directionality(
+      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      child: BaseLayout(
+        currentPage: 'المنتجات', // الصفحة الحالية
+        showAppBar: true,
+        title: _isNewProduct ? 'إضافة منتج جديد' : 'تحديث المنتج',
+        actions: [
+          IconButton(
+            onPressed: () {
+              // أي إجراء تريده هنا
+            },
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+        child: Padding(
+          padding:
+              isDesktop
+                  ? const EdgeInsets.fromLTRB(40, 70, 40, 0)
+                  : const EdgeInsets.all(20),
+          child: _buildBody(isDesktop),
         ),
       ),
     );
@@ -747,7 +741,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _unitControllers.clear();
     _unitIds.clear();
     _barcodeController.text = '';
-    _qrController.text = '';
   }
 
   Future<void> _saveProduct() async {

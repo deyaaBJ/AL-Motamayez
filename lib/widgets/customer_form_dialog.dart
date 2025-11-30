@@ -29,27 +29,30 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // العنوان
-            _buildHeader(),
+    return Directionality(
+      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      child: Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, // النص يبدأ من اليمين
+            children: [
+              // العنوان
+              _buildHeader(),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-            // النموذج
-            _buildForm(),
+              // النموذج
+              _buildForm(),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // الأزرار
-            _buildActionButtons(),
-          ],
+              // الأزرار
+              _buildActionButtons(),
+            ],
+          ),
         ),
       ),
     );

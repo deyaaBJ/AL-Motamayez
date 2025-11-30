@@ -6,6 +6,7 @@ import 'package:shopmate/providers/product_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
 import 'package:shopmate/providers/reports_provider.dart';
 import 'package:shopmate/providers/sales_provider.dart';
+import 'package:shopmate/providers/sidebar_provider.dart';
 import 'package:shopmate/screens/SalesHistoryScreen.dart';
 import 'package:shopmate/screens/auth/login.dart';
 import 'package:shopmate/providers/auth_provider.dart';
@@ -41,6 +42,9 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ReportsProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => ProductProvider()),
+        ChangeNotifierProvider(
+          create: (_) => SideBarProvider(),
+        ), // أضف هذا السطر
       ],
       child: const ShopMateApp(),
     ),

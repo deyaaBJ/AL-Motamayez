@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/models/app_section.dart';
-import 'package:shopmate/models/sale.dart';
+import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/providers/auth_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
-import 'package:shopmate/screens/pos_screen.dart';
-import 'package:shopmate/widgets/sale_center_button.dart';
-import 'package:shopmate/widgets/sections_grid.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -16,280 +12,264 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  // الأقسام الرئيسية
-  final List<AppSection> _sections = [
-    AppSection('المبيعات', Icons.point_of_sale, const Color(0xFF8B5FBF)),
-    AppSection('المنتجات', Icons.inventory_2, const Color(0xFF6A3093)),
-    AppSection('التقارير', Icons.analytics, const Color(0xFF4A1C6D)),
-    AppSection(
-      'العملاء',
-      Icons.people,
-      const Color.fromARGB(255, 131, 78, 190),
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(
+      () =>
+          Provider.of<SettingsProvider>(context, listen: false).loadSettings(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
-    final role = auth.role;
+    final role = Provider.of<AuthProvider>(context).role;
 
-    // فلترة الأقسام حسب الدور
-    final filteredSections =
-        role == 'admin'
-            ? _sections
-            : _sections.where((section) {
-              if (role == 'cashier') {
-                // الكاشير → المنتجات فقط
-                return section.title == 'المنتجات';
-              }
-
-              if (role == 'tax') {
-                // حساب الضريبة → المنتجات + المبيعات
-                return section.title == 'المنتجات' ||
-                    section.title == 'المبيعات';
-              }
-
-              // أي دور آخر (لو موجود)
-              return section.title == 'المنتجات';
-            }).toList();
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F5FF),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 20),
-
-              // زر بدء بيع جديد يظهر للجميع
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 80),
-                child: SaleCenterButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/pos');
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              Expanded(
-                child: SectionsGrid(
-                  sections: filteredSections,
-                  onSectionTap: (section) {
-                    switch (section.title) {
-                      case 'المنتجات':
-                        Navigator.pushNamed(context, '/product');
-                        break;
-                      case 'المبيعات':
-                        Navigator.pushNamed(context, '/salesHistory');
-                        break;
-                      case 'التقارير':
-                        Navigator.pushNamed(context, '/report');
-                        break;
-                      case 'العملاء':
-                        Navigator.pushNamed(context, '/customer');
-                        break;
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-
-          if (role == 'admin')
-            Positioned(
-              bottom: 30,
-              left: 24,
-              child: _buildFloatingSettingsButton(),
-            ),
-          Positioned(
-            bottom: 30,
-            right: 24,
-            child: _buildFloatingLogoutButton(),
-          ),
-        ],
+    return Directionality(
+      textDirection: TextDirection.rtl, // 🔥 تحويل كل الواجهة للعربي
+      child: BaseLayout(
+        currentPage: 'home',
+        showAppBar: false,
+        child: _buildMainContent(context, role),
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return FutureBuilder<void>(
-      future:
-          Provider.of<SettingsProvider>(context, listen: false).loadSettings(),
-      builder: (context, snapshot) {
-        final settingsProvider = Provider.of<SettingsProvider>(context);
-        final marketName = settingsProvider.marketName ?? 'اسم المتجر';
-
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 24),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF8B5FBF), Color(0xFF6A3093), Color(0xFF4A1C6D)],
-            ),
-            borderRadius: const BorderRadius.only(
-              bottomLeft: Radius.circular(20),
-              bottomRight: Radius.circular(20),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.purple.withOpacity(0.3),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
+  Widget _buildMainContent(BuildContext context, String? role) {
+    return Column(
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 25),
+          color: Colors.transparent,
+          child: Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end, // 🔥 النص لليمين
+                children: [
+                  const Text(
+                    "مرحباً بك مرة أخرى،",
+                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    "لوحة التحكم",
+                    style: TextStyle(
+                      color: Colors.grey.shade800,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.notifications_none,
+                  color: Color(0xFF6A3093),
+                ),
               ),
             ],
           ),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // استبدال الأيقونة بالصورة
-                  Container(
-                    width: 70, // عرض الصورة
-                    height: 70, // ارتفاع الصورة
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
+        ),
+
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 30),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end, // 🔥 محتوى يمين
+              children: [
+                // بطاقة الهيرو
+                Container(
+                  width: double.infinity,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF8B5FBF), Color(0xFF4A1C6D)],
+                      begin: Alignment.topRight, // 🔥 عربي
+                      end: Alignment.bottomLeft,
                     ),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/images/shop_logo.png', // مسار الصورة
-                        fit: BoxFit.fill, // تغطية كاملة للدائرة
-                        height: 100,
-                        width: 60,
+                    borderRadius: BorderRadius.circular(25),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF6A3093).withOpacity(0.4),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Stack(
                     children: [
-                      const Text(
-                        'ShopMate POS',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                      Positioned(
+                        left: -20, // 🔥 جهة اليسار بالعربي
+                        top: -20,
+                        child: Icon(
+                          Icons.shopping_cart,
+                          size: 150,
+                          color: Colors.white.withOpacity(0.1),
                         ),
                       ),
-                      Text(
-                        marketName,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
+                      Padding(
+                        padding: const EdgeInsets.all(30),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end, // عربي
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              "جاهز للبيع؟",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              "ابدأ عملية بيع جديدة بسرعة وسهولة",
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const Spacer(),
+                            ElevatedButton.icon(
+                              onPressed:
+                                  () => Navigator.pushNamed(context, '/pos'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: const Color(0xFF4A1C6D),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 0,
+                              ),
+                              icon: const Icon(Icons.add),
+                              label: const Text("فاتورة جديدة"),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+                ),
 
-  Widget _buildFloatingSettingsButton() {
-    return Column(
-      children: [
-        // زر الإعدادات الدائري
-        Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF8B5FBF), Color(0xFF6A3093)],
-            ),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.purple.withOpacity(0.4),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
-              ),
-            ],
-            border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                Navigator.pushNamed(context, '/settings');
-              },
-              borderRadius: BorderRadius.circular(30),
-              child: const Icon(Icons.settings, color: Colors.white, size: 26),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
+                const SizedBox(height: 30),
 
-        // نص الإعدادات بدون خلفية بيضاء
-        const Text(
-          'الإعدادات',
-          style: TextStyle(
-            color: Color(0xFF6A3093),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
+                const Text(
+                  "نظرة عامة اليوم",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 15),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        "المبيعات",
+                        "250 د.أ",
+                        Icons.monetization_on,
+                        Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: _buildStatCard(
+                        "الطلبات",
+                        "12",
+                        Icons.receipt_long,
+                        Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 15),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        "المنتجات",
+                        "1,204",
+                        Icons.inventory,
+                        Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    const Spacer(),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildFloatingLogoutButton() {
-    return Column(
-      children: [
-        Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF8B5FBF), Color(0xFF6A3093)],
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        textDirection: TextDirection.rtl, // 🔥 أيقونة يمين ونص يسار
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.purple.withOpacity(0.4),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(width: 15),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                title,
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               ),
             ],
-            border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
           ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                Navigator.pushNamed(context, '/login');
-              },
-              borderRadius: BorderRadius.circular(30),
-              child: const Icon(Icons.logout, color: Colors.white, size: 26),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        // نص الإعدادات بدون خلفية بيضاء
-        const Text(
-          'الخروج',
-          style: TextStyle(
-            color: Color(0xFF6A3093),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

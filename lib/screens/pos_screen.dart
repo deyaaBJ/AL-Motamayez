@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/components/posPageCompoments/custom_app_bar.dart';
 import 'package:shopmate/components/posPageCompoments/search_section.dart';
 import 'package:shopmate/models/cart_item.dart';
@@ -187,38 +188,58 @@ class _PosScreenState extends State<PosScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F5FF),
-      appBar: buildCustomAppBar(context), // ✅ تم إصلاح الخطأ هنا
-      body: Column(
-        children: [
-          // عرض معلومات الوضع الحالي
-          if (widget.isReturnMode || widget.isEditMode) _buildModeBanner(),
 
-          SearchSection(
-            searchController: _searchController,
-            searchFocusNode: _searchFocusNode,
-            searchType: _searchType,
-            isSearching: _isSearching,
-            performSearch: _performSearch,
-            onEnterPressed: _handleEnterPressed,
-            clearSearch: _clearSearch,
-            showSearchResults: _showSearchResults,
-            refreshState: () => setState(() {}),
-            onChangeSearchType: (type) {
-              setState(() {
-                _searchType = type;
-                _searchController.clear();
-                _showSearchResults = false;
-                _searchResults.clear();
-              });
+    return Directionality(
+      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      child: BaseLayout(
+        currentPage: 'المبيعات', // اسم الصفحة للسايدبار
+        showAppBar: true,
+        title: 'نقاط البيع',
+        actions: [
+          IconButton(
+            onPressed: () {
+              // أي عملية تحديث أو إعادة تحميل
             },
+            icon: const Icon(Icons.refresh),
           ),
-
-          if (_showSearchResults) _buildSearchResults(),
-          Expanded(child: _buildCartTable()),
-          _buildTotalAndButtons(),
         ],
+        floatingActionButton: null, // أو ضع FAB إذا احتجت
+        child: Column(
+          children: [
+            // عرض معلومات الوضع الحالي
+            if (widget.isReturnMode || widget.isEditMode) _buildModeBanner(),
+
+            // قسم البحث
+            SearchSection(
+              searchController: _searchController,
+              searchFocusNode: _searchFocusNode,
+              searchType: _searchType,
+              isSearching: _isSearching,
+              performSearch: _performSearch,
+              onEnterPressed: _handleEnterPressed,
+              clearSearch: _clearSearch,
+              showSearchResults: _showSearchResults,
+              refreshState: () => setState(() {}),
+              onChangeSearchType: (type) {
+                setState(() {
+                  _searchType = type;
+                  _searchController.clear();
+                  _showSearchResults = false;
+                  _searchResults.clear();
+                });
+              },
+            ),
+
+            // نتائج البحث
+            if (_showSearchResults) _buildSearchResults(),
+
+            // جدول العربة أو المبيعات
+            Expanded(child: _buildCartTable()),
+
+            // إجمالي المبيعات والأزرار
+            _buildTotalAndButtons(),
+          ],
+        ),
       ),
     );
   }

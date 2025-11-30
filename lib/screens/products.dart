@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/models/productFilter.dart';
 import 'package:shopmate/providers/product_provider.dart';
 import 'package:shopmate/models/product.dart';
@@ -80,40 +81,41 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F5FF),
-      appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          ProductFilterBar(
-            currentFilter: _currentFilter,
-            onFilterChanged: (filter) {
-              setState(() {
-                _currentFilter = filter;
-              });
+    return Directionality(
+      textDirection: TextDirection.rtl, // 🔥 تحويل كل الواجهة للعربي
+      child: BaseLayout(
+        currentPage: 'المنتجات',
+        showAppBar: true,
+        title: 'إدارة المنتجات',
+        actions: [
+          // إذا كان لديك أي actions في AppBar أضفها هنا
+          IconButton(
+            onPressed: () {
+              /* action */
             },
+            icon: Icon(Icons.refresh),
           ),
-
-          _buildSearchBar(),
-
-          ProductTableHeader(
-            columns: const [
-              HeaderColumn(label: 'اسم المنتج', flex: 3),
-              HeaderColumn(label: 'السعر', flex: 2),
-              HeaderColumn(label: 'سعر التكلفة', flex: 2),
-              HeaderColumn(label: 'الكمية', flex: 2),
-              HeaderColumn(label: 'الحالة', flex: 1),
-              HeaderColumn(label: '', flex: 1),
-            ],
-          ),
-
-          Expanded(child: _buildProductsList()),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addNewProduct,
-        backgroundColor: const Color(0xFF8B5FBF),
-        child: const Icon(Icons.add, color: Colors.white, size: 28),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _addNewProduct,
+          backgroundColor: const Color(0xFF8B5FBF),
+          child: const Icon(Icons.add, color: Colors.white, size: 28),
+        ),
+        child: Column(
+          children: [
+            ProductFilterBar(
+              currentFilter: _currentFilter,
+              onFilterChanged: (filter) {
+                setState(() {
+                  _currentFilter = filter;
+                });
+              },
+            ),
+            _buildSearchBar(),
+            ProductTableHeader(columns: const [/* ... */]),
+            Expanded(child: _buildProductsList()),
+          ],
+        ),
       ),
     );
   }

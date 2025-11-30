@@ -1,6 +1,7 @@
 // screens/sales_history_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/providers/auth_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
 import 'package:shopmate/screens/pos_screen.dart';
@@ -39,26 +40,37 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text(
-          'سجل الفواتير',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.blue[800],
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: Column(
-        children: [
-          // الفلاتر المدمجة والفخمة
-          _buildElegantFiltersSection(),
-          const SizedBox(height: 10),
-          // جدول الفواتير
-          Expanded(child: _buildSalesTable()),
+    return Directionality(
+      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      child: BaseLayout(
+        currentPage: 'المبيعات', // اسم الصفحة للسايدبار
+        showAppBar: true, // تفعيل AppBar
+        title: 'سجل الفواتير', // عنوان AppBar
+        actions: [
+          IconButton(
+            onPressed: () {
+              // أي عملية تحديث أو action
+            },
+            icon: const Icon(Icons.refresh),
+          ),
         ],
+        floatingActionButton: FloatingActionButton(
+          onPressed: () {
+            // إضافة فاتورة جديدة
+          },
+          backgroundColor: const Color(0xFF8B5FBF),
+          child: const Icon(Icons.add, color: Colors.white, size: 28),
+        ),
+        child: Column(
+          children: [
+            // قسم الفلاتر المدمجة
+            _buildElegantFiltersSection(),
+            const SizedBox(height: 10),
+
+            // جدول الفواتير
+            Expanded(child: _buildSalesTable()),
+          ],
+        ),
       ),
     );
   }
