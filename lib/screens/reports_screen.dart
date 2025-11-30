@@ -1,7 +1,8 @@
 // screens/reports_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/sales_provider.dart';
+import 'package:shopmate/providers/settings_provider.dart';
+import '../providers/reports_provider.dart'; // تأكد من استخدام ReportsProvider
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -11,12 +12,12 @@ class ReportsScreen extends StatefulWidget {
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
-  String _selectedPeriod = 'اليوم'; // اليوم، الأسبوع، الشهر، السنة
+  String _selectedPeriod = 'اليوم';
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => context.read<SalesProvider>().loadReportsData());
+    Future.microtask(() => context.read<ReportsProvider>().loadReportsData());
   }
 
   @override
@@ -33,7 +34,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         elevation: 0,
         centerTitle: true,
       ),
-      body: Consumer<SalesProvider>(
+      body: Consumer<ReportsProvider>(
         builder: (context, provider, _) {
           if (provider.isLoadingReports) {
             return const Center(child: CircularProgressIndicator());
@@ -51,8 +52,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 _buildStatsCards(provider),
                 const SizedBox(height: 24),
 
-                // منحنى تطور الأرباح والمبيعات
-                _buildProfitSalesChart(provider),
+                // منحنى تطور الأرباح والمبيعات (ثابت - آخر 7 أيام)
+                _buildWeeklySalesTable(provider), // تغيير الاسم للتوضيح
                 const SizedBox(height: 24),
 
                 // الإحصائيات التفصيلية
@@ -73,7 +74,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildPeriodFilter(SalesProvider provider) {
+  Widget _buildPeriodFilter(ReportsProvider provider) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -106,10 +107,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildStatsCards(SalesProvider provider) {
+  Widget _buildStatsCards(ReportsProvider provider) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
     return LayoutBuilder(
       builder: (context, constraints) {
-        // حساب عدد الأعمدة حسب عرض الشاشة
         int crossAxisCount = 3;
         double screenWidth = constraints.maxWidth;
 
@@ -119,7 +121,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
           crossAxisCount = 2;
         }
 
-        // تحديد نسبة العرض للارتفاع
         double childAspectRatio = 2;
 
         return GridView.count(
@@ -132,19 +133,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
           children: [
             _buildStatCard(
               'إجمالي المبيعات',
-              '${provider.totalSalesAmount.toStringAsFixed(0)} ل.س',
+              '${provider.totalSalesAmount.toStringAsFixed(0)} $currencyName',
               Icons.shopping_cart,
               Colors.blue,
               '${provider.salesCount} فاتورة',
             ),
             _buildStatCard(
               'إجمالي الأرباح',
-              '${provider.totalProfit.toStringAsFixed(0)} ل.س',
+              '${provider.totalProfit.toStringAsFixed(0)} $currencyName',
               Icons.attach_money,
               Colors.green,
               '${provider.profitPercentage.toStringAsFixed(1)}% من المبيعات',
             ),
-
             _buildStatCard(
               'عدد الفواتير',
               provider.salesCount.toString(),
@@ -158,65 +158,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildStatCard(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-    String subtitle,
-  ) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-                const Spacer(),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProfitSalesChart(SalesProvider provider) {
+  // التغيير الرئيسي هنا: جعل الجدول يوضح أنه ثابت لآخر 7 أيام
+  Widget _buildWeeklySalesTable(ReportsProvider provider) {
     return Card(
       margin: const EdgeInsets.all(16),
       elevation: 2,
@@ -225,16 +168,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // العنوان
+            // العنوان - موضح أنه لآخر 7 أيام
             const Row(
               children: [
                 Icon(Icons.table_chart, color: Colors.blue, size: 22),
                 SizedBox(width: 8),
                 Text(
-                  'مبيعات الأسبوع',
+                  'مبيعات آخر 7 أيام',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            // إضافة وصف صغير يوضح أن الجدول ثابت
+            Text(
+              'عرض بيانات آخر 7 أيام بغض النظر عن الفلتر المختار',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
             ),
             const SizedBox(height: 16),
 
@@ -246,7 +199,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildSimpleTable(SalesProvider provider) {
+  Widget _buildSimpleTable(ReportsProvider provider) {
     if (provider.weeklySalesData.isEmpty) {
       return _buildEmptyTable();
     }
@@ -316,6 +269,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     required double sales,
     required double profit,
   }) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
     bool hasData = sales > 0;
 
     return Container(
@@ -341,7 +296,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              hasData ? '${sales.toStringAsFixed(0)} ل.س' : '-',
+              hasData ? '${sales.toStringAsFixed(0)} $currencyName' : '-',
               style: TextStyle(
                 color: hasData ? Colors.blue[700] : Colors.grey,
                 fontWeight: hasData ? FontWeight.w600 : FontWeight.normal,
@@ -354,7 +309,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              hasData ? '+${profit.toStringAsFixed(0)} ل.س' : '-',
+              hasData ? '+${profit.toStringAsFixed(0)} $currencyName' : '-',
               style: TextStyle(
                 color: hasData ? Colors.green[700] : Colors.grey,
                 fontWeight: hasData ? FontWeight.w600 : FontWeight.normal,
@@ -368,6 +323,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildTableTotal(double totalSales) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
@@ -389,7 +346,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              '${totalSales.toStringAsFixed(0)} ل.س',
+              '${totalSales.toStringAsFixed(0)} $currencyName',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.green,
@@ -414,7 +371,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           Icon(Icons.table_rows, size: 60, color: Colors.grey[400]),
           const SizedBox(height: 16),
           const Text(
-            'لا توجد بيانات',
+            'لا توجد بيانات لآخر 7 أيام',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -423,7 +380,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'سيظهر جدول المبيعات هنا',
+            'سيظهر جدول المبيعات هنا عند وجود مبيعات',
             style: TextStyle(color: Colors.grey),
           ),
         ],
@@ -431,7 +388,68 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildDetailedStats(SalesProvider provider) {
+  // باقي الدوال تبقى كما هي بدون تغيير...
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+    String subtitle,
+  ) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const Spacer(),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailedStats(ReportsProvider provider) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -447,12 +465,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
             const SizedBox(height: 16),
             _buildStatRow(
               'المبيعات النقدية',
-              '${provider.cashSalesAmount.toStringAsFixed(0)} ل.س',
+              '${provider.cashSalesAmount.toStringAsFixed(0)} $currencyName',
               Colors.green,
             ),
             _buildStatRow(
               'المبيعات الآجلة',
-              '${provider.creditSalesAmount.toStringAsFixed(0)} ل.س',
+              '${provider.creditSalesAmount.toStringAsFixed(0)} $currencyName',
               Colors.orange,
             ),
             _buildStatRow(
@@ -501,7 +519,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildTopProducts(SalesProvider provider) {
+  // في reports_screen.dart - عدّل دوال عرض المنتجات
+
+  Widget _buildTopProducts(ReportsProvider provider) {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -510,18 +530,29 @@ class _ReportsScreenState extends State<ReportsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'المنتجات الأكثر مبيعاً',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            const Row(
+              children: [
+                Icon(Icons.trending_up, color: Colors.green, size: 22),
+                SizedBox(width: 8),
+                Text(
+                  'المنتجات الأكثر مبيعاً',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'مرتبة حسب الإيرادات مع مراعاة أنواع الوحدات المختلفة',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
             ),
             const SizedBox(height: 16),
+
             if (provider.topProducts.isEmpty)
-              const Center(
-                child: Text(
-                  'لا توجد بيانات',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              )
+              _buildEmptyProductsState()
             else
               Column(
                 children:
@@ -529,6 +560,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       return _buildProductItem(
                         product['name'],
                         product['quantity'],
+                        product['unit'],
+                        product['sale_count'],
+                        product['revenue'],
                       );
                     }).toList(),
               ),
@@ -538,31 +572,112 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildProductItem(String name, int quantity) {
+  Widget _buildProductItem(
+    String name,
+    double quantity,
+    String unit,
+    int saleCount,
+    double revenue,
+  ) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
+    // تنسيق الكمية بناءً على نوع الوحدة
+    String formattedQuantity;
+    if (quantity % 1 == 0) {
+      formattedQuantity = quantity.toInt().toString(); // رقم صحيح
+    } else {
+      formattedQuantity = quantity.toStringAsFixed(2); // رقم عشري
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              name,
-              style: const TextStyle(fontSize: 14),
-              overflow: TextOverflow.ellipsis,
+          // شريط لوني
+          Container(
+            width: 4,
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.green,
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '$quantity قطعة',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue[700],
-              ),
+          const SizedBox(width: 12),
+
+          // معلومات المنتج
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                const SizedBox(height: 4),
+
+                // معلومات إضافية
+                Row(
+                  children: [
+                    // الكمية والوحدة
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '$formattedQuantity $unit',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue[700],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // عدد مرات البيع
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '$saleCount مرة',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange[700],
+                        ),
+                      ),
+                    ),
+
+                    const Spacer(),
+
+                    // الإيرادات
+                    Text(
+                      '${revenue.toStringAsFixed(0)} $currencyName',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -570,7 +685,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildTopCustomers(SalesProvider provider) {
+  Widget _buildEmptyProductsState() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Column(
+        children: [
+          Icon(Icons.inventory_2, size: 60, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          const Text(
+            'لا توجد منتجات مباعة',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'سيظهر هنا المنتجات الأكثر مبيعاً',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopCustomers(ReportsProvider provider) {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -608,6 +748,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildCustomerItem(String name, double amount) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -615,7 +757,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           CircleAvatar(
             backgroundColor: Colors.blue.withOpacity(0.1),
             child: Text(
-              name[0],
+              name.isNotEmpty ? name[0] : '?',
               style: TextStyle(
                 color: Colors.blue[700],
                 fontWeight: FontWeight.bold,
@@ -635,7 +777,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ),
                 ),
                 Text(
-                  '${amount.toStringAsFixed(0)} ل.س',
+                  '${amount.toStringAsFixed(0)} $currencyName',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],

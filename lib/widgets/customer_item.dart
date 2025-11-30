@@ -69,7 +69,7 @@ class CustomerItem extends StatelessWidget {
 
         // رقم الهاتف
         Text(
-          customer.phone,
+          customer.phone!,
           style: const TextStyle(fontSize: 14, color: Colors.grey),
         ),
 

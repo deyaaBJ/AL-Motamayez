@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/models/app_section.dart';
+import 'package:shopmate/models/sale.dart';
 import 'package:shopmate/providers/auth_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
+import 'package:shopmate/screens/pos_screen.dart';
 import 'package:shopmate/widgets/sale_center_button.dart';
 import 'package:shopmate/widgets/sections_grid.dart';
 

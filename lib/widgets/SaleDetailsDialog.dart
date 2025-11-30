@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/models/customer.dart';
 import 'package:shopmate/providers/auth_provider.dart';
+import 'package:shopmate/providers/settings_provider.dart';
 import 'package:shopmate/widgets/customer_selection_dialog.dart';
 import '../models/sale.dart';
 import '../providers/sales_provider.dart';
@@ -510,6 +511,7 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
           ),
           child: Column(
             children: [
+              // Header
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -526,6 +528,9 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
                   children: [
                     Expanded(flex: 3, child: Text('المنتج')),
                     Expanded(
+                      child: Text('الوحدة', textAlign: TextAlign.center),
+                    ),
+                    Expanded(
                       child: Text('الكمية', textAlign: TextAlign.center),
                     ),
                     Expanded(child: Text('السعر', textAlign: TextAlign.center)),
@@ -535,6 +540,7 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
                   ],
                 ),
               ),
+              // Items
               ...items.map((item) => _buildProductRow(item)).toList(),
             ],
           ),
@@ -544,10 +550,26 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
   }
 
   Widget _buildProductRow(Map<String, dynamic> item) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
+
     final productName = item['product_name'] ?? 'منتج';
-    final quantity = item['quantity'] as int;
+    final quantity = item['quantity'] as double;
     final price = item['price'] as double;
-    final subtotal = quantity * price;
+    final subtotal = item['subtotal'] as double;
+    final unitType = item['unit_type'] as String;
+    final customUnitName = item['custom_unit_name'] as String?;
+    final productBaseUnit = item['product_base_unit'] as String;
+
+    // تحديد اسم الوحدة المعروضة
+    String displayUnit = _getDisplayUnit(
+      unitType,
+      customUnitName,
+      productBaseUnit,
+    );
+
+    // تحديد الكمية المعروضة
+    String displayQuantity = _getDisplayQuantity(quantity, unitType);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -558,14 +580,32 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
         children: [
           Expanded(flex: 3, child: Text(productName)),
           Expanded(
-            child: Text(quantity.toString(), textAlign: TextAlign.center),
-          ),
-          Expanded(
-            child: Text(price.toStringAsFixed(0), textAlign: TextAlign.center),
+            child: Text(
+              displayUnit,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
           Expanded(
             child: Text(
-              subtotal.toStringAsFixed(0),
+              displayQuantity,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              '${price.toStringAsFixed(0)} ${settings.currencyName}',
+              textAlign: TextAlign.center,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              '${subtotal.toStringAsFixed(0)} ${settings.currencyName}',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Colors.blue,
@@ -579,6 +619,9 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
   }
 
   Widget _buildFinancialSummary(Sale sale) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -589,13 +632,15 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
         children: [
           _buildSummaryRow(
             label: 'المبلغ الإجمالي',
-            value: '${sale.totalAmount.toStringAsFixed(0)} ليرة سورية',
+            value:
+                '${sale.totalAmount.toStringAsFixed(0)} ${settings.currencyName}',
             valueColor: Colors.blue[700]!,
           ),
           const SizedBox(height: 12),
           _buildSummaryRow(
             label: 'إجمالي الربح',
-            value: '${sale.totalProfit.toStringAsFixed(0)} ليرة سورية',
+            value:
+                '${sale.totalProfit.toStringAsFixed(0)} ${settings.currencyName}',
             valueColor: Colors.green[700]!,
           ),
         ],
@@ -676,6 +721,35 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
           ),
         );
       }
+    }
+  }
+
+  String _getDisplayUnit(
+    String unitType,
+    String? customUnitName,
+    String baseUnit,
+  ) {
+    switch (unitType) {
+      case 'piece':
+        return 'قطعة';
+      case 'kg':
+        return 'كيلو';
+      case 'custom':
+        return customUnitName ?? 'وحدة';
+      default:
+        return baseUnit == 'kg' ? 'كيلو' : 'قطعة';
+    }
+  }
+
+  String _getDisplayQuantity(double quantity, String unitType) {
+    if (unitType == 'kg') {
+      // إذا كانت بالكيلو، نعرض بعلامة عشرية إذا لزم الأمر
+      return quantity % 1 == 0
+          ? quantity.toInt().toString()
+          : quantity.toStringAsFixed(2);
+    } else {
+      // إذا كانت قطع أو وحدات مخصصة، نعرض كعدد صحيح
+      return quantity.toInt().toString();
     }
   }
 }

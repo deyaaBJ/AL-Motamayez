@@ -19,6 +19,8 @@ class ProductItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsProvider>(context);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 2,
@@ -64,7 +66,7 @@ class ProductItem extends StatelessWidget {
             Expanded(
               flex: 2,
               child: Text(
-                '₪${product.price.toStringAsFixed(2)}',
+                '${settings.currencyName} ${product.price.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF8B5FBF),
@@ -76,7 +78,7 @@ class ProductItem extends StatelessWidget {
             Expanded(
               flex: 2,
               child: Text(
-                '₪${product.costPrice.toStringAsFixed(2)}',
+                '${settings.currencyName} ${product.costPrice.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF8B5FBF),
@@ -136,7 +138,7 @@ class ProductItem extends StatelessWidget {
     );
   }
 
-  Color _getQuantityColor(BuildContext context, int quantity) {
+  Color _getQuantityColor(BuildContext context, double quantity) {
     final settingsProvider = Provider.of<SettingsProvider>(
       context,
       listen: false,
@@ -154,8 +156,7 @@ class ProductItem extends StatelessWidget {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder:
-                (context) => AddProductScreen(productBarcode: product.barcode),
+            builder: (context) => AddProductScreen(productId: product.id),
           ),
         ).then((result) {
           if (result == true) onUpdate();

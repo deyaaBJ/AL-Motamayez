@@ -23,7 +23,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
     // إذا كان تعديل، املأ البيانات الحالية
     if (widget.customer != null) {
       _nameController.text = widget.customer!.name;
-      _phoneController.text = widget.customer!.phone;
+      _phoneController.text = widget.customer!.phone!;
     }
   }
 

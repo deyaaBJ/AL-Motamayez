@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/providers/customer_provider.dart';
+import 'package:shopmate/providers/product_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
 import 'package:shopmate/providers/reports_provider.dart';
 import 'package:shopmate/providers/sales_provider.dart';
@@ -39,6 +40,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => SalesProvider()),
         ChangeNotifierProvider(create: (_) => ReportsProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => ProductProvider()),
       ],
       child: const ShopMateApp(),
     ),

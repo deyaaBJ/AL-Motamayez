@@ -98,41 +98,36 @@ class AuthProvider with ChangeNotifier {
   // ================================
   // تغيير كلمة المرور لمستخدم حسب الدور (role)
   // ================================
+  // في ملف auth_provider.dart
   Future<bool> changePasswordByRole({
     required String role,
     required String oldPassword,
     required String newPassword,
   }) async {
+    final db = await _dbHelper.db;
     try {
-      final db = await _dbHelper.db;
-
-      // جلب المستخدم حسب الدور
+      // التحقق من كلمة المرور القديمة أولاً
       final users = await db.query(
         'users',
-        where: 'role = ?',
-        whereArgs: [role],
+        where: 'role = ? AND password = ?',
+        whereArgs: [role, oldPassword],
       );
 
-      if (users.isEmpty) return false;
-
-      final user = users.first;
-
-      // تحقق من كلمة المرور القديمة
-      if (user['password'] != oldPassword) return false;
+      if (users.isEmpty) {
+        return false; // كلمة المرور القديمة غير صحيحة
+      }
 
       // تحديث كلمة المرور
-      await db.update(
+      final result = await db.update(
         'users',
         {'password': newPassword},
         where: 'role = ?',
         whereArgs: [role],
       );
 
-      notifyListeners();
-
-      return true;
+      return result > 0;
     } catch (e) {
-      print('Error changing password by role: $e');
+      print('Error changing password: $e');
       return false;
     }
   }
