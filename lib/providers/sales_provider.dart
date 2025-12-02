@@ -145,6 +145,23 @@ class SalesProvider extends ChangeNotifier {
   // ████████████████████████████████ الدوال الأصلية (الحالية) ███████████████████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
 
+  int todaySalesCount = 0; // عدد فواتير اليوم
+
+  // تحميل عدد فواتير اليوم
+  Future<void> loadTodaySalesCount() async {
+    final db = await _dbHelper.db;
+
+    final result = await db.rawQuery("""
+      SELECT COUNT(*) as count 
+      FROM sales
+      WHERE DATE(date) = DATE('now')
+    """);
+
+    todaySalesCount = result.first['count'] as int;
+
+    notifyListeners();
+  }
+
   Future<void> fetchSales({bool loadMore = false}) async {
     if (_isLoading || (!_hasMore && loadMore)) return;
 

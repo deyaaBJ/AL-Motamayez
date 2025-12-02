@@ -22,16 +22,10 @@ import 'package:window_size/window_size.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ تهيئة sqflite على Desktop
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
-
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    setWindowMinSize(
-      const Size(700, 700),
-    ); // الحد الأدنى = 20 سم × 20 سم تقريبا
-    setWindowMaxSize(const Size(1920, 1080)); // اختياري
-  }
+  final reportsProvider = ReportsProvider();
+  await reportsProvider.initialize();
 
   runApp(
     MultiProvider(
@@ -39,12 +33,10 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => CustomerProvider()),
         ChangeNotifierProvider(create: (_) => SalesProvider()),
-        ChangeNotifierProvider(create: (_) => ReportsProvider()),
+        ChangeNotifierProvider(create: (_) => ReportsProvider()), // ✅ صح
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => ProductProvider()),
-        ChangeNotifierProvider(
-          create: (_) => SideBarProvider(),
-        ), // أضف هذا السطر
+        ChangeNotifierProvider(create: (_) => SideBarProvider()),
       ],
       child: const ShopMateApp(),
     ),

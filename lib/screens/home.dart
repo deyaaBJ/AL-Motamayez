@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/providers/auth_provider.dart';
+import 'package:shopmate/providers/product_provider.dart';
+import 'package:shopmate/providers/sales_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
+import 'package:shopmate/widgets/PosCartAnimation.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -15,6 +18,9 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    Provider.of<SalesProvider>(context, listen: false).loadTodaySalesCount();
+    Provider.of<ProductProvider>(context, listen: false).loadTotalProducts();
+
     Future.microtask(
       () =>
           Provider.of<SettingsProvider>(context, listen: false).loadSettings(),
@@ -36,6 +42,8 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildMainContent(BuildContext context, String? role) {
+    final salesProvider = Provider.of<SalesProvider>(context);
+    final productProvider = Provider.of<ProductProvider>(context);
     return Column(
       children: [
         // Header
@@ -43,9 +51,12 @@ class _MainScreenState extends State<MainScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 25),
           color: Colors.transparent,
           child: Row(
+            // لجعل المحاذاة صحيحة حسب اللغة (عربي/إنجليزي)
+            textDirection: TextDirection.rtl,
             children: [
               Column(
-                crossAxisAlignment: CrossAxisAlignment.end, // 🔥 النص لليمين
+                crossAxisAlignment:
+                    CrossAxisAlignment.start, // تعديل المحاذاة لتناسب العربية
                 children: [
                   const Text(
                     "مرحباً بك مرة أخرى،",
@@ -62,24 +73,9 @@ class _MainScreenState extends State<MainScreen> {
                   ),
                 ],
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.notifications_none,
-                  color: Color(0xFF6A3093),
-                ),
-              ),
+              const Spacer(), // يدفع العنصر التالي لأقصى الجهة الأخرى
+              // 👇 هنا الأنيميشن الجديد بدلاً من أيقونة الإشعارات
+              const BeautifulCartAnimation(color: Color(0xFF4A1C6D)),
             ],
           ),
         ),
@@ -180,36 +176,22 @@ class _MainScreenState extends State<MainScreen> {
                   children: [
                     Expanded(
                       child: _buildStatCard(
-                        "المبيعات",
-                        "250 د.أ",
-                        Icons.monetization_on,
-                        Colors.green,
-                      ),
-                    ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: _buildStatCard(
                         "الطلبات",
-                        "12",
+                        "${salesProvider.todaySalesCount}", // ✔ عدد فواتير اليوم
                         Icons.receipt_long,
                         Colors.orange,
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  children: [
+                    const SizedBox(width: 15),
+
                     Expanded(
                       child: _buildStatCard(
                         "المنتجات",
-                        "1,204",
+                        "${productProvider.totalProducts}", // ✔ عدد المنتجات
                         Icons.inventory,
                         Colors.blue,
                       ),
                     ),
-                    const SizedBox(width: 15),
-                    const Spacer(),
                   ],
                 ),
               ],
@@ -233,7 +215,7 @@ class _MainScreenState extends State<MainScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
+            color: const Color.fromARGB(255, 26, 25, 25).withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -256,7 +238,10 @@ class _MainScreenState extends State<MainScreen> {
             children: [
               Text(
                 title,
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                style: TextStyle(
+                  color: const Color.fromARGB(255, 29, 29, 29),
+                  fontSize: 12,
+                ),
               ),
               const SizedBox(height: 4),
               Text(

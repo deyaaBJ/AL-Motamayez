@@ -6,6 +6,11 @@ import '../db/db_helper.dart';
 class ReportsProvider extends ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
 
+  Future<void> initialize() async {
+    print('Initializing ReportsProvider...');
+    await deleteOldCashSales();
+  }
+
   // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
   // ████████████████████████████████ الحالات والمتغيرات █████████████████████████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
@@ -397,21 +402,24 @@ class ReportsProvider extends ChangeNotifier {
                   saleDate.month == now.month &&
                   saleDate.day == now.day;
               break;
+
             case 'الأسبوع':
               final weekAgo = now.subtract(const Duration(days: 7));
               shouldInclude =
                   saleDate.isAfter(weekAgo) || _isSameDay(saleDate, weekAgo);
               break;
+
             case 'الشهر':
-              final monthAgo = now.subtract(const Duration(days: 30));
+              // نفس الشهر فقط
               shouldInclude =
-                  saleDate.isAfter(monthAgo) || _isSameDay(saleDate, monthAgo);
+                  saleDate.year == now.year && saleDate.month == now.month;
               break;
+
             case 'السنة':
-              final yearAgo = now.subtract(const Duration(days: 365));
-              shouldInclude =
-                  saleDate.isAfter(yearAgo) || _isSameDay(saleDate, yearAgo);
+              // نفس السنة فقط
+              shouldInclude = saleDate.year == now.year;
               break;
+
             default:
               shouldInclude = true;
           }
@@ -431,8 +439,7 @@ class ReportsProvider extends ChangeNotifier {
       await _loadFilteredTopProducts(period);
       await _loadFilteredTopCustomers(period);
 
-      // ملاحظة: لا نعيد تحميل بيانات الأسبوع - نبقيها كما هي لآخر 7 أيام
-      print('بيانات الأسبوع تبقى ثابتة لعرض آخر 7 أيام');
+      print('تم تطبيق الفلتر بنجاح: ${filteredSales.length} فاتورة');
     } catch (e) {
       print('Error in alternative filter: $e');
     }
@@ -589,13 +596,17 @@ class ReportsProvider extends ChangeNotifier {
   String _getWhereClauseForPeriod(String period) {
     switch (period) {
       case 'اليوم':
-        return "WHERE date >= date('now', 'start of day')";
+        // اليوم الحالي فقط - نفس اليوم والشهر والسنة
+        return "WHERE strftime('%Y-%m-%d', date) = strftime('%Y-%m-%d', 'now', 'localtime')";
       case 'الأسبوع':
+        // آخر 7 أيام (كما هو) - حسب طلبك
         return "WHERE date >= date('now', '-7 days')";
       case 'الشهر':
-        return "WHERE date >= date('now', '-30 days')";
+        // نفس الشهر الحالي فقط
+        return "WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime')";
       case 'السنة':
-        return "WHERE date >= date('now', '-365 days')";
+        // نفس السنة الحالية فقط
+        return "WHERE strftime('%Y', date) = strftime('%Y', 'now', 'localtime')";
       default:
         return "WHERE date >= date('now', '-30 days')";
     }
@@ -693,5 +704,30 @@ class ReportsProvider extends ChangeNotifier {
     print('التاريخ الحالي في SQLite: ${currentDate.first['current_date']}');
 
     print('=== End Debug ===');
+  }
+
+  //هاض خاص بحذف الفواتير الي مر عليها سنه ونوعها cash
+
+  Future<void> deleteOldCashSales() async {
+    final db = await _dbHelper.db;
+
+    // جلب الفواتير النقدية القديمة
+    final oldSales = await db.rawQuery("""
+    SELECT * FROM sales
+    WHERE payment_type = 'cash'
+    AND DATE(date) <= DATE('now', '-1 year')
+  """);
+
+    for (var sale in oldSales) {
+      final saleId = sale['id'];
+
+      // حذف العناصر المرتبطة بالفاتورة
+      await db.delete('sale_items', where: "sale_id = ?", whereArgs: [saleId]);
+
+      // حذف الفاتورة نفسها
+      await db.delete('sales', where: "id = ?", whereArgs: [saleId]);
+    }
+
+    print('تم حذف ${oldSales.length} فاتورة نقدية عمرها أكثر من سنة.');
   }
 }

@@ -40,6 +40,17 @@ class ProductProvider with ChangeNotifier {
     return result.map((e) => Product.fromMap(e)).toList();
   }
 
+  int totalProducts = 0;
+
+  Future<void> loadTotalProducts() async {
+    final db = await _dbHelper.db;
+
+    final res = await db.rawQuery("SELECT COUNT(*) as count FROM products");
+
+    totalProducts = res.first['count'] as int;
+    notifyListeners();
+  }
+
   Future<List<Product>> searchProducts(String query) async {
     final db = await _dbHelper.db;
     if (query.trim().isEmpty) return [];
