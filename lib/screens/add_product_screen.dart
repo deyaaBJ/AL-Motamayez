@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shopmate/components/base_layout.dart';
+import 'package:shopmate/helpers/helpers.dart';
 import 'package:shopmate/models/product.dart';
 import 'package:shopmate/models/product_unit.dart';
 import 'package:shopmate/providers/product_provider.dart';
@@ -745,12 +746,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('يرجى تصحيح الأخطاء في النموذج'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      showAppToast(context, 'يرجى تصحيح الأخطاء في النموذج', ToastType.error);
+
       return;
     }
 
@@ -767,12 +764,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     // التحقق من البيانات الأساسية
     if (_nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('يرجى إدخال اسم المنتج'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      showAppToast(context, 'يرجى إدخال اسم المنتج', ToastType.error);
+
       return;
     }
 
@@ -816,14 +809,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
       setState(() => _isLoading = false);
 
       // إظهار رسالة نجاح
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _isNewProduct ? 'تم إضافة المنتج بنجاح' : 'تم تحديث المنتج بنجاح',
-          ),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
+      showAppToast(
+        context,
+        _isNewProduct ? 'تم إضافة المنتج بنجاح' : 'تم تحديث المنتج بنجاح',
+        ToastType.success,
       );
 
       // الانتظار قليلاً ثم العودة
@@ -831,10 +820,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       Navigator.pop(context, true);
     } catch (e) {
       setState(() => _isLoading = false);
-      print('خطأ في حفظ المنتج: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red),
-      );
+      showAppToast(context, 'حدث خطأ: $e', ToastType.error);
     }
   }
 

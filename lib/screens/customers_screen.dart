@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/components/base_layout.dart';
+import 'package:shopmate/helpers/helpers.dart';
 import 'package:shopmate/providers/settings_provider.dart';
 import '../models/customer.dart';
 import '../providers/customer_provider.dart';
@@ -650,11 +651,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
               ).addCustomer(customer);
 
               if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('تم إضافة العميل ${customer.name}'),
-                  backgroundColor: Colors.green,
-                ),
+              showAppToast(
+                context,
+                'تم إضافة العميل ${customer.name}',
+                ToastType.success,
               );
             },
           ),
@@ -676,11 +676,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
               await provider.updateCustomer(updatedCustomer);
 
               if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('تم تحديث العميل ${updatedCustomer.name}'),
-                  backgroundColor: Colors.blue,
-                ),
+              showAppToast(
+                context,
+                'تم تحديث العميل ${updatedCustomer.name}',
+                ToastType.success,
               );
             },
           ),
@@ -738,21 +737,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     await provider.deleteCustomer(customer.id!);
                     if (!mounted) return;
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('تم حذف العميل ${customer.name}'),
-                        backgroundColor: Colors.red,
-                      ),
+                    showAppToast(
+                      context,
+                      'تم حذف العميل ${customer.name}',
+                      ToastType.error,
                     );
                   } catch (e) {
                     if (!mounted) return;
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(e.toString()),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
+                    showAppToast(context, e.toString(), ToastType.error);
                   }
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -807,31 +800,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       await provider.payDebt(customer.id!, amount, 'cash');
                       if (!mounted) return;
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'تم تسديد ${amount.toStringAsFixed(2)} $currencyName للعميل ${customer.name}',
-                          ),
-                          backgroundColor: Colors.green,
-                        ),
+                      showAppToast(
+                        context,
+                        'تم تسديد ${amount.toStringAsFixed(2)} $currencyName للعميل ${customer.name}',
+                        ToastType.success,
                       );
                     } catch (e) {
                       if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(e.toString()),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
+                      showAppToast(context, e.toString(), ToastType.error);
                     }
                   } else {
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('المبلغ غير صالح'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
+                    showAppToast(context, 'المبلغ غير صالح', ToastType.error);
                   }
                 },
                 style: ElevatedButton.styleFrom(

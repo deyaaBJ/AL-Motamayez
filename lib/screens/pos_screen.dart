@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/components/posPageCompoments/custom_app_bar.dart';
 import 'package:shopmate/components/posPageCompoments/search_section.dart';
+import 'package:shopmate/helpers/helpers.dart';
 import 'package:shopmate/models/cart_item.dart';
 import 'package:shopmate/models/customer.dart';
 import 'package:shopmate/models/product.dart';
@@ -153,19 +154,16 @@ class _PosScreenState extends State<PosScreen>
         });
 
         if (_cartItems.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('لم يتم العثور على عناصر في الفاتورة'),
-              backgroundColor: Colors.orange,
-            ),
+          showAppToast(
+            context,
+            'لم يتم العثور على عناصر في الفاتورة',
+            ToastType.warning,
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('تم تحميل ${_cartItems.length} عنصر من الفاتورة'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
+          showAppToast(
+            context,
+            'تم تحميل ${_cartItems.length} عنصر من الفاتورة',
+            ToastType.success,
           );
         }
       }
@@ -173,12 +171,7 @@ class _PosScreenState extends State<PosScreen>
       _isSaleLoaded = false;
       print('❌ خطأ في تحميل الفاتورة: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ في تحميل الفاتورة: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showAppToast(context, 'خطأ في تحميل الفاتورة: $e', ToastType.error);
       }
     } finally {
       _isLoading = false;
@@ -640,21 +633,15 @@ class _PosScreenState extends State<PosScreen>
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'تم ${widget.isReturnMode ? 'إرجاع' : 'إضافة'} ${product.name} (${unit.unitName}) ${widget.isReturnMode ? 'من' : 'إلى'} السلة',
-          ),
-          backgroundColor: widget.isReturnMode ? Colors.orange : Colors.green,
-          duration: const Duration(seconds: 1),
-        ),
+      showAppToast(
+        context,
+        'تم ${widget.isReturnMode ? 'إرجاع' : 'إضافة'} ${product.name} (${unit.unitName}) ${widget.isReturnMode ? 'من' : 'إلى'} السلة',
+        widget.isReturnMode ? ToastType.warning : ToastType.success,
       );
     } catch (e) {
       print('Error adding unit to cart: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red),
-      );
+      showAppToast(context, 'خطأ: $e', ToastType.error);
     }
   }
 
@@ -700,21 +687,15 @@ class _PosScreenState extends State<PosScreen>
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'تم ${widget.isReturnMode ? 'إرجاع' : 'إضافة'} ${product.name} ${widget.isReturnMode ? 'من' : 'إلى'} السلة',
-          ),
-          backgroundColor: widget.isReturnMode ? Colors.orange : Colors.green,
-          duration: const Duration(seconds: 1),
-        ),
+      showAppToast(
+        context,
+        'تم ${widget.isReturnMode ? 'إرجاع' : 'إضافة'} ${product.name} ${widget.isReturnMode ? 'من' : 'إلى'} السلة',
+        widget.isReturnMode ? ToastType.warning : ToastType.success,
       );
     } catch (e) {
       print('Error adding product to cart: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red),
-      );
+      showAppToast(context, 'خطأ: $e', ToastType.error);
     }
   }
 
@@ -1018,15 +999,12 @@ class _PosScreenState extends State<PosScreen>
 
   void _finalizeSale(bool printInvoice, bool isDebtSale) {
     _clearCart();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          widget.isReturnMode
-              ? 'تم إتمام الإرجاع بنجاح'
-              : 'تم إتمام البيع ${isDebtSale ? 'المؤجل ' : ''}بنجاح',
-        ),
-        backgroundColor: widget.isReturnMode ? Colors.orange : Colors.green,
-      ),
+    showAppToast(
+      context,
+      widget.isReturnMode
+          ? 'تم إتمام الإرجاع بنجاح'
+          : 'تم إتمام البيع ${isDebtSale ? 'المؤجل ' : ''}بنجاح',
+      widget.isReturnMode ? ToastType.warning : ToastType.success,
     );
   }
 
@@ -1039,11 +1017,9 @@ class _PosScreenState extends State<PosScreen>
 
   // دالة جديدة للإرجاع أو التعديل
   Future<void> _completeReturnOrEdit() async {
-    print("ddddddddddddddddddddd");
     if (_cartItems.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('السلة فارغة')));
+      showAppToast(context, 'السلة فارغة', ToastType.warning);
+
       return;
     }
 
@@ -1051,15 +1027,6 @@ class _PosScreenState extends State<PosScreen>
     final productProvider = context.read<ProductProvider>();
 
     try {
-      // if (widget.isReturnMode) {
-      //   // معالجة الإرجاع
-      //   await productProvider.processReturn(
-      //     originalSale: _originalSale!,
-      //     returnItems: _cartItems,
-      //     totalReturnAmount: _totalAmount.abs(),
-      //     userRole: auth.role ?? 'user',
-      //   );
-      // } else
       if (widget.isEditMode) {
         print("===== الفاتورة قبل الحفظ (Edit Mode) =====");
         print("Original Sale: $_originalSale");
@@ -1083,33 +1050,27 @@ class _PosScreenState extends State<PosScreen>
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.isReturnMode
-                  ? 'تم إتمام الإرجاع بنجاح'
-                  : 'تم تحديث الفاتورة بنجاح',
-            ),
-            backgroundColor: Colors.green,
-          ),
+        showAppToast(
+          context,
+          widget.isReturnMode
+              ? 'تم إتمام الإرجاع بنجاح'
+              : 'تم تحديث الفاتورة بنجاح',
+          ToastType.success,
         );
 
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
-        );
+        showAppToast(context, 'خطأ: $e', ToastType.error);
       }
     }
   }
 
   void _completeSale() async {
     if (_cartItems.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('السلة فارغة')));
+      showAppToast(context, 'السلة فارغة', ToastType.warning);
+
       return;
     }
 
@@ -1126,28 +1087,20 @@ class _PosScreenState extends State<PosScreen>
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم إتمام البيع بنجاح'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        showAppToast(context, 'تم إتمام البيع بنجاح', ToastType.success);
+
         _clearCart();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
-        );
+        showAppToast(context, 'خطأ: $e', ToastType.error);
       }
     }
   }
 
   void _recordDebtSale() async {
     if (_cartItems.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('السلة فارغة')));
+      showAppToast(context, 'السلة فارغة', ToastType.warning);
       return;
     }
 
@@ -1284,11 +1237,10 @@ class _PosScreenState extends State<PosScreen>
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('خطأ في إضافة العميل: $e'),
-                      backgroundColor: Colors.red,
-                    ),
+                  showAppToast(
+                    context,
+                    'خطأ في إضافة العميل: $e',
+                    ToastType.error,
                   );
                 }
               }
@@ -1311,19 +1263,17 @@ class _PosScreenState extends State<PosScreen>
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('تم تسجيل بيع مؤجل للعميل ${customer.name} بنجاح'),
-            backgroundColor: Colors.green,
-          ),
+        showAppToast(
+          context,
+          'تم تسجيل بيع مؤجل للعميل ${customer.name} بنجاح',
+          ToastType.success,
         );
+
         _clearCart();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
-        );
+        showAppToast(context, 'خطأ: $e', ToastType.error);
       }
     }
   }

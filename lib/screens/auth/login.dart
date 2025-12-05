@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'dart:math';
 
 import 'package:shopmate/components/LoginCard.dart';
+import 'package:shopmate/helpers/helpers.dart';
 import 'package:shopmate/providers/auth_provider.dart';
 
 void main() {
@@ -85,18 +86,12 @@ class _LoginScreenState extends State<LoginScreen>
       });
 
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم تسجيل الدخول بنجاح!'),
-            backgroundColor: Colors.purple,
-          ),
-        );
+        showAppToast(context, 'تم تسجيل الدخول بنجاح!', ToastType.success);
+
         // مثال: انتقل للشاشة الرئيسية
         Navigator.pushReplacementNamed(context, '/home');
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('البريد أو كلمة السر خاطئة')),
-        );
+        showAppToast(context, 'البريد أو كلمة السر خاطئة', ToastType.error);
       }
     }
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shopmate/helpers/helpers.dart';
 import '../models/product.dart';
 import '../providers/product_provider.dart';
 
@@ -12,12 +13,8 @@ Future<void> saveProduct({
   if (product.name.isEmpty ||
       product.price == 0.0 ||
       product.costPrice == 0.0) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('يرجى ملء جميع الحقول المطلوبة'),
-        backgroundColor: Colors.red,
-      ),
-    );
+    showAppToast(context, 'يرجى ملء جميع الحقول المطلوبة', ToastType.error);
+
     return;
   }
 
@@ -35,20 +32,14 @@ Future<void> saveProduct({
 
     final action = isNewProduct ? 'تمت إضافة' : 'تم تحديث';
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$action المنتج "${product.name}" بنجاح'),
-        backgroundColor: Colors.green,
-      ),
+    showAppToast(
+      context,
+      '$action المنتج "${product.name}" بنجاح',
+      ToastType.success,
     );
   } catch (e) {
     onEnd();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('حدث خطأ أثناء حفظ المنتج: $e'),
-        backgroundColor: Colors.red,
-      ),
-    );
+    showAppToast(context, 'حدث خطأ أثناء حفظ المنتج: $e', ToastType.error);
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shopmate/helpers/helpers.dart';
 import 'package:shopmate/models/cart_item.dart';
 import 'package:shopmate/models/product_unit.dart';
 import 'package:shopmate/providers/settings_provider.dart';
@@ -336,11 +337,10 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                       }
                       Navigator.pop(context);
                     } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('الرجاء إدخال رقم موجب صالح'),
-                          duration: Duration(seconds: 2),
-                        ),
+                      showAppToast(
+                        context,
+                        'الرجاء إدخال رقم موجب صالح',
+                        ToastType.error,
                       );
                     }
                   }

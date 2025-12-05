@@ -66,12 +66,14 @@ CREATE TABLE product_units (
     // جدول المستخدمين
     await db.execute('''
       CREATE TABLE users(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        role TEXT NOT NULL
-      )
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  role TEXT NOT NULL,
+  google_drive_token TEXT
+)
+
     ''');
 
     // إضافة مستخدم افتراضي

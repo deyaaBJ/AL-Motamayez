@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shopmate/helpers/helpers.dart';
 import 'package:shopmate/models/product.dart';
 import 'package:shopmate/providers/settings_provider.dart';
 import 'package:shopmate/providers/product_provider.dart';
@@ -183,8 +184,10 @@ class ProductItem extends StatelessWidget {
                       await provider.deleteProduct(product.id.toString());
                       onUpdate();
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('تم حذف ${product.name} بنجاح')),
+                      showAppToast(
+                        context,
+                        'تم حذف ${product.name} بنجاح',
+                        ToastType.success,
                       );
                     },
                   ),

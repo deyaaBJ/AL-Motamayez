@@ -1,6 +1,7 @@
 // widgets/sale_details_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shopmate/helpers/helpers.dart';
 import 'package:shopmate/models/customer.dart';
 import 'package:shopmate/providers/auth_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
@@ -60,22 +61,14 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
                 ? 'تم تغيير نوع الدفع إلى نقدي'
                 : 'تم تغيير نوع الدفع إلى آجل للزبون ${selectedCustomer?.name}';
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        showAppToast(context, message, ToastType.success);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('فشل في تعديل نوع الدفع: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
+        showAppToast(
+          context,
+          'فشل في تعديل نوع الدفع: ${e.toString()}',
+          ToastType.error,
         );
       }
     }
@@ -101,20 +94,14 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
         );
       } else if (mounted) {
         // إذا تم إلغاء العملية، نعرض رسالة فقط إذا كانت الصفحة مازالت مفتوحة
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم إلغاء تغيير نوع الدفع'),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        showAppToast(context, 'تم إلغاء تغيير نوع الدفع', ToastType.warning);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('حدث خطأ أثناء اختيار الزبون: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+        showAppToast(
+          context,
+          'حدث خطأ أثناء اختيار الزبون: ${e.toString()}',
+          ToastType.error,
         );
       }
     }
@@ -703,22 +690,14 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
                 ? 'تم تغيير نوع حالة عرض الضرائب إلى تضمنه بالضرائب ✅'
                 : 'تم تغيير نوع حالة عرض الضرائب إلى غير تضمنه بالضرائب ❌';
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        showAppToast(context, message, ToastType.success);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('فشل في تعديل نوع عرضه للضرائب: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
+        showAppToast(
+          context,
+          'فشل في تعديل نوع عرضه للضرائب: ${e.toString()}',
+          ToastType.error,
         );
       }
     }

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/components/base_layout.dart';
+import 'package:shopmate/helpers/helpers.dart';
 import 'package:shopmate/providers/auth_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
 import 'package:shopmate/screens/pos_screen.dart';
@@ -1364,22 +1365,14 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       await provider.deleteSale(sale.id!);
 
       // عرض رسالة نجاح
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تم حذف الفاتورة رقم ${sale.id} بنجاح'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 2),
-        ),
+      showAppToast(
+        context,
+        'تم حذف الفاتورة رقم ${sale.id} بنجاح',
+        ToastType.success,
       );
     } catch (e) {
       // عرض رسالة خطأ
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('خطأ في حذف الفاتورة: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      showAppToast(context, 'خطأ في حذف الفاتورة: $e', ToastType.error);
     }
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/constant/constant.dart';
+import 'package:shopmate/helpers/helpers.dart';
 import 'package:shopmate/providers/auth_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
 
@@ -504,14 +505,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   settingsProvider.updateLowStockThreshold(value.round());
                 },
                 onChangeEnd: (value) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'تم حفظ الحد الأدنى للمخزون: ${value.round()}',
-                      ),
-                      backgroundColor: const Color(0xFF6A3093),
-                      duration: const Duration(seconds: 1),
-                    ),
+                  showAppToast(
+                    context,
+                    'تم حفظ الحد الأدنى للمخزون: ${value.round()}',
+                    ToastType.success,
                   );
                 },
               ),
@@ -695,12 +692,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (String? newValue) {
                   if (newValue != null) {
                     settings.updateCurrency(newValue);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('تم تغيير العملة إلى $newValue'),
-                        backgroundColor: const Color(0xFF6A3093),
-                        duration: const Duration(seconds: 2),
-                      ),
+                    showAppToast(
+                      context,
+                      'تم تغيير العملة إلى $newValue',
+                      ToastType.success,
                     );
                   }
                 },
@@ -1164,9 +1159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _isEditingAdmin = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم تحديث بيانات المدير بنجاح')),
-    );
+    showAppToast(context, 'تم تحديث بيانات المدير بنجاح', ToastType.success);
   }
 
   Future<void> _saveCashierChanges() async {
@@ -1180,9 +1173,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _isEditingCashier = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم تحديث بيانات الكاشير بنجاح')),
-    );
+    showAppToast(context, 'تم تحديث بيانات الكاشير بنجاح', ToastType.success);
   }
 
   Future<void> _saveTaxChanges() async {
@@ -1196,8 +1187,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _isEditingTax = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم تحديث بيانات حساب الضريبة بنجاح')),
+    showAppToast(
+      context,
+      'تم تحديث بيانات حساب الضريبة بنجاح',
+      ToastType.success,
     );
   }
 
@@ -1218,12 +1211,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             : 'tax';
 
     if (_newPasswordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('كلمات المرور غير متطابقة'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      showAppToast(context, 'كلمات المرور غير متطابقة', ToastType.error);
+
       return;
     }
 
@@ -1236,19 +1225,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Navigator.pop(context);
     _clearPasswordFields();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? (_isAdminPassword
-                  ? 'تم تغيير كلمة مرور المدير بنجاح'
-                  : _isCashierPassword
-                  ? 'تم تغيير كلمة مرور الكاشير بنجاح'
-                  : 'تم تغيير كلمة مرور حساب الضريبة بنجاح')
-              : 'كلمة المرور الحالية غير صحيحة أو حدث خطأ أثناء التحديث',
-        ),
-        backgroundColor: success ? Colors.green : Colors.red,
-      ),
+    showAppToast(
+      context,
+      success
+          ? (_isAdminPassword
+              ? 'تم تغيير كلمة مرور المدير بنجاح'
+              : _isCashierPassword
+              ? 'تم تغيير كلمة مرور الكاشير بنجاح'
+              : 'تم تغيير كلمة مرور حساب الضريبة بنجاح')
+          : 'كلمة المرور الحالية غير صحيحة أو حدث خطأ أثناء التحديث',
+      success ? ToastType.success : ToastType.error,
     );
 
     if (success) {
