@@ -130,60 +130,8 @@ class SearchSection extends StatelessWidget {
 
           const SizedBox(height: 8),
 
-          _buildSearchTypeButtons(),
+          // _buildSearchTypeButtons(),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSearchTypeButtons() {
-    return SizedBox(
-      height: 32,
-      child: Row(
-        children: [
-          _buildSearchTypeChip('المنتجات', 'product'),
-          const SizedBox(width: 8),
-          _buildSearchTypeChip('الوحدات', 'unit'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchTypeChip(String label, String type) {
-    final isSelected = searchType == type;
-
-    return GestureDetector(
-      onTap: () {
-        onChangeSearchType(type);
-        refreshState();
-        searchFocusNode.requestFocus();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF6A3093) : Colors.grey[200],
-          borderRadius: BorderRadius.circular(16),
-          border: isSelected ? null : Border.all(color: Colors.grey[300]!),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              type == 'unit' ? Icons.inventory_2 : Icons.shopping_bag,
-              color: isSelected ? Colors.white : Colors.grey[700],
-              size: 14,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey[700],
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

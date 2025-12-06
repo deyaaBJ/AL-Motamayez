@@ -1,3 +1,4 @@
+// providers/customer_provider.dart
 import 'package:flutter/material.dart';
 import 'package:shopmate/db/db_helper.dart';
 import 'package:shopmate/models/customer.dart';
@@ -6,19 +7,54 @@ class CustomerProvider extends ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
   List<Customer> _customers = [];
   List<Customer> _filteredCustomers = [];
+  List<Customer> _displayedCustomers = [];
   String _searchQuery = '';
+
+  // متغيرات التحميل التدريجي
+  int _currentPage = 0;
+  final int _itemsPerPage = 20;
+  bool _isLoading = false;
+  bool _hasMore = true;
 
   List<Customer> get customers => _customers;
   List<Customer> get filteredCustomers =>
       _searchQuery.isEmpty ? _customers : _filteredCustomers;
+  List<Customer> get displayedCustomers => _displayedCustomers;
   String get searchQuery => _searchQuery;
+  bool get isLoading => _isLoading;
+  bool get hasMore => _hasMore;
 
   // جلب كل الزبائن من الداتا بيس مع حساب الدين والنقدي
-  Future<void> fetchCustomers() async {
-    final db = await _dbHelper.db;
-    final result = await db.query('customers', orderBy: 'name ASC');
+  Future<void> fetchCustomers({bool reset = false}) async {
+    if (_isLoading) return;
 
-    _customers = [];
+    _isLoading = true;
+
+    if (reset) {
+      _currentPage = 0;
+      _hasMore = true;
+      _customers.clear();
+      _displayedCustomers.clear();
+    }
+
+    notifyListeners();
+
+    final db = await _dbHelper.db;
+
+    // حساب OFFSET للتحميل التدريجي
+    final offset = _currentPage * _itemsPerPage;
+
+    final result = await db.query(
+      'customers',
+      orderBy: 'name ASC',
+      limit: _itemsPerPage,
+      offset: offset,
+    );
+
+    // إذا كانت النتائج أقل من الحد المطلوب، فهذا يعني لا يوجد المزيد
+    if (result.length < _itemsPerPage) {
+      _hasMore = false;
+    }
 
     for (var customerData in result) {
       final customer = Customer.fromMap(customerData);
@@ -34,8 +70,24 @@ class CustomerProvider extends ChangeNotifier {
       _customers.add(updatedCustomer);
     }
 
-    _filteredCustomers = _customers;
+    _displayedCustomers = List.from(_customers);
+    _filteredCustomers = _displayedCustomers;
+    _currentPage++;
+    _isLoading = false;
+
     notifyListeners();
+  }
+
+  // تحميل المزيد من العملاء
+  Future<void> loadMoreCustomers() async {
+    if (!_isLoading && _hasMore && _searchQuery.isEmpty) {
+      await fetchCustomers();
+    }
+  }
+
+  // إعادة تحميل من البداية
+  Future<void> refreshCustomers() async {
+    await fetchCustomers(reset: true);
   }
 
   // حساب إجمالي الدين والنقدي للعميل من الفواتير
@@ -77,29 +129,22 @@ class CustomerProvider extends ChangeNotifier {
 
   Future<void> searchCustomers(String query) async {
     _searchQuery = query;
-    final db = await _dbHelper.db;
 
     if (query.isEmpty) {
-      final result = await db.query('customers', orderBy: 'name ASC');
-      _filteredCustomers = result.map((e) => Customer.fromMap(e)).toList();
+      _filteredCustomers = _displayedCustomers;
     } else {
-      final result = await db.query(
-        'customers',
-        where: 'name LIKE ? OR phone LIKE ?',
-        whereArgs: ['%$query%', '%$query%'],
-        orderBy: 'name ASC',
-      );
-      _filteredCustomers = result.map((e) => Customer.fromMap(e)).toList();
-    }
+      final results =
+          _displayedCustomers.where((customer) {
+            final nameMatch = customer.name.toLowerCase().contains(
+              query.toLowerCase(),
+            );
+            final phoneMatch =
+                customer.phone?.toLowerCase().contains(query.toLowerCase()) ??
+                false;
+            return nameMatch || phoneMatch;
+          }).toList();
 
-    // حساب الدين والنقدي للعملاء المفلترة
-    for (int i = 0; i < _filteredCustomers.length; i++) {
-      final customer = _filteredCustomers[i];
-      final totals = await _calculateCustomerTotals(customer.id!);
-      _filteredCustomers[i] = customer.copyWith(
-        debt: totals['debt'] ?? 0.0,
-        totalCash: totals['cash'] ?? 0.0,
-      );
+      _filteredCustomers = results;
     }
 
     notifyListeners();
@@ -112,10 +157,15 @@ class CustomerProvider extends ChangeNotifier {
 
     // إنشاء نسخة جديدة من العميل مع ID
     final newCustomer = customer.copyWith(id: id);
-    _customers.add(newCustomer);
+    _customers.insert(0, newCustomer); // إضافة في البداية
+    _displayedCustomers = List.from(_customers);
+    _filteredCustomers = _displayedCustomers;
 
-    // إعادة تحميل العملاء لتحديث القائمة
-    await fetchCustomers();
+    // إعادة تعيين التحميل التدريجي
+    _currentPage = 0;
+    _hasMore = true;
+
+    notifyListeners();
   }
 
   // تحديث زبون
@@ -128,8 +178,14 @@ class CustomerProvider extends ChangeNotifier {
       whereArgs: [customer.id],
     );
 
-    // إعادة تحميل العملاء لتحديث القائمة
-    await fetchCustomers();
+    // تحديث في القائمة المحلية
+    final index = _customers.indexWhere((c) => c.id == customer.id);
+    if (index != -1) {
+      _customers[index] = customer;
+      _displayedCustomers = List.from(_customers);
+      _filteredCustomers = _displayedCustomers;
+      notifyListeners();
+    }
   }
 
   // حذف زبون
@@ -149,17 +205,20 @@ class CustomerProvider extends ChangeNotifier {
 
     await db.delete('customers', where: 'id = ?', whereArgs: [id]);
 
-    // إعادة تحميل العملاء لتحديث القائمة
-    await fetchCustomers();
+    // حذف من القائمة المحلية
+    _customers.removeWhere((c) => c.id == id);
+    _displayedCustomers = List.from(_customers);
+    _filteredCustomers = _displayedCustomers;
+
+    notifyListeners();
   }
 
   // تسديد دين العميل
   Future<void> payDebt(
     int customerId,
     double amount,
-    String s, {
-    String paymentType = 'cash',
-  }) async {
+    String paymentType,
+  ) async {
     if (amount <= 0) {
       throw Exception('المبلغ يجب أن يكون أكبر من الصفر');
     }
@@ -167,7 +226,12 @@ class CustomerProvider extends ChangeNotifier {
     final db = await _dbHelper.db;
 
     // البحث عن العميل
-    final customer = _customers.firstWhere((c) => c.id == customerId);
+    final customerIndex = _customers.indexWhere((c) => c.id == customerId);
+    if (customerIndex == -1) {
+      throw Exception('العميل غير موجود');
+    }
+
+    final customer = _customers[customerIndex];
 
     if (amount > customer.debt) {
       throw Exception('المبلغ المسدد أكبر من الدين المتبقي');
@@ -183,11 +247,16 @@ class CustomerProvider extends ChangeNotifier {
       'show_for_tax': 0,
     });
 
-    // إعادة تحميل العملاء لتحديث الأرقام
-    await fetchCustomers();
+    // تحديث الدين المحلي
+    final updatedCustomer = customer.copyWith(debt: customer.debt - amount);
+    _customers[customerIndex] = updatedCustomer;
+    _displayedCustomers = List.from(_customers);
+    _filteredCustomers = _displayedCustomers;
+
+    notifyListeners();
   }
 
-  // الحصول على إحصائيات العملاء
+  // الحصول على إحصائيات العملاء (من العملاء المحملين فقط)
   Map<String, dynamic> getCustomerStats() {
     final totalCustomers = _customers.length;
     final totalDebt = _customers.fold(
@@ -306,22 +375,13 @@ class CustomerProvider extends ChangeNotifier {
 
   // مسح البحث
   void clearSearch() {
-    _searchController?.clear();
     _searchQuery = '';
-    _filteredCustomers = _customers;
+    _filteredCustomers = _displayedCustomers;
     notifyListeners();
-  }
-
-  // تحكم البحث (إذا كنت تستخدمه في الواجهة)
-  TextEditingController? _searchController;
-  TextEditingController get searchController {
-    _searchController ??= TextEditingController();
-    return _searchController!;
   }
 
   @override
   void dispose() {
-    _searchController?.dispose();
     super.dispose();
   }
 }

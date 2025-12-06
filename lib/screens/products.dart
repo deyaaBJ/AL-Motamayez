@@ -16,84 +16,105 @@ class ProductsScreen extends StatefulWidget {
 }
 
 class _ProductsScreenState extends State<ProductsScreen> {
-  final List<Product> _products = [];
   bool _isLoading = false;
-  bool _hasMore = true;
-  int _page = 0;
-
   String _searchQuery = '';
   ProductFilter _currentFilter = ProductFilter.all;
+  List<Product> _searchResults = [];
 
   final ScrollController _scrollController = ScrollController();
+  final ProductProvider _provider = ProductProvider();
+
   @override
   void initState() {
     super.initState();
-    _loadProducts();
+    _loadInitialProducts();
+    _setupScrollListener();
+  }
+
+  void _setupScrollListener() {
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
               _scrollController.position.maxScrollExtent - 200 &&
           !_isLoading &&
-          _hasMore) {
-        _loadProducts();
+          _provider.hasMore &&
+          _searchQuery.isEmpty) {
+        print('Loading more products...');
+        _loadMoreProducts();
       }
     });
   }
 
-  final ProductProvider _provider = ProductProvider();
+  Future<void> _loadInitialProducts() async {
+    if (_isLoading) return;
 
-  Future<void> _loadProducts({bool reset = false}) async {
-    if (!reset && (_isLoading || !_hasMore))
-      return; // ✅ يسمح بالتحميل لو reset=true
+    setState(() => _isLoading = true);
 
-    setState(() {
-      _isLoading = true;
-    });
-
-    if (reset) {
-      _page = 0;
-      _products.clear();
-      _hasMore = true;
+    try {
+      await _provider.loadProducts(reset: true);
+    } catch (e) {
+      print('Error loading initial products: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('حدث خطأ في تحميل المنتجات: $e')));
+    } finally {
+      setState(() => _isLoading = false);
     }
-
-    final newProducts = await _provider.getProducts(reset: reset);
-
-    setState(() {
-      _products.addAll(newProducts);
-      _isLoading = false;
-      _hasMore = newProducts.length == _provider.limit;
-    });
   }
 
-  List<Product> get _filteredProducts {
-    final query = _searchQuery.toLowerCase();
-    return _products.where((product) {
-      final matchesSearch =
-          query.isEmpty
-              ? true
-              : product.name.toLowerCase().contains(query) ||
-                  product.barcode.toLowerCase().contains(query);
+  Future<void> _loadMoreProducts() async {
+    if (_isLoading || !_provider.hasMore || _searchQuery.isNotEmpty) return;
 
-      final doesMatchFilter = matchesFilter(context, product, _currentFilter);
+    setState(() => _isLoading = true);
 
-      return matchesSearch && doesMatchFilter;
-    }).toList();
+    try {
+      await _provider.loadProducts(reset: false);
+    } catch (e) {
+      print('Error loading more products: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // ✅ دالة لعرض العدد الإجمالي (يمكن استخدامها في AppBar)
+  Widget _buildTotalProductsIndicator() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Color(0xFF6A3093).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.inventory_2, size: 16, color: Color(0xFF6A3093)),
+          SizedBox(width: 4),
+          Text(
+            '${_provider.totalProducts}',
+            style: TextStyle(
+              color: Color(0xFF6A3093),
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl, // 🔥 تحويل كل الواجهة للعربي
+      textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'المنتجات',
         showAppBar: true,
         title: 'إدارة المنتجات',
         actions: [
-          // إذا كان لديك أي actions في AppBar أضفها هنا
+          _buildTotalProductsIndicator(),
           IconButton(
-            onPressed: () {
-              /* action */
-            },
+            onPressed: _loadInitialProducts,
             icon: Icon(Icons.refresh),
+            tooltip: 'تحديث',
           ),
         ],
         floatingActionButton: FloatingActionButton(
@@ -106,13 +127,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
             ProductFilterBar(
               currentFilter: _currentFilter,
               onFilterChanged: (filter) {
-                setState(() {
-                  _currentFilter = filter;
-                });
+                setState(() => _currentFilter = filter);
               },
             ),
             _buildSearchBar(),
-            ProductTableHeader(columns: const [/* ... */]),
+            ProductTableHeader(columns: const [/* أضف الأعمدة هنا */]),
             Expanded(child: _buildProductsList()),
           ],
         ),
@@ -120,48 +139,21 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
-  AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 2,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Color(0xFF6A3093)),
-        onPressed: () => Navigator.pop(context),
-      ),
-      title: const Text(
-        'المنتجات',
-        style: TextStyle(
-          color: Color(0xFF6A3093),
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  List<Product> _searchResults = [];
-
   Widget _buildSearchBar() {
     return Container(
       padding: const EdgeInsets.all(16),
       color: Colors.transparent,
       child: TextField(
         onChanged: (value) async {
-          setState(() {
-            _searchQuery = value;
-          });
+          setState(() => _searchQuery = value.trim());
 
-          if (value.trim().isEmpty) {
-            setState(() {
-              _searchResults = [];
-            });
+          if (value.isEmpty) {
+            setState(() => _searchResults = []);
             return;
           }
 
           final results = await _provider.searchProducts(value);
-          setState(() {
-            _searchResults = results;
-          });
+          setState(() => _searchResults = results);
         },
         decoration: InputDecoration(
           hintText: '🔍 ابحث عن منتج...',
@@ -180,55 +172,86 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
-  // استخدام القائمة في ListView
-  List<Product> get displayedProducts {
-    if (_searchQuery.isEmpty) return _products;
-    return _searchResults;
+  // ✅ الحصول على المنتجات المعروضة
+  List<Product> get _displayedProducts {
+    if (_searchQuery.isNotEmpty) {
+      return _searchResults.where((product) {
+        return matchesFilter(context, product, _currentFilter);
+      }).toList();
+    }
+
+    return _provider.products.where((product) {
+      return matchesFilter(context, product, _currentFilter);
+    }).toList();
   }
 
   Widget _buildProductsList() {
-    if (_isLoading && _products.isEmpty) {
+    final productsToDisplay = _displayedProducts;
+
+    if (_isLoading && productsToDisplay.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_filteredProducts.isEmpty && !_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inventory_2, size: 80, color: Colors.grey),
-            SizedBox(height: 16),
-            Text(
-              'لا توجد منتجات',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
-            ),
-          ],
-        ),
-      );
+    if (productsToDisplay.isEmpty && !_isLoading) {
+      return _buildEmptyState();
     }
 
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.all(16),
-      itemCount: _filteredProducts.length + (_hasMore ? 1 : 0),
+      itemCount:
+          productsToDisplay.length + (_shouldShowLoadingIndicator ? 1 : 0),
       itemBuilder: (context, index) {
-        if (index == _filteredProducts.length) {
+        if (index == productsToDisplay.length) {
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Center(child: CircularProgressIndicator()),
           );
         }
 
-        final product = _filteredProducts[index];
+        final product = productsToDisplay[index];
         return ProductItem(
           product: product,
           provider: _provider,
-          onUpdate:
-              () => setState(() {
-                _loadProducts(reset: true);
-              }),
+          onUpdate: _loadInitialProducts,
         );
       },
+    );
+  }
+
+  bool get _shouldShowLoadingIndicator {
+    return _isLoading &&
+        _provider.hasMore &&
+        _searchQuery.isEmpty &&
+        _provider.products.isNotEmpty;
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            _searchQuery.isNotEmpty ? Icons.search_off : Icons.inventory_2,
+            size: 80,
+            color: Colors.grey,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _searchQuery.isNotEmpty
+                ? 'لا توجد نتائج للبحث "${_searchQuery}"'
+                : 'لا توجد منتجات',
+            style: const TextStyle(fontSize: 18, color: Colors.grey),
+          ),
+          if (_searchQuery.isEmpty) ...[
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: _loadInitialProducts,
+              child: const Text('تحديث'),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -237,8 +260,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
       context,
       MaterialPageRoute(builder: (context) => const AddProductScreen()),
     );
+    await _loadInitialProducts();
+  }
 
-    await _loadProducts(reset: true);
-    setState(() {});
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 }

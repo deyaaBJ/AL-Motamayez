@@ -9,15 +9,16 @@ class SalesProvider extends ChangeNotifier {
   bool _hasMore = true;
   bool _isLoading = false;
 
-  // Added public getters so UI can read loading/hasMore state
   bool get isLoading => _isLoading;
   bool get hasMore => _hasMore;
 
   final DBHelper _dbHelper = DBHelper();
-  List<Sale> _sales = [];
-  List<Sale> _filteredSales = [];
 
-  List<Sale> get sales => _filteredSales;
+  // ✅ فصل البيانات: قائمة للكل وقائمة للعرض المصفى
+  List<Sale> _allSales = []; // جميع الفواتير المحملة
+  List<Sale> _displayedSales = []; // الفواتير المعروضة بعد التصفية
+
+  List<Sale> get sales => _displayedSales; // نعرض المصفاة فقط
 
   // الفلاتر
   String _selectedPaymentType = 'الكل';
@@ -26,27 +27,24 @@ class SalesProvider extends ChangeNotifier {
   DateTime? _selectedDate;
 
   // الفلاتر الجديدة للتاريخ المتقدم
-  String _dateFilterType = 'day'; // 'day', 'month', 'year'
-  int? _selectedMonth; // 1-12
+  String _dateFilterType = 'day';
+  int? _selectedMonth;
   int? _selectedYear;
 
-  // Getters for filters
+  // Getters
   String get selectedPaymentType => _selectedPaymentType;
   String get selectedCustomer => _selectedCustomer;
   DateTime? get selectedDate => _selectedDate;
   String get selectedTaxFilter => _selectedTaxFilter;
-
-  // Getters للخصائص الجديدة
   String get dateFilterType => _dateFilterType;
   int? get selectedMonth => _selectedMonth;
   int? get selectedYear => _selectedYear;
 
-  // قيم الفلاتر
   List<String> get paymentTypes => ['الكل', 'cash', 'credit'];
 
   List<String> get customerNames {
     Set<String> names = {'الكل'};
-    for (var sale in _sales) {
+    for (var sale in _allSales) {
       if (sale.customerName != null && sale.customerName!.isNotEmpty) {
         names.add(sale.customerName!);
       } else {
@@ -56,7 +54,6 @@ class SalesProvider extends ChangeNotifier {
     return names.toList();
   }
 
-  // دوال الحصول على القوائم للفلاتر الجديدة
   List<String> get months => [
     'يناير',
     'فبراير',
@@ -77,34 +74,97 @@ class SalesProvider extends ChangeNotifier {
     return List.generate(5, (index) => currentYear - index);
   }
 
-  // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ دوال الفلترة المتقدمة للتاريخ ██████████████████████████████████████████████
-  // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ Getters جديدة ███████████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
+  // ✅ Getter للحصول على عدد الفواتير المحملة
+  int get loadedSalesCount => _allSales.length;
+
+  // ✅ Getter للتحقق مما إذا كانت هناك فواتير محملة
+  bool get hasLoadedSales => _allSales.isNotEmpty;
+
+  // ✅ Getter للحصول على نسبة الفلاتر
+  String get filteredPercentage {
+    if (_allSales.isEmpty) return "0%";
+    final percentage =
+        (_displayedSales.length / _allSales.length * 100).toInt();
+    return "$percentage%";
+  }
+
+  // ✅ Getter للحصول على ملخص الفلاتر
+  Map<String, dynamic> get filterSummary {
+    return {
+      'totalLoaded': _allSales.length,
+      'displayed': _displayedSales.length,
+      'filteredOut': _allSales.length - _displayedSales.length,
+      'percentage': filteredPercentage,
+    };
+  }
+
+  // ✅ دالة لمعرفة ما إذا كانت الفلاتر تعمل
+  bool get isFilterActive {
+    return _selectedPaymentType != 'الكل' ||
+        _selectedCustomer != 'الكل' ||
+        _selectedTaxFilter != 'الكل' ||
+        _selectedDate != null ||
+        _selectedMonth != null ||
+        _selectedYear != null ||
+        _dateFilterType != 'day';
+  }
+
+  // ✅ دالة للحصول على وصف الفلاتر النشطة
+  String get activeFiltersDescription {
+    final filters = <String>[];
+
+    if (_selectedPaymentType != 'الكل') {
+      filters.add('دفع: ${_selectedPaymentType == 'cash' ? 'نقدي' : 'آجل'}');
+    }
+
+    if (_selectedCustomer != 'الكل') {
+      filters.add('عميل: $_selectedCustomer');
+    }
+
+    if (_selectedTaxFilter != 'الكل') {
+      filters.add('ضريبة: $_selectedTaxFilter');
+    }
+
+    if (_dateFilterType == 'day' && _selectedDate != null) {
+      final date = _selectedDate!;
+      filters.add('تاريخ: ${date.year}-${date.month}-${date.day}');
+    } else if (_dateFilterType == 'month' &&
+        _selectedMonth != null &&
+        _selectedYear != null) {
+      filters.add('شهر: ${months[_selectedMonth! - 1]} $_selectedYear');
+    } else if (_dateFilterType == 'year' && _selectedYear != null) {
+      filters.add('سنة: $_selectedYear');
+    }
+
+    return filters.isEmpty ? 'لا توجد فلاتر' : filters.join('، ');
+  }
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ الفلاتر المتقدمة ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
 
   void setDateFilterType(String type) {
     _dateFilterType = type;
-    _page = 0;
-    _sales.clear();
+    _applyFilters(); // ✅ فقط نطبق الفلاتر على البيانات الموجودة
     notifyListeners();
-    fetchSales();
   }
 
   void setMonthFilter(int month) {
     _selectedMonth = month;
     _dateFilterType = 'month';
-    _page = 0;
-    _sales.clear();
+    _applyFilters();
     notifyListeners();
-    fetchSales();
   }
 
   void setYearFilter(int year) {
     _selectedYear = year;
     _dateFilterType = 'year';
-    _page = 0;
-    _sales.clear();
+    _applyFilters();
     notifyListeners();
-    fetchSales();
   }
 
   void clearDateFilter() {
@@ -112,10 +172,8 @@ class SalesProvider extends ChangeNotifier {
     _selectedMonth = null;
     _selectedYear = null;
     _dateFilterType = 'day';
-    _page = 0;
-    _sales.clear();
+    _applyFilters();
     notifyListeners();
-    fetchSales();
   }
 
   // دالة مساعدة لبناء استعلام التاريخ
@@ -141,27 +199,24 @@ class SalesProvider extends ChangeNotifier {
     return '1=1';
   }
 
-  // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ الدوال الأصلية (الحالية) ███████████████████████████████████████████████████
-  // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ التحميل التدريجي ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
 
-  int todaySalesCount = 0; // عدد فواتير اليوم
+  int todaySalesCount = 0;
 
-  // تحميل عدد فواتير اليوم
   Future<void> loadTodaySalesCount() async {
     final db = await _dbHelper.db;
-
     final result = await db.rawQuery("""
       SELECT COUNT(*) as count 
       FROM sales
       WHERE DATE(date) = DATE('now')
     """);
-
     todaySalesCount = result.first['count'] as int;
-
     notifyListeners();
   }
 
+  // ✅ التحميل التدريجي للفواتير (بدون فلاتر في الاستعلام)
   Future<void> fetchSales({bool loadMore = false}) async {
     if (_isLoading || (!_hasMore && loadMore)) return;
 
@@ -170,122 +225,143 @@ class SalesProvider extends ChangeNotifier {
 
     if (!loadMore) {
       _page = 0;
-      _sales.clear();
+      _allSales.clear();
+      _hasMore = true;
     }
 
     final db = await _dbHelper.db;
 
-    // بناء استعلامات الفلترة
-    final dateWhereClause = _buildDateWhereClause();
+    try {
+      // ✅ نطلب كل الفواتير بدون فلاتر للتحميل التدريجي
+      final result = await db.rawQuery('''
+        SELECT s.*, c.name as customer_name 
+        FROM sales s 
+        LEFT JOIN customers c ON s.customer_id = c.id 
+        ORDER BY s.date DESC
+        LIMIT $_limit OFFSET ${_page * _limit}
+      ''');
 
-    String paymentWhereClause = '';
+      final newSales = result.map((e) => Sale.fromMap(e)).toList();
+
+      if (newSales.length < _limit) {
+        _hasMore = false;
+      }
+
+      if (loadMore) {
+        _allSales.addAll(newSales);
+      } else {
+        _allSales = newSales;
+      }
+
+      _page++;
+
+      // ✅ تطبيق الفلاتر على البيانات الجديدة
+      _applyFilters();
+    } catch (e) {
+      print('Error fetching sales: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ✅ تطبيق الفلاتر على البيانات المحملة
+  void _applyFilters() {
+    List<Sale> filtered = _allSales;
+
+    // فلترة نوع الدفع
     if (_selectedPaymentType != 'الكل') {
-      paymentWhereClause = "s.payment_type = '$_selectedPaymentType'";
+      filtered =
+          filtered
+              .where(
+                (sale) =>
+                    sale.paymentType == _selectedPaymentType.toLowerCase(),
+              )
+              .toList();
     }
 
-    String customerWhereClause = '';
+    // فلترة العميل
     if (_selectedCustomer != 'الكل') {
       if (_selectedCustomer == 'بدون عميل') {
-        customerWhereClause = "s.customer_id IS NULL";
+        filtered = filtered.where((sale) => sale.customerId == null).toList();
       } else {
-        customerWhereClause = "c.name = '$_selectedCustomer'";
+        filtered =
+            filtered
+                .where((sale) => sale.customerName == _selectedCustomer)
+                .toList();
       }
     }
 
-    String taxWhereClause = '';
+    // فلترة الضريبة
     if (_selectedTaxFilter != 'الكل') {
-      if (_selectedTaxFilter == 'مضمنه بالضرائب') {
-        taxWhereClause = "s.show_for_tax = 1";
-      } else if (_selectedTaxFilter == 'غير مضمنه بالضرائب') {
-        taxWhereClause = "s.show_for_tax = 0";
-      }
+      final taxValue = _selectedTaxFilter == 'مضمنه بالضرائب' ? 1 : 0;
+      filtered = filtered.where((sale) => sale.showForTax == taxValue).toList();
     }
 
-    // بناء الجملة WHERE النهائية
-    final whereConditions =
-        [
-              dateWhereClause,
-              paymentWhereClause,
-              customerWhereClause,
-              taxWhereClause,
-            ]
-            .where((condition) => condition.isNotEmpty && condition != '1=1')
-            .toList();
-
-    final whereClause =
-        whereConditions.isNotEmpty
-            ? 'WHERE ${whereConditions.join(' AND ')}'
-            : '';
-
-    final result = await db.rawQuery('''
-      SELECT s.*, c.name as customer_name 
-      FROM sales s 
-      LEFT JOIN customers c ON s.customer_id = c.id 
-      $whereClause
-      ORDER BY s.date DESC
-      LIMIT $_limit OFFSET ${_page * _limit}
-    ''');
-
-    final newSales = result.map((e) => Sale.fromMap(e)).toList();
-
-    if (newSales.length < _limit) {
-      _hasMore = false;
+    // فلترة التاريخ
+    if (_dateFilterType == 'day' && _selectedDate != null) {
+      final selectedDateStr = _selectedDate!.toIso8601String().split('T')[0];
+      filtered =
+          filtered.where((sale) {
+            final saleDateStr =
+                DateTime.parse(sale.date).toIso8601String().split('T')[0];
+            return saleDateStr == selectedDateStr;
+          }).toList();
+    } else if (_dateFilterType == 'month' &&
+        _selectedMonth != null &&
+        _selectedYear != null) {
+      filtered =
+          filtered.where((sale) {
+            final saleDate = DateTime.parse(sale.date);
+            return saleDate.month == _selectedMonth &&
+                saleDate.year == _selectedYear;
+          }).toList();
+    } else if (_dateFilterType == 'year' && _selectedYear != null) {
+      filtered =
+          filtered.where((sale) {
+            final saleDate = DateTime.parse(sale.date);
+            return saleDate.year == _selectedYear;
+          }).toList();
     }
 
-    if (loadMore) {
-      _sales.addAll(newSales);
-    } else {
-      _sales = newSales;
-    }
-
-    _filteredSales = _sales;
-    _page++;
-    _isLoading = false;
-
-    notifyListeners();
+    _displayedSales = filtered;
   }
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ دوال الفلترة ███████████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
 
   void setPaymentTypeFilter(String? value) {
     _selectedPaymentType = value ?? 'الكل';
-    _page = 0;
-    _sales.clear();
+    _applyFilters();
     notifyListeners();
-    fetchSales();
   }
 
   void setCustomerFilter(String? value) {
     _selectedCustomer = value ?? 'الكل';
-    _page = 0;
-    _sales.clear();
+    _applyFilters();
     notifyListeners();
-    fetchSales();
   }
 
   void setDateFilter(DateTime? date) {
     _selectedDate = date;
     _dateFilterType = 'day';
-    _page = 0;
-    _sales.clear();
+    _applyFilters();
     notifyListeners();
-    fetchSales();
   }
 
   void setTaxFilter(String? value) {
     _selectedTaxFilter = value ?? 'الكل';
-    _page = 0;
-    _sales.clear();
+    _applyFilters();
     notifyListeners();
-    fetchSales();
   }
 
   void clearFilters() {
     _selectedPaymentType = 'الكل';
     _selectedCustomer = 'الكل';
     _selectedTaxFilter = 'الكل';
-    _page = 0;
-    _sales.clear();
+    _applyFilters();
     notifyListeners();
-    fetchSales();
   }
 
   void clearAllFilters() {
@@ -296,16 +372,13 @@ class SalesProvider extends ChangeNotifier {
     _selectedMonth = null;
     _selectedYear = null;
     _dateFilterType = 'day';
-    _page = 0;
-    _sales.clear();
+    _applyFilters();
     notifyListeners();
-    fetchSales();
   }
 
-  // دالة لإعادة تعيين الحالة
   void reset() {
-    _sales.clear();
-    _filteredSales.clear();
+    _allSales.clear();
+    _displayedSales.clear();
     _isLoading = false;
     _hasMore = true;
     _page = 0;

@@ -70,12 +70,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
           _nameController.text = _existingProduct!.name;
           _priceController.text = _existingProduct!.price.toString();
           _costPriceController.text = _existingProduct!.costPrice.toString();
+          _quantityController.text = '0'; // الكمية الجديدة التي ستضاف
+
+          // ⬅️ التعديل هنا: استخدام كمية المنتج الفعلية بدلاً من 0
           _originalQuantityController.text =
               _existingProduct!.quantity.toString();
-          _quantityController.text = '0';
-          _barcodeController.text = _existingProduct!.barcode ?? '';
 
-          // تعبئة البيانات الجديدة - استخدام baseUnit بدلاً من unit
+          _barcodeController.text = _existingProduct!.barcode ?? '';
           _selectedUnit = _existingProduct!.baseUnit;
 
           // تحميل الوحدات الإضافية للمنتج الموجود
@@ -91,6 +92,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         _isLoading = false;
       });
       print('Error loading product by ID: $e');
+      showAppToast(context, 'خطأ في تحميل المنتج: $e', ToastType.error);
     }
   }
 
@@ -373,15 +375,26 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Widget _buildQuantitySection() {
     return Column(
       children: [
-        if (!_isNewProduct) ...[
-          CustomTextField(
-            controller: _originalQuantityController,
-            label:
-                _selectedUnit == 'piece'
-                    ? 'الكمية الحالية (قطعة)'
-                    : 'الكمية الحالية (كيلو)',
-            prefixIcon: Icons.inventory,
-            readOnly: true,
+        if (!_isNewProduct && _existingProduct != null) ...[
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue[200]!),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info, color: Colors.blue[700], size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'الكمية الحالية: ${_existingProduct!.quantity.toStringAsFixed(2)}',
+                    style: TextStyle(color: Colors.blue[700]),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           CustomTextField(
@@ -390,7 +403,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 _selectedUnit == 'piece'
                     ? 'الكمية المراد إضافتها (قطعة)'
                     : 'الكمية المراد إضافتها (كيلو)',
-            prefixIcon: Icons.add_shopping_cart,
+            prefixIcon: Icons.add,
             keyboardType: TextInputType.numberWithOptions(decimal: true),
             validator: (value) {
               if (value == null || value.isEmpty) {
@@ -398,6 +411,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
               }
               if (double.tryParse(value) == null) {
                 return 'يرجى إدخال كمية صحيحة';
+              }
+              final qty = double.tryParse(value) ?? 0;
+              if (qty < 0) {
+                return 'الكمية لا يمكن أن تكون سالبة';
               }
               return null;
             },
@@ -414,6 +431,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
               }
               if (double.tryParse(value) == null) {
                 return 'يرجى إدخال كمية صحيحة';
+              }
+              final qty = double.tryParse(value) ?? 0;
+              if (qty <= 0) {
+                return 'الكمية يجب أن تكون أكبر من صفر';
               }
               return null;
             },
@@ -747,7 +768,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate()) {
       showAppToast(context, 'يرجى تصحيح الأخطاء في النموذج', ToastType.error);
-
       return;
     }
 
@@ -765,45 +785,64 @@ class _AddProductScreenState extends State<AddProductScreen> {
     // التحقق من البيانات الأساسية
     if (_nameController.text.isEmpty) {
       showAppToast(context, 'يرجى إدخال اسم المنتج', ToastType.error);
-
       return;
     }
-
-    // إنشاء كائن المنتج
-    final product = Product(
-      name: _nameController.text,
-      barcode: _barcodeController.text,
-      baseUnit: _selectedUnit,
-      price: double.tryParse(_priceController.text) ?? 0.0,
-      quantity: finalQuantity,
-      costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
-    );
 
     setState(() => _isLoading = true);
 
     try {
-      int? productId;
-
       if (_isNewProduct) {
-        // addProduct returns void, لذا نستدعيه ثم نحاول جلب الـ ID عن طريق البحث بالباركود
+        // إنشاء كائن المنتج الجديد
+        final product = Product(
+          name: _nameController.text,
+          barcode: _barcodeController.text,
+          baseUnit: _selectedUnit,
+          price: double.tryParse(_priceController.text) ?? 0.0,
+          quantity: finalQuantity,
+          costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
+        );
+
         await _provider.addProduct(product);
+
+        // محاولة الحصول على الـ ID من خلال البحث بالباركود
         try {
           final results = await _provider.searchProductsByBarcode(
             product.barcode,
           );
           if (results.isNotEmpty) {
-            productId = results.first.id;
-          }
-          // ignore: empty_catches
-        } catch (e) {}
-      } else {
-        await _provider.updateProduct(product);
-        productId = _existingProduct?.id;
-      }
+            final newProductId = results.first.id;
 
-      // حفظ الوحدات الإضافية إذا كان هناك منتج ID وقسم الوحدات مفعل
-      if (productId != null && _showUnitsSection) {
-        await _saveProductUnits(productId);
+            // حفظ الوحدات الإضافية
+            if (_showUnitsSection && newProductId != null) {
+              await _saveProductUnits(newProductId);
+            }
+          }
+        } catch (e) {
+          print('Warning: Could not get product ID: $e');
+        }
+      } else {
+        // ✅ تحديث المنتج الموجود - مع إضافة ID
+        if (_existingProduct?.id == null) {
+          throw Exception('لا يمكن تحديث منتج بدون ID');
+        }
+
+        final product = Product(
+          id: _existingProduct!.id, // ⬅️ هذا هو الحل! إضافة الـ ID
+          name: _nameController.text,
+          barcode: _barcodeController.text,
+          baseUnit: _selectedUnit,
+          price: double.tryParse(_priceController.text) ?? 0.0,
+          quantity: finalQuantity,
+          costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
+          addedDate: _existingProduct?.addedDate, // الحفاظ على تاريخ الإضافة
+        );
+
+        await _provider.updateProduct(product);
+
+        // حفظ الوحدات الإضافية
+        if (_showUnitsSection && _existingProduct!.id != null) {
+          await _saveProductUnits(_existingProduct!.id!);
+        }
       }
 
       setState(() => _isLoading = false);
@@ -816,11 +855,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
       );
 
       // الانتظار قليلاً ثم العودة
-      await Future.delayed(Duration(seconds: 1));
+      await Future.delayed(const Duration(seconds: 1));
       Navigator.pop(context, true);
     } catch (e) {
       setState(() => _isLoading = false);
       showAppToast(context, 'حدث خطأ: $e', ToastType.error);
+      print('Error saving product: $e');
     }
   }
 

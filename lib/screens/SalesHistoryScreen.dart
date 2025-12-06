@@ -42,15 +42,16 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      textDirection: TextDirection.rtl,
       child: BaseLayout(
-        currentPage: 'المبيعات', // اسم الصفحة للسايدبار
-        showAppBar: true, // تفعيل AppBar
-        title: 'سجل الفواتير', // عنوان AppBar
+        currentPage: 'المبيعات',
+        showAppBar: true,
+        title: 'سجل الفواتير',
         actions: [
           IconButton(
             onPressed: () {
-              // أي عملية تحديث أو action
+              // ✅ تحديث الفواتير
+              context.read<SalesProvider>().fetchSales();
             },
             icon: const Icon(Icons.refresh),
           ),
@@ -58,6 +59,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         floatingActionButton: FloatingActionButton(
           onPressed: () {
             // إضافة فاتورة جديدة
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => PosScreen()),
+            );
           },
           backgroundColor: const Color(0xFF8B5FBF),
           child: const Icon(Icons.add, color: Colors.white, size: 28),
@@ -122,8 +127,61 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                       letterSpacing: -0.5,
                     ),
                   ),
+                  const Spacer(),
+                  // ✅ عرض عدد الفواتير المحملة
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${provider.loadedSalesCount} فاتورة محملة',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue.shade800,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ],
               ),
+
+              // ✅ عرض وصف الفلاتر النشطة
+              if (provider.isFilterActive) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.filter_alt,
+                        size: 14,
+                        color: Colors.orange.shade700,
+                      ),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          provider.activeFiltersDescription,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.orange.shade800,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 16),
 
               // الفلاتر في صفين متجاوبين
               LayoutBuilder(
@@ -139,6 +197,31 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                   }
                 },
               ),
+
+              // ✅ زر إزالة الفلاتر
+              if (provider.isFilterActive) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: Icon(Icons.filter_alt_off, color: Colors.white),
+                    label: Text(
+                      'إزالة جميع الفلاتر',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade600,
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () {
+                      provider.clearAllFilters();
+                    },
+                  ),
+                ),
+              ],
             ],
           ),
         );
@@ -981,24 +1064,66 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       builder: (context, salesProvider, settingsProvider, _) {
         final currencyName = settingsProvider.currencyName;
 
+        // ✅ تحسين رسائل الحالة
         if (salesProvider.sales.isEmpty && !salesProvider.isLoading) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.receipt_long, size: 70, color: Colors.grey[400]),
-                const SizedBox(height: 16),
-                Text(
-                  'لا توجد فواتير',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w600,
+          if (salesProvider.hasLoadedSales) {
+            // هناك فواتير محملة لكنها لا تطابق الفلاتر
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.filter_list_off,
+                    size: 70,
+                    color: Colors.orange[400],
                   ),
-                ),
-              ],
-            ),
-          );
+                  const SizedBox(height: 16),
+                  Text(
+                    'لا توجد فواتير تطابق الفلاتر',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.orange[600],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      salesProvider.clearAllFilters();
+                    },
+                    child: Text('إزالة الفلاتر'),
+                  ),
+                ],
+              ),
+            );
+          } else {
+            // لا توجد فواتير على الإطلاق
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.receipt_long, size: 70, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'لا توجد فواتير',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    icon: Icon(Icons.refresh),
+                    label: Text('تحديث'),
+                    onPressed: () {
+                      salesProvider.fetchSales();
+                    },
+                  ),
+                ],
+              ),
+            );
+          }
         }
 
         return Container(
@@ -1023,6 +1148,60 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                 scrollDirection: Axis.vertical,
                 child: Column(
                   children: [
+                    // ✅ رأس المعلومات
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        border: Border(
+                          bottom: BorderSide(color: Colors.blue[100]!),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.list_alt,
+                            size: 18,
+                            color: Colors.blue[700],
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'عرض ${salesProvider.sales.length} من إجمالي ${salesProvider.loadedSalesCount} فاتورة',
+                                  style: TextStyle(
+                                    color: Colors.blue[700],
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (salesProvider.isFilterActive) ...[
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'تمت فلترة ${salesProvider.filterSummary['filteredOut']} فاتورة (${salesProvider.filteredPercentage})',
+                                    style: TextStyle(
+                                      color: Colors.orange[600],
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          Spacer(),
+                          if (salesProvider.isLoading)
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    // الجدول (يظل كما هو)
                     DataTable(
                       headingRowColor:
                           MaterialStateProperty.resolveWith<Color?>(
@@ -1098,7 +1277,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
                             return DataRow(
                               onSelectChanged:
-                                  (_) => _showSaleDetails(sale.id, context),
+                                  (_) => _showSaleDetails(sale.id!, context),
                               cells: [
                                 DataCell(
                                   Text(
@@ -1278,12 +1457,15 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   }
 
   // دالة لعرض تأكيد الحذف
-  void _showDeleteConfirmationDialog(BuildContext context, Sale sale) {
-    final settings = Provider.of<SettingsProvider>(context);
-
+  void _showDeleteConfirmationDialog(BuildContext parentContext, Sale sale) {
     showDialog(
-      context: context,
-      builder: (BuildContext context) {
+      context: parentContext,
+      builder: (BuildContext dialogContext) {
+        final settings = Provider.of<SettingsProvider>(
+          dialogContext,
+          listen: false,
+        );
+
         return AlertDialog(
           title: Row(
             children: [
@@ -1296,23 +1478,14 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'هل أنت متأكد من رغبتك في حذف الفاتورة رقم ${sale.id}؟',
-                style: const TextStyle(fontSize: 16),
-              ),
+              Text('هل أنت متأكد من رغبتك في حذف الفاتورة رقم ${sale.id}؟'),
               const SizedBox(height: 8),
               Text(
                 'المبلغ: ${sale.totalAmount.toStringAsFixed(0)} ${settings.currencyName}',
-                style: TextStyle(
-                  color: Colors.grey[700],
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 4),
-              Text(
-                'التاريخ: ${sale.formattedDate}',
-                style: TextStyle(color: Colors.grey[700]),
-              ),
+              Text('التاريخ: ${sale.formattedDate}'),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -1328,7 +1501,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                     Expanded(
                       child: Text(
                         'سيتم إرجاع جميع الكميات إلى المخزون',
-                        style: TextStyle(color: Colors.red[700], fontSize: 14),
+                        style: TextStyle(color: Colors.red[700]),
                       ),
                     ),
                   ],
@@ -1338,12 +1511,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('إلغاء'),
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.of(context).pop();
+                Navigator.of(dialogContext).pop();
                 _deleteSale(sale);
               },
               style: ElevatedButton.styleFrom(

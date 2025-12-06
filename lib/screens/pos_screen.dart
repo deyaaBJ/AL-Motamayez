@@ -185,7 +185,7 @@ class _PosScreenState extends State<PosScreen>
     return Directionality(
       textDirection: TextDirection.rtl, // واجهة عربية كاملة
       child: BaseLayout(
-        currentPage: 'المبيعات', // اسم الصفحة للسايدبار
+        currentPage: '', // اسم الصفحة للسايدبار
         showAppBar: true,
         title: 'نقاط البيع',
         actions: [
@@ -1093,7 +1093,14 @@ class _PosScreenState extends State<PosScreen>
       }
     } catch (e) {
       if (mounted) {
-        showAppToast(context, 'خطأ: $e', ToastType.error);
+        final errorMessage =
+            e
+                .toString()
+                .replaceAll("Exception: ", "")
+                .replaceAll("Bad state: ", "")
+                .trim();
+
+        showAppToast(context, 'خطأ: $errorMessage', ToastType.error);
       }
     }
   }
@@ -1273,7 +1280,14 @@ class _PosScreenState extends State<PosScreen>
       }
     } catch (e) {
       if (mounted) {
-        showAppToast(context, 'خطأ: $e', ToastType.error);
+        final errorMessage =
+            e
+                .toString()
+                .replaceAll("Exception: ", "")
+                .replaceAll("Bad state: ", "")
+                .trim();
+
+        showAppToast(context, 'خطأ: $errorMessage', ToastType.error);
       }
     }
   }

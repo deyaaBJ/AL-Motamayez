@@ -4,6 +4,7 @@ import 'package:shopmate/models/product.dart';
 import 'package:shopmate/models/product_unit.dart';
 import 'package:shopmate/models/sale.dart';
 import 'package:shopmate/models/sale_item.dart';
+import 'package:shopmate/utils/unit_translator.dart';
 import 'package:sqflite/sqflite.dart';
 import '../db/db_helper.dart';
 
@@ -17,64 +18,116 @@ class ProductProvider with ChangeNotifier {
   List<Product> _products = [];
   List<Product> get products => _products;
 
+  int _totalProducts = 0;
+  int get totalProducts => _totalProducts;
+
   bool get hasMore => _hasMore;
-  int get limit => _limit;
+  int get currentPage => _page;
 
-  Future<List<Product>> getProducts({bool reset = false}) async {
-    final db = await _dbHelper.db;
-
-    if (reset) {
-      _page = 0;
-      _hasMore = true;
-    }
-
-    final result = await db.query(
-      'products',
-      limit: _limit,
-      offset: _page * _limit,
-    );
-
-    if (result.length < _limit) _hasMore = false;
-
-    _page++;
-    return result.map((e) => Product.fromMap(e)).toList();
-  }
-
-  int totalProducts = 0;
-
-  Future<void> loadTotalProducts() async {
-    final db = await _dbHelper.db;
-
-    final res = await db.rawQuery("SELECT COUNT(*) as count FROM products");
-
-    totalProducts = res.first['count'] as int;
+  // ✅ إعادة تعيين حالة الـ pagination
+  void resetPagination() {
+    _page = 0;
+    _hasMore = true;
+    _products.clear();
     notifyListeners();
   }
 
-  Future<List<Product>> searchProducts(String query) async {
+  // ✅ تحميل عدد المنتجات الإجمالي
+  Future<void> loadTotalProducts() async {
     final db = await _dbHelper.db;
-    if (query.trim().isEmpty) return [];
-
-    final result = await db.query(
-      'products',
-      where: 'LOWER(name) LIKE LOWER(?) OR LOWER(barcode) LIKE LOWER(?)',
-      whereArgs: ['%$query%', '%$query%'],
-      orderBy: 'name ASC',
-    );
-
-    return result.map(Product.fromMap).toList();
+    final res = await db.rawQuery("SELECT COUNT(*) as count FROM products");
+    _totalProducts = res.first['count'] as int;
+    notifyListeners();
   }
 
+  // ✅ التحميل التدريجي للمنتجات مع تحسين الأداء
+  Future<List<Product>> loadProducts({bool reset = false}) async {
+    if (!reset && !_hasMore) return [];
+
+    if (reset) {
+      resetPagination();
+    }
+
+    final db = await _dbHelper.db;
+
+    try {
+      final result = await db.query(
+        'products',
+        limit: _limit,
+        offset: _page * _limit,
+        orderBy: 'id DESC', // استخدام id إذا لم يكن created_at موجود
+      );
+
+      if (result.isEmpty) {
+        _hasMore = false;
+        return [];
+      }
+
+      final newProducts = result.map((e) => Product.fromMap(e)).toList();
+
+      // تحديث الحالة
+      _page++;
+
+      if (newProducts.length < _limit) {
+        _hasMore = false;
+      }
+
+      // إضافة المنتجات الجديدة للقائمة
+      if (reset) {
+        _products = newProducts;
+      } else {
+        _products.addAll(newProducts);
+      }
+
+      // تحميل العدد الإجمالي تلقائياً
+      await loadTotalProducts();
+
+      notifyListeners();
+      return newProducts;
+    } catch (e) {
+      print('Error loading products: $e');
+      return [];
+    }
+  }
+
+  // البحث عن المنتجات (لا يستخدم التحميل التدريجي)
+  Future<List<Product>> searchProducts(String query) async {
+    final db = await _dbHelper.db;
+    if (query.trim().isEmpty) {
+      return _products; // إرجاع المنتجات المحملة
+    }
+
+    try {
+      final result = await db.query(
+        'products',
+        where: 'LOWER(name) LIKE LOWER(?) OR LOWER(barcode) LIKE LOWER(?)',
+        whereArgs: ['%$query%', '%$query%'],
+        orderBy: 'name ASC',
+      );
+
+      return result.map(Product.fromMap).toList();
+    } catch (e) {
+      print('Error searching products: $e');
+      return [];
+    }
+  }
+
+  // ✅ البحث عن منتج بواسطة الباركود (بحث دقيق)
   Future<List<Product>> searchProductsByBarcode(String barcode) async {
     final db = await _dbHelper.db;
 
-    final result = await db.query(
-      'products',
-      where: 'barcode = ?', // 🔹 مطابقة كاملة
-      whereArgs: [barcode], // لا نضع % لأنها للبحث الجزئي
-    );
+    try {
+      final result = await db.query(
+        'products',
+        where: 'barcode = ?',
+        whereArgs: [barcode],
+      );
 
-    return result.map((map) => Product.fromMap(map)).toList();
+      return result.map((map) => Product.fromMap(map)).toList();
+    } catch (e) {
+      print('Error searching by barcode: $e');
+      return [];
+    }
   }
 
   // إضافة وحدة جديدة للمنتج
@@ -145,7 +198,6 @@ class ProductProvider with ChangeNotifier {
   Future<void> addProduct(Product product) async {
     final db = await _dbHelper.db;
 
-    // استخدام الهيكل الجديد
     final productMap = {
       'name': product.name,
       'barcode': product.barcode,
@@ -157,91 +209,46 @@ class ProductProvider with ChangeNotifier {
 
     final id = await db.insert('products', productMap);
 
-    // إضافة المنتج للقائمة المحلية مع الهيكل الجديد
-    _products.add(
-      Product(
-        id: id,
-        name: product.name,
-        barcode: product.barcode,
-        baseUnit: product.baseUnit,
-        price: product.price,
-        quantity: product.quantity,
-        costPrice: product.costPrice,
-      ),
-    );
+    // إعادة تحميل البيانات
+    await loadProducts(reset: true);
 
     notifyListeners();
   }
 
   Future<void> updateProduct(Product updatedProduct) async {
+    if (updatedProduct.id == null) {
+      throw Exception('لا يمكن تحديث منتج بدون ID');
+    }
+
     final db = await _dbHelper.db;
 
-    // ✅ إنشاء map للتحديث مع القيم الجديدة فقط
-    final updateData = <String, dynamic>{};
+    // تحديث جميع الحقول بشكل كامل
+    final updateData = <String, dynamic>{
+      'name': updatedProduct.name,
+      'barcode': updatedProduct.barcode,
+      'base_unit': updatedProduct.baseUnit,
+      'price': updatedProduct.price,
+      'cost_price': updatedProduct.costPrice,
+      'quantity': updatedProduct.quantity,
+    };
 
-    if (updatedProduct.name.isNotEmpty) {
-      updateData['name'] = updatedProduct.name;
-    }
-
-    if (updatedProduct.price > 0) {
-      updateData['price'] = updatedProduct.price;
-    }
-
-    if (updatedProduct.costPrice > 0) {
-      updateData['cost_price'] = updatedProduct.costPrice;
-    }
-
-    // ✅ الكمية يتم تحديثها دائماً (تم حسابها في الواجهة)
-    updateData['quantity'] = updatedProduct.quantity;
-
-    // ✅ الحقول الجديدة - استخدام base_unit بدلاً من unit
-    if (updatedProduct.baseUnit.isNotEmpty) {
-      updateData['base_unit'] = updatedProduct.baseUnit;
-    }
-
-    // ❌ إزالة الحقول القديمة التي لم تعد موجودة في الجدول الجديد
-    // updateData['allow_pack'] = updatedProduct.allowPack;
-    // updateData['pack_price'] = updatedProduct.packPrice;
-    // updateData['pack_size'] = updatedProduct.packSize;
-
-    // تحديث قاعدة البيانات
+    // استخدام ID للتحديث
     await db.update(
       'products',
       updateData,
-      where: 'barcode = ?',
-      whereArgs: [updatedProduct.barcode],
+      where: 'id = ?',
+      whereArgs: [updatedProduct.id],
     );
 
-    // ✅ تحديث القائمة المحلية
-    final index = _products.indexWhere(
-      (p) => p.barcode == updatedProduct.barcode,
-    );
+    // تحديث القائمة المحلية
+    final index = _products.indexWhere((p) => p.id == updatedProduct.id);
     if (index != -1) {
-      // تحديث المنتج في القائمة المحلية مع الهيكل الجديد
-      _products[index] = Product(
-        id: _products[index].id,
-        name:
-            updatedProduct.name.isNotEmpty
-                ? updatedProduct.name
-                : _products[index].name,
-        barcode: _products[index].barcode,
-        baseUnit:
-            updatedProduct.baseUnit.isNotEmpty
-                ? updatedProduct.baseUnit
-                : _products[index].baseUnit,
-        price:
-            updatedProduct.price > 0
-                ? updatedProduct.price
-                : _products[index].price,
-        costPrice:
-            updatedProduct.costPrice > 0
-                ? updatedProduct.costPrice
-                : _products[index].costPrice,
-        quantity: updatedProduct.quantity,
-        addedDate: _products[index].addedDate,
-      );
+      _products[index] = updatedProduct;
       notifyListeners();
     }
+
+    // تحديث العدد الإجمالي
+    await loadTotalProducts();
   }
 
   Future<void> deleteProduct(String idProduct) async {
@@ -311,7 +318,8 @@ class ProductProvider with ChangeNotifier {
 
         if (currentQuantity < requiredQuantity) {
           throw Exception(
-            'المنتج "$productName" لا يوجد به كمية كافية. الكمية المتاحة: ${currentQuantity.toStringAsFixed(2)} ${product.baseUnit}',
+            'المنتج "$productName" لا يوجد به كمية كافية. '
+            'الكمية المتاحة: ${currentQuantity.toStringAsFixed(2)} ${translateUnit(product.baseUnit)}',
           );
         }
       } else {
@@ -688,7 +696,8 @@ class ProductProvider with ChangeNotifier {
 
         if (requiredQuantity > 0 && currentQuantity < requiredQuantity) {
           throw Exception(
-            'المنتج "$productName" لا يوجد به كمية كافية. الكمية المتاحة: ${currentQuantity.toStringAsFixed(2)} ${product.baseUnit}',
+            'المنتج "$productName" لا يوجد به كمية كافية. '
+            'الكمية المتاحة: ${currentQuantity.toStringAsFixed(2)} ${translateUnit(product.baseUnit)}',
           );
         }
       } else {
