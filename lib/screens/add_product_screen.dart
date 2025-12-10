@@ -558,12 +558,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
               },
             ),
             SizedBox(height: 12),
-            CustomTextField(
-              controller: controller.barcodeController,
-              label: 'باركود الوحدة (اختياري)',
-              prefixIcon: Icons.qr_code_2,
-            ),
-            SizedBox(height: 12),
+
             CustomTextField(
               controller: controller.containQtyController,
               label: 'كم تحتوي من الوحدة الأساسية',

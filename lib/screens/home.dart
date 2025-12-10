@@ -176,7 +176,7 @@ class _MainScreenState extends State<MainScreen> {
                   children: [
                     Expanded(
                       child: _buildStatCard(
-                        "الطلبات",
+                        "المبيعات",
                         "${salesProvider.todaySalesCount}", // ✔ عدد فواتير اليوم
                         Icons.receipt_long,
                         Colors.orange,

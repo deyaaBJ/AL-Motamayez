@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shopmate/db/db_helper.dart';
 import 'package:shopmate/providers/customer_provider.dart';
 import 'package:shopmate/providers/product_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
@@ -24,8 +25,8 @@ void main() async {
 
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
-  final reportsProvider = ReportsProvider();
-  await reportsProvider.initialize();
+  final DBHelper dbHelper = DBHelper();
+  await dbHelper.db;
 
   runApp(
     MultiProvider(

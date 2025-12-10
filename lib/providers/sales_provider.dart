@@ -1,9 +1,14 @@
 // providers/sales_provider.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
 import '../models/sale.dart';
 
 class SalesProvider extends ChangeNotifier {
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ المتغيرات الأساسية ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
   int _page = 0;
   final int _limit = 20;
   bool _hasMore = true;
@@ -14,19 +19,31 @@ class SalesProvider extends ChangeNotifier {
 
   final DBHelper _dbHelper = DBHelper();
 
-  // ✅ فصل البيانات: قائمة للكل وقائمة للعرض المصفى
-  List<Sale> _allSales = []; // جميع الفواتير المحملة
-  List<Sale> _displayedSales = []; // الفواتير المعروضة بعد التصفية
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ نظام الـ Cache ███████████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
 
-  List<Sale> get sales => _displayedSales; // نعرض المصفاة فقط
+  // ✅ Cache للبيانات المحملة مسبقاً
+  final Map<String, List<Sale>> _salesCache = {};
+  String? _currentCacheKey;
+  Timer? _cacheCleanupTimer;
 
-  // الفلاتر
+  // ✅ بيانات محملة ومعروضة
+  List<Sale> _allSales = [];
+  List<Sale> _displayedSales = [];
+
+  List<Sale> get sales => _displayedSales;
+  int get loadedSalesCount => _allSales.length;
+  bool get hasLoadedSales => _allSales.isNotEmpty;
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ الفلاتر ██████████████████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
   String _selectedPaymentType = 'الكل';
   String _selectedCustomer = 'الكل';
   String _selectedTaxFilter = 'الكل';
   DateTime? _selectedDate;
-
-  // الفلاتر الجديدة للتاريخ المتقدم
   String _dateFilterType = 'day';
   int? _selectedMonth;
   int? _selectedYear;
@@ -75,14 +92,8 @@ class SalesProvider extends ChangeNotifier {
   }
 
   // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ Getters جديدة ███████████████████████████████████████████
+  // ████████████████████████████████ Getters جديدة ███████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
-
-  // ✅ Getter للحصول على عدد الفواتير المحملة
-  int get loadedSalesCount => _allSales.length;
-
-  // ✅ Getter للتحقق مما إذا كانت هناك فواتير محملة
-  bool get hasLoadedSales => _allSales.isNotEmpty;
 
   // ✅ Getter للحصول على نسبة الفلاتر
   String get filteredPercentage {
@@ -92,7 +103,7 @@ class SalesProvider extends ChangeNotifier {
     return "$percentage%";
   }
 
-  // ✅ Getter للحصول على ملخص الفلاتر
+  // ✅ Getter لملخص الفلاتر
   Map<String, dynamic> get filterSummary {
     return {
       'totalLoaded': _allSales.length,
@@ -102,7 +113,7 @@ class SalesProvider extends ChangeNotifier {
     };
   }
 
-  // ✅ دالة لمعرفة ما إذا كانت الفلاتر تعمل
+  // ✅ Getter للتحقق من وجود فلاتر نشطة
   bool get isFilterActive {
     return _selectedPaymentType != 'الكل' ||
         _selectedCustomer != 'الكل' ||
@@ -113,7 +124,21 @@ class SalesProvider extends ChangeNotifier {
         _dateFilterType != 'day';
   }
 
-  // ✅ دالة للحصول على وصف الفلاتر النشطة
+  // ✅ Getter للتحقق من وضع الأرشيف
+  bool get isArchiveMode {
+    if (_dateFilterType == 'year' && _selectedYear != null) {
+      return _selectedYear! < DateTime.now().year;
+    }
+    if (_dateFilterType == 'month' && _selectedYear != null) {
+      return _selectedYear! < DateTime.now().year;
+    }
+    if (_dateFilterType == 'day' && _selectedDate != null) {
+      return _selectedDate!.year < DateTime.now().year;
+    }
+    return false;
+  }
+
+  // ✅ Getter لوصف الفلاتر النشطة
   String get activeFiltersDescription {
     final filters = <String>[];
 
@@ -144,146 +169,90 @@ class SalesProvider extends ChangeNotifier {
   }
 
   // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ الفلاتر المتقدمة ███████████████████████████████████████
+  // ████████████████████████████████ نظام الـ Cache ███████████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
 
-  void setDateFilterType(String type) {
-    _dateFilterType = type;
-    _applyFilters(); // ✅ فقط نطبق الفلاتر على البيانات الموجودة
-    notifyListeners();
+  SalesProvider() {
+    // تنظيف الـ cache كل 5 دقائق
+    _cacheCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      _cleanupOldCache();
+    });
   }
 
-  void setMonthFilter(int month) {
-    _selectedMonth = month;
-    _dateFilterType = 'month';
-    _applyFilters();
-    notifyListeners();
+  @override
+  void dispose() {
+    _cacheCleanupTimer?.cancel();
+    super.dispose();
   }
 
-  void setYearFilter(int year) {
-    _selectedYear = year;
-    _dateFilterType = 'year';
-    _applyFilters();
-    notifyListeners();
+  // ✅ دالة لإنشاء مفتاح cache
+  String _generateCacheKey() {
+    final keyParts = [
+      'payment=$_selectedPaymentType',
+      'customer=$_selectedCustomer',
+      'tax=$_selectedTaxFilter',
+      'dateType=$_dateFilterType',
+      'month=$_selectedMonth',
+      'year=$_selectedYear',
+      if (_selectedDate != null)
+        'date=${_selectedDate!.toIso8601String().substring(0, 10)}',
+    ];
+    return keyParts.join('|');
   }
 
-  void clearDateFilter() {
-    _selectedDate = null;
-    _selectedMonth = null;
-    _selectedYear = null;
-    _dateFilterType = 'day';
-    _applyFilters();
-    notifyListeners();
-  }
-
-  // دالة مساعدة لبناء استعلام التاريخ
-  String _buildDateWhereClause() {
-    switch (_dateFilterType) {
-      case 'day':
-        if (_selectedDate != null) {
-          final dateStr = _selectedDate!.toIso8601String().split('T')[0];
-          return "date(s.date) = '$dateStr'";
-        }
-        break;
-      case 'month':
-        if (_selectedMonth != null && _selectedYear != null) {
-          return "strftime('%m', s.date) = '${_selectedMonth!.toString().padLeft(2, '0')}' AND strftime('%Y', s.date) = '$_selectedYear'";
-        }
-        break;
-      case 'year':
-        if (_selectedYear != null) {
-          return "strftime('%Y', s.date) = '$_selectedYear'";
-        }
-        break;
+  // ✅ دالة لتحديث الـ cache
+  void _updateCache() {
+    if (_currentCacheKey != null && _allSales.isNotEmpty) {
+      _salesCache[_currentCacheKey!] = List.from(_allSales);
+      print('✅ تم تحديث الـ cache للمفتاح: $_currentCacheKey');
     }
-    return '1=1';
   }
 
-  // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ التحميل التدريجي ███████████████████████████████████████
-  // █████████████████████████████████████████████████████████████████████████
-
-  int todaySalesCount = 0;
-
-  Future<void> loadTodaySalesCount() async {
-    final db = await _dbHelper.db;
-    final result = await db.rawQuery("""
-      SELECT COUNT(*) as count 
-      FROM sales
-      WHERE DATE(date) = DATE('now')
-    """);
-    todaySalesCount = result.first['count'] as int;
-    notifyListeners();
-  }
-
-  // ✅ التحميل التدريجي للفواتير (بدون فلاتر في الاستعلام)
-  Future<void> fetchSales({bool loadMore = false}) async {
-    if (_isLoading || (!_hasMore && loadMore)) return;
-
-    _isLoading = true;
-    notifyListeners();
-
-    if (!loadMore) {
-      _page = 0;
-      _allSales.clear();
-      _hasMore = true;
-    }
-
-    final db = await _dbHelper.db;
-
-    try {
-      // ✅ نطلب كل الفواتير بدون فلاتر للتحميل التدريجي
-      final result = await db.rawQuery('''
-        SELECT s.*, c.name as customer_name 
-        FROM sales s 
-        LEFT JOIN customers c ON s.customer_id = c.id 
-        ORDER BY s.date DESC
-        LIMIT $_limit OFFSET ${_page * _limit}
-      ''');
-
-      final newSales = result.map((e) => Sale.fromMap(e)).toList();
-
-      if (newSales.length < _limit) {
-        _hasMore = false;
+  // ✅ دالة لتنظيف الـ cache القديم
+  void _cleanupOldCache({int keepLast = 10}) {
+    if (_salesCache.length > keepLast) {
+      final keys = _salesCache.keys.toList();
+      // احتفظ بـ keepLast الأحدث
+      for (int i = 0; i < keys.length - keepLast; i++) {
+        _salesCache.remove(keys[i]);
       }
-
-      if (loadMore) {
-        _allSales.addAll(newSales);
-      } else {
-        _allSales = newSales;
-      }
-
-      _page++;
-
-      // ✅ تطبيق الفلاتر على البيانات الجديدة
-      _applyFilters();
-    } catch (e) {
-      print('Error fetching sales: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      print('🧹 تم تنظيف الـ cache، بقي ${_salesCache.length} عنصر');
     }
   }
 
-  // ✅ تطبيق الفلاتر على البيانات المحملة
-  void _applyFilters() {
-    List<Sale> filtered = _allSales;
+  // ✅ دالة للتحقق مما إذا كان يمكن التصفية محلياً
+  bool _canFilterLocally() {
+    // يمكن التصفية محلياً إذا:
+    // 1. لدينا بيانات محملة
+    // 2. لا نغير فلتر السنة (لأنه قد يحتاج بيانات جديدة)
+    // 3. الفلاتر الأخرى يمكن تطبيقها على البيانات الحالية
+    return _allSales.isNotEmpty &&
+        !(_dateFilterType == 'year' &&
+            _selectedYear != null &&
+            !_salesCache.containsKey(_generateCacheKey()));
+  }
+
+  // ✅ دالة لتطبيق الفلاتر محلياً
+  void _applyLocalFilters() {
+    List<Sale> filtered = List.from(_allSales);
 
     // فلترة نوع الدفع
     if (_selectedPaymentType != 'الكل') {
+      final paymentValue = _selectedPaymentType.toLowerCase();
       filtered =
-          filtered
-              .where(
-                (sale) =>
-                    sale.paymentType == _selectedPaymentType.toLowerCase(),
-              )
-              .toList();
+          filtered.where((sale) => sale.paymentType == paymentValue).toList();
     }
 
     // فلترة العميل
     if (_selectedCustomer != 'الكل') {
       if (_selectedCustomer == 'بدون عميل') {
-        filtered = filtered.where((sale) => sale.customerId == null).toList();
+        filtered =
+            filtered
+                .where(
+                  (sale) =>
+                      sale.customerName == null || sale.customerName!.isEmpty,
+                )
+                .toList();
       } else {
         filtered =
             filtered
@@ -298,70 +267,334 @@ class SalesProvider extends ChangeNotifier {
       filtered = filtered.where((sale) => sale.showForTax == taxValue).toList();
     }
 
-    // فلترة التاريخ
+    // فلترة التاريخ (إذا كان محلياً)
     if (_dateFilterType == 'day' && _selectedDate != null) {
-      final selectedDateStr = _selectedDate!.toIso8601String().split('T')[0];
+      final dateStr = _selectedDate!.toIso8601String().split('T')[0];
       filtered =
-          filtered.where((sale) {
-            final saleDateStr =
-                DateTime.parse(sale.date).toIso8601String().split('T')[0];
-            return saleDateStr == selectedDateStr;
-          }).toList();
-    } else if (_dateFilterType == 'month' &&
-        _selectedMonth != null &&
-        _selectedYear != null) {
-      filtered =
-          filtered.where((sale) {
-            final saleDate = DateTime.parse(sale.date);
-            return saleDate.month == _selectedMonth &&
-                saleDate.year == _selectedYear;
-          }).toList();
-    } else if (_dateFilterType == 'year' && _selectedYear != null) {
-      filtered =
-          filtered.where((sale) {
-            final saleDate = DateTime.parse(sale.date);
-            return saleDate.year == _selectedYear;
-          }).toList();
+          filtered.where((sale) => sale.date.startsWith(dateStr)).toList();
     }
 
     _displayedSales = filtered;
+    print(
+      '✅ تم التصفية محلياً: ${_displayedSales.length} فاتورة من أصل ${_allSales.length}',
+    );
   }
 
   // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ دوال الفلترة ███████████████████████████████████████████
+  // ████████████████████████████████ الفلاتر المتقدمة ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
+  void setDateFilterType(String type) {
+    _dateFilterType = type;
+    _resetAndFetch();
+    notifyListeners();
+  }
+
+  void setMonthFilter(int month) {
+    _selectedMonth = month;
+    _dateFilterType = 'month';
+    _resetAndFetch();
+    notifyListeners();
+  }
+
+  void setYearFilter(int year) {
+    _selectedYear = year;
+    _dateFilterType = 'year';
+
+    // ✅ تحقق من الـ cache أولاً
+    final cacheKey = _generateCacheKey();
+    if (_salesCache.containsKey(cacheKey)) {
+      print('✅ استخدام الـ cache الموجود للسنة: $year');
+      _allSales = List.from(_salesCache[cacheKey]!);
+      _displayedSales = List.from(_allSales);
+      _currentCacheKey = cacheKey;
+      _hasMore = false;
+      notifyListeners();
+      return;
+    }
+
+    _resetAndFetch();
+    notifyListeners();
+  }
+
+  void clearDateFilter() {
+    _selectedDate = null;
+    _selectedMonth = null;
+    _selectedYear = null;
+    _dateFilterType = 'day';
+    _resetAndFetch();
+    notifyListeners();
+  }
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ بناء استعلام التاريخ ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
+  String _buildDateWhereClause() {
+    switch (_dateFilterType) {
+      case 'day':
+        if (_selectedDate != null) {
+          final dateStr = _selectedDate!.toIso8601String().split('T')[0];
+          return "s.date LIKE '$dateStr%'";
+        }
+        break;
+      case 'month':
+        if (_selectedMonth != null && _selectedYear != null) {
+          final monthStr = _selectedMonth!.toString().padLeft(2, '0');
+          return "s.date LIKE '$_selectedYear-$monthStr-%'";
+        }
+        break;
+      case 'year':
+        if (_selectedYear != null) {
+          return "s.date LIKE '$_selectedYear-%'";
+        }
+        break;
+    }
+    return '1=1';
+  }
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ التحميل التدريجي مع الفلاتر ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
+  int todaySalesCount = 0;
+
+  Future<void> loadTodaySalesCount() async {
+    final db = await _dbHelper.db;
+    final result = await db.rawQuery("""
+      SELECT COUNT(*) as count 
+      FROM sales
+      WHERE SUBSTR(date, 1, 10) = DATE('now')
+    """);
+    todaySalesCount = result.first['count'] as int;
+    notifyListeners();
+  }
+
+  // ✅ دالة لإعادة التعيين والجلب
+  void _resetAndFetch() {
+    _page = 0;
+    _allSales.clear();
+    _displayedSales.clear();
+    _hasMore = true;
+    Future.microtask(() => _fetchSalesWithFilters());
+  }
+
+  // ✅ التحميل التدريجي للفواتير مع الـ cache
+  Future<void> _fetchSalesWithFilters({bool loadMore = false}) async {
+    if (_isLoading || (!_hasMore && loadMore)) return;
+
+    // ✅ تحقق من الـ cache أولاً (فقط للتحميل الأولي)
+    final cacheKey = _generateCacheKey();
+    if (!loadMore && _salesCache.containsKey(cacheKey)) {
+      print('✅ استخدام الـ cache الموجود للمفتاح: $cacheKey');
+      _allSales = List.from(_salesCache[cacheKey]!);
+      _displayedSales = List.from(_allSales);
+      _currentCacheKey = cacheKey;
+      _hasMore = false;
+      notifyListeners();
+      return;
+    }
+
+    _isLoading = true;
+    notifyListeners();
+
+    if (!loadMore) {
+      _page = 0;
+      _allSales.clear();
+      _hasMore = true;
+    }
+
+    final db = await _dbHelper.db;
+
+    try {
+      // ✅ تحديد الجدول بناءً على الفلتر الزمني
+      final bool shouldUseArchive;
+      final int? selectedYear = _selectedYear;
+      final int currentYear = DateTime.now().year;
+
+      if (_dateFilterType == 'year' && selectedYear != null) {
+        shouldUseArchive = selectedYear < currentYear;
+      } else if (_dateFilterType == 'month' && selectedYear != null) {
+        shouldUseArchive = selectedYear < currentYear;
+      } else if (_dateFilterType == 'day' && _selectedDate != null) {
+        shouldUseArchive = _selectedDate!.year < currentYear;
+      } else {
+        // بدون فلتر تاريخ → نعرض السنة الحالية فقط
+        shouldUseArchive = false;
+
+        // إذا لم يكن هناك فلتر تاريخ، نضبط فلتر السنة على السنة الحالية تلقائياً
+        if (_selectedYear == null && !loadMore) {
+          _selectedYear = currentYear;
+          _dateFilterType = 'year';
+        }
+      }
+
+      String table = shouldUseArchive ? "sales_archive s" : "sales s";
+
+      // ✅ بناء استعلام التاريخ
+      String dateCondition = _buildDateWhereClause();
+
+      // ✅ بناء جميع شروط الفلتر
+      final List<String> conditions = [dateCondition];
+
+      // فلترة نوع الدفع
+      if (_selectedPaymentType != 'الكل') {
+        final paymentValue = _selectedPaymentType.toLowerCase();
+        conditions.add("s.payment_type = '$paymentValue'");
+      }
+
+      // فلترة العميل
+      if (_selectedCustomer != 'الكل') {
+        if (_selectedCustomer == 'بدون عميل') {
+          conditions.add("s.customer_id IS NULL");
+        } else {
+          conditions.add("c.name = '$_selectedCustomer'");
+        }
+      }
+
+      // فلترة الضريبة
+      if (_selectedTaxFilter != 'الكل') {
+        final taxValue = _selectedTaxFilter == 'مضمنه بالضرائب' ? 1 : 0;
+        conditions.add("s.show_for_tax = $taxValue");
+      }
+
+      String whereClause = conditions.join(' AND ');
+
+      // ✅ الاستعلام النهائي
+      final result = await db.rawQuery('''
+        SELECT 
+          s.id,
+          s.date,
+          s.total_amount,
+          s.total_profit,
+          s.customer_id,
+          c.name AS customer_name,
+          s.payment_type,
+          s.show_for_tax
+        FROM $table
+        LEFT JOIN customers c ON s.customer_id = c.id
+        WHERE $whereClause
+        ORDER BY s.date DESC
+        LIMIT $_limit OFFSET ${_page * _limit}
+      ''');
+
+      final newSales = result.map((e) => Sale.fromMap(e)).toList();
+
+      if (newSales.length < _limit) {
+        _hasMore = false;
+      }
+
+      if (loadMore) {
+        _allSales.addAll(newSales);
+        _updateCache(); // تحديث الـ cache
+      } else {
+        _allSales = newSales;
+        _currentCacheKey = cacheKey;
+        _salesCache[cacheKey] = List.from(_allSales); // حفظ في الـ cache
+      }
+
+      _page++;
+
+      // ✅ تعيين البيانات المعروضة
+      _displayedSales = List.from(_allSales);
+
+      // ✅ طباعة معلومات التصحيح
+      print('═══════════════════════════════════════════════════════');
+      print('📊 جلب الفواتير - الصفحة: $_page');
+      print('📋 الجدول المستخدم: ${shouldUseArchive ? 'الأرشيف' : 'الحالي'}');
+      print('🔍 فلتر التاريخ: $_dateFilterType');
+      print('📅 السنة: $_selectedYear');
+      print('🔍 الشروط: $whereClause');
+      print('✅ تم تحميل ${newSales.length} فاتورة');
+      print('🔑 مفتاح الـ cache: $cacheKey');
+      print('💾 إجمالي مفاتيح الـ cache: ${_salesCache.length}');
+      print('═══════════════════════════════════════════════════════');
+    } catch (e) {
+      print('❌ خطأ في جلب الفواتير: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ دوال الفلترة المحسنة ███████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
 
   void setPaymentTypeFilter(String? value) {
+    final oldValue = _selectedPaymentType;
     _selectedPaymentType = value ?? 'الكل';
-    _applyFilters();
-    notifyListeners();
+
+    // ✅ إذا كان نفس القيمة، لا تفعل شيئاً
+    if (oldValue == _selectedPaymentType) return;
+
+    // ✅ إذا كان يمكن التصفية محلياً، استخدمها
+    if (_canFilterLocally()) {
+      _applyLocalFilters();
+      notifyListeners();
+    } else {
+      _resetAndFetch();
+    }
   }
 
   void setCustomerFilter(String? value) {
+    final oldValue = _selectedCustomer;
     _selectedCustomer = value ?? 'الكل';
-    _applyFilters();
-    notifyListeners();
+
+    if (oldValue == _selectedCustomer) return;
+
+    if (_canFilterLocally()) {
+      _applyLocalFilters();
+      notifyListeners();
+    } else {
+      _resetAndFetch();
+    }
   }
 
   void setDateFilter(DateTime? date) {
     _selectedDate = date;
     _dateFilterType = 'day';
-    _applyFilters();
-    notifyListeners();
+
+    // ✅ تحقق من الـ cache أولاً
+    final cacheKey = _generateCacheKey();
+    if (_salesCache.containsKey(cacheKey)) {
+      print('✅ استخدام الـ cache الموجود للتاريخ');
+      _allSales = List.from(_salesCache[cacheKey]!);
+      _displayedSales = List.from(_allSales);
+      _currentCacheKey = cacheKey;
+      _hasMore = false;
+      notifyListeners();
+      return;
+    }
+
+    _resetAndFetch();
   }
 
   void setTaxFilter(String? value) {
+    final oldValue = _selectedTaxFilter;
     _selectedTaxFilter = value ?? 'الكل';
-    _applyFilters();
-    notifyListeners();
+
+    if (oldValue == _selectedTaxFilter) return;
+
+    if (_canFilterLocally()) {
+      _applyLocalFilters();
+      notifyListeners();
+    } else {
+      _resetAndFetch();
+    }
   }
 
   void clearFilters() {
     _selectedPaymentType = 'الكل';
     _selectedCustomer = 'الكل';
     _selectedTaxFilter = 'الكل';
-    _applyFilters();
-    notifyListeners();
+
+    if (_canFilterLocally()) {
+      _displayedSales = List.from(_allSales);
+      notifyListeners();
+    } else {
+      _resetAndFetch();
+    }
   }
 
   void clearAllFilters() {
@@ -372,8 +605,25 @@ class SalesProvider extends ChangeNotifier {
     _selectedMonth = null;
     _selectedYear = null;
     _dateFilterType = 'day';
-    _applyFilters();
-    notifyListeners();
+
+    // ✅ استخدام الـ cache الافتراضي (السنة الحالية)
+    final currentYear = DateTime.now().year;
+    final defaultCacheKey =
+        'payment=الكل|customer=الكل|tax=الكل|dateType=year|month=null|year=$currentYear|date=null';
+
+    if (_salesCache.containsKey(defaultCacheKey)) {
+      print('✅ استخدام الـ cache الافتراضي');
+      _allSales = List.from(_salesCache[defaultCacheKey]!);
+      _displayedSales = List.from(_allSales);
+      _currentCacheKey = defaultCacheKey;
+      _hasMore = false;
+      notifyListeners();
+    } else {
+      // تعيين السنة الحالية وجلب البيانات
+      _selectedYear = currentYear;
+      _dateFilterType = 'year';
+      _resetAndFetch();
+    }
   }
 
   void reset() {
@@ -389,47 +639,81 @@ class SalesProvider extends ChangeNotifier {
     _selectedMonth = null;
     _selectedYear = null;
     _dateFilterType = 'day';
+    _currentCacheKey = null;
     notifyListeners();
   }
 
-  // جلب تفاصيل الفاتورة
-  Future<Map<String, dynamic>> getSaleDetails(int saleId) async {
-    final db = await _dbHelper.db;
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ الدوال العامة للاستخدام ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
 
-    // بيانات الفاتورة الأساسية
-    final saleResult = await db.rawQuery(
-      '''
-    SELECT s.*, c.name as customer_name, c.phone as customer_phone
-    FROM sales s 
-    LEFT JOIN customers c ON s.customer_id = c.id 
-    WHERE s.id = ?
-  ''',
-      [saleId],
-    );
-
-    if (saleResult.isEmpty) {
-      throw Exception('الفاتورة غير موجودة');
+  Future<void> fetchSales({bool loadMore = false}) async {
+    // إذا كان هذا أول تحميل ولم يكن هناك فلتر سنة، نضبط السنة الحالية
+    if (!loadMore && _selectedYear == null) {
+      _selectedYear = DateTime.now().year;
+      _dateFilterType = 'year';
     }
 
-    // عناصر الفاتورة مع معلومات الوحدات
-    final itemsResult = await db.rawQuery(
-      '''
-    SELECT 
-      si.*, 
-      p.name as product_name,
-      p.base_unit as product_base_unit,
-      pu.unit_name as custom_unit_name,
-      pu.contain_qty as unit_contain_qty
-    FROM sale_items si 
-    JOIN products p ON si.product_id = p.id 
-    LEFT JOIN product_units pu ON si.unit_id = pu.id
-    WHERE si.sale_id = ?
-  ''',
-      [saleId],
-    );
-
-    return {'sale': Sale.fromMap(saleResult.first), 'items': itemsResult};
+    await _fetchSalesWithFilters(loadMore: loadMore);
   }
+
+  Future<void> loadMoreSales() async {
+    if (_hasMore && !_isLoading) {
+      await _fetchSalesWithFilters(loadMore: true);
+    }
+  }
+
+  void applyDefaultFilter() {
+    if (_selectedYear == null) {
+      _selectedYear = DateTime.now().year;
+      _dateFilterType = 'year';
+      _resetAndFetch();
+    }
+  }
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ Prefetching للبيانات ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
+  // ✅ تحميل بيانات السنة الحالية مسبقاً
+  Future<void> prefetchCurrentYear() async {
+    final currentYear = DateTime.now().year;
+    final cacheKey =
+        'payment=الكل|customer=الكل|tax=الكل|dateType=year|month=null|year=$currentYear|date=null';
+
+    if (_salesCache.containsKey(cacheKey)) {
+      return; // البيانات موجودة بالفعل
+    }
+
+    try {
+      final db = await _dbHelper.db;
+      final result = await db.rawQuery('''
+        SELECT 
+          s.id,
+          s.date,
+          s.total_amount,
+          s.total_profit,
+          s.customer_id,
+          c.name AS customer_name,
+          s.payment_type,
+          s.show_for_tax
+        FROM sales s
+        LEFT JOIN customers c ON s.customer_id = c.id
+        WHERE s.date LIKE '$currentYear-%'
+        LIMIT 50
+      ''');
+
+      final sales = result.map((e) => Sale.fromMap(e)).toList();
+      _salesCache[cacheKey] = sales;
+      print('✅ تم تحميل ${sales.length} فاتورة للسنة $currentYear مسبقاً');
+    } catch (e) {
+      print('❌ خطأ في تحميل البيانات المسبق: $e');
+    }
+  }
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ دوال التحديث المعدلة (بدون copyWith) ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
 
   Future<void> updatePaymentType(
     int saleId,
@@ -464,6 +748,25 @@ class SalesProvider extends ChangeNotifier {
       throw Exception('فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.');
     }
 
+    // ✅ تحديث البيانات المحلية
+    final index = _allSales.indexWhere((sale) => sale.id == saleId);
+    if (index != -1) {
+      // إنشاء Sale جديد مع البيانات المحدثة
+      final oldSale = _allSales[index];
+      final updatedSale = Sale(
+        id: oldSale.id,
+        date: oldSale.date,
+        totalAmount: oldSale.totalAmount,
+        totalProfit: oldSale.totalProfit,
+        customerId: customerId ?? oldSale.customerId,
+        customerName: oldSale.customerName,
+        paymentType: paymentType,
+        showForTax: oldSale.showForTax,
+      );
+      _allSales[index] = updatedSale;
+      _updateCache();
+    }
+
     notifyListeners();
   }
 
@@ -471,9 +774,7 @@ class SalesProvider extends ChangeNotifier {
     final db = await _dbHelper.db;
 
     // إعداد البيانات للتحديث
-    Map<String, dynamic> updateData = {
-      'show_for_tax': showForTax ? 1 : 0, // 1: نعم، 0: لا
-    };
+    Map<String, dynamic> updateData = {'show_for_tax': showForTax ? 1 : 0};
 
     // تنفيذ التحديث في قاعدة البيانات
     int count = await db.update(
@@ -488,10 +789,110 @@ class SalesProvider extends ChangeNotifier {
       throw Exception('فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.');
     }
 
+    // ✅ تحديث البيانات المحلية
+    final index = _allSales.indexWhere((sale) => sale.id == saleId);
+    if (index != -1) {
+      // إنشاء Sale جديد مع البيانات المحدثة
+      final oldSale = _allSales[index];
+      final updatedSale = Sale(
+        id: oldSale.id,
+        date: oldSale.date,
+        totalAmount: oldSale.totalAmount,
+        totalProfit: oldSale.totalProfit,
+        customerId: oldSale.customerId,
+        customerName: oldSale.customerName,
+        paymentType: oldSale.paymentType,
+        showForTax: showForTax,
+      );
+      _allSales[index] = updatedSale;
+      _updateCache();
+    }
+
     notifyListeners();
   }
 
-  // في ملف SalesProvider
+  // دالة مساعدة لإنشاء Sale جديد (بديل عن copyWith)
+  Sale _createUpdatedSale({
+    required Sale oldSale,
+    String? paymentType,
+    int? showForTax,
+    int? customerId,
+  }) {
+    return Sale(
+      id: oldSale.id,
+      date: oldSale.date,
+      totalAmount: oldSale.totalAmount,
+      totalProfit: oldSale.totalProfit,
+      customerId: customerId ?? oldSale.customerId,
+      customerName: oldSale.customerName,
+      paymentType: paymentType ?? oldSale.paymentType,
+      showForTax:
+          showForTax != null ? showForTax == 1 : (oldSale.showForTax == 1),
+    );
+  }
+
+  Future<Map<String, dynamic>> getSaleDetails(int saleId) async {
+    final db = await _dbHelper.db;
+
+    // ✅ تحديد الجدول بناءً على سنة الفاتورة
+    bool useArchive = false;
+
+    // أولاً نحاول البحث في sales
+    var saleResult = await db.rawQuery(
+      '''
+      SELECT s.*, c.name as customer_name, c.phone as customer_phone
+      FROM sales s 
+      LEFT JOIN customers c ON s.customer_id = c.id 
+      WHERE s.id = ?
+      ''',
+      [saleId],
+    );
+
+    // إذا لم نجد في sales، نبحث في الأرشيف
+    if (saleResult.isEmpty) {
+      saleResult = await db.rawQuery(
+        '''
+        SELECT s.*, c.name as customer_name, c.phone as customer_phone
+        FROM sales_archive s 
+        LEFT JOIN customers c ON s.customer_id = c.id 
+        WHERE s.id = ?
+        ''',
+        [saleId],
+      );
+      useArchive = true;
+    }
+
+    if (saleResult.isEmpty) {
+      throw Exception('الفاتورة غير موجودة');
+    }
+
+    // ✅ تحديد جدول العناصر بناءً على مصدر الفاتورة
+    String itemsTable = useArchive ? 'sale_items_archive' : 'sale_items';
+
+    // عناصر الفاتورة مع معلومات الوحدات
+    final itemsResult = await db.rawQuery(
+      '''
+      SELECT 
+        si.*, 
+        p.name as product_name,
+        p.base_unit as product_base_unit,
+        pu.unit_name as custom_unit_name,
+        pu.contain_qty as unit_contain_qty
+      FROM $itemsTable si 
+      JOIN products p ON si.product_id = p.id 
+      LEFT JOIN product_units pu ON si.unit_id = pu.id
+      WHERE si.sale_id = ?
+      ''',
+      [saleId],
+    );
+
+    return {
+      'sale': Sale.fromMap(saleResult.first),
+      'items': itemsResult,
+      'isFromArchive': useArchive,
+    };
+  }
+
   Future<void> deleteSale(int saleId) async {
     final db = await _dbHelper.db;
 
@@ -548,12 +949,14 @@ class SalesProvider extends ChangeNotifier {
     });
 
     // 5. إزالة الفاتورة من القائمة المحلية
-    sales.removeWhere((sale) => sale.id == saleId);
+    _allSales.removeWhere((sale) => sale.id == saleId);
+    _displayedSales.removeWhere((sale) => sale.id == saleId);
+
+    // 6. تحديث الـ cache
+    _updateCache();
 
     notifyListeners();
 
     print('🗑️ تم حذف الفاتورة #$saleId وإرجاع الكميات إلى المخزون');
   }
-
-  // في product_provider.dart - أضف هذه الدالة
 }

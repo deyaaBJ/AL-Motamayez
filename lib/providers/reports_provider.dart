@@ -8,7 +8,7 @@ class ReportsProvider extends ChangeNotifier {
 
   Future<void> initialize() async {
     print('Initializing ReportsProvider...');
-    await deleteOldCashSales();
+    // await deleteOldCashSales();
   }
 
   // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
@@ -65,10 +65,9 @@ class ReportsProvider extends ChangeNotifier {
 
     try {
       await Future.wait([
-        _loadSalesStats(),
         _loadTopProducts(),
         _loadTopCustomers(),
-        _loadWeeklySalesData(), // تحميل بيانات الأسبوع الثابتة
+        _loadWeeklySalesData(),
       ]);
     } catch (e) {
       print('Error loading reports data: $e');
@@ -78,16 +77,47 @@ class ReportsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // فلترة حسب فترة محددة (اليوم، الأسبوع، الشهر، السنة)
   Future<void> filterByPeriod(String period) async {
     _isLoadingReports = true;
     notifyListeners();
 
     try {
-      // استخدام الطريقة البديلة للفلترة
-      await _filterByPeriodAlternative(period);
+      await _filterSales(period);
     } catch (e) {
       print('Error filtering reports: $e');
-      // في حالة الخطأ، إعادة تحميل البيانات الافتراضية
+      await loadReportsData();
+    }
+
+    _isLoadingReports = false;
+    notifyListeners();
+  }
+
+  // فلترة حسب شهر محدد وسنة محددة
+  Future<void> filterBySpecificMonth(int month, int year) async {
+    _isLoadingReports = true;
+    notifyListeners();
+
+    try {
+      await _filterSales('specific-month', month: month, year: year);
+    } catch (e) {
+      print('Error in filterBySpecificMonth: $e');
+      await loadReportsData();
+    }
+
+    _isLoadingReports = false;
+    notifyListeners();
+  }
+
+  // فلترة حسب سنة محددة
+  Future<void> filterBySpecificYear(int year) async {
+    _isLoadingReports = true;
+    notifyListeners();
+
+    try {
+      await _filterSales('specific-year', year: year);
+    } catch (e) {
+      print('Error in filterBySpecificYear: $e');
       await loadReportsData();
     }
 
@@ -99,105 +129,6 @@ class ReportsProvider extends ChangeNotifier {
   // ████████████████████████████████ دوال تحميل البيانات ████████████████████████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
 
-  Future<void> _loadSalesStats() async {
-    try {
-      final db = await _dbHelper.db;
-
-      // إجمالي المبيعات والأرباح
-      final salesResult = await db.rawQuery('''
-        SELECT 
-          COUNT(*) as count,
-          SUM(total_amount) as total_sales,
-          SUM(total_profit) as total_profit,
-          MAX(total_amount) as highest_sale,
-          MIN(total_amount) as lowest_sale
-        FROM sales
-        WHERE date >= date('now', '-30 days')
-      ''');
-
-      if (salesResult.isNotEmpty) {
-        final data = salesResult.first;
-        _salesCount = data['count'] as int? ?? 0;
-        _totalSalesAmount = (data['total_sales'] as num?)?.toDouble() ?? 0;
-        _totalProfit = (data['total_profit'] as num?)?.toDouble() ?? 0;
-        _highestSaleAmount = (data['highest_sale'] as num?)?.toDouble() ?? 0;
-        _lowestSaleAmount = (data['lowest_sale'] as num?)?.toDouble() ?? 0;
-
-        _averageSaleAmount =
-            _salesCount > 0 ? _totalSalesAmount / _salesCount : 0;
-        _profitPercentage =
-            _totalSalesAmount > 0
-                ? (_totalProfit / _totalSalesAmount) * 100
-                : 0;
-      }
-
-      // المبيعات النقدية والآجلة
-      final paymentResult = await db.rawQuery('''
-        SELECT 
-          payment_type,
-          SUM(total_amount) as amount
-        FROM sales
-        WHERE date >= date('now', '-30 days')
-        GROUP BY payment_type
-      ''');
-
-      _cashSalesAmount = 0;
-      _creditSalesAmount = 0;
-
-      for (var row in paymentResult) {
-        if (row['payment_type'] == 'cash') {
-          _cashSalesAmount = (row['amount'] as num?)?.toDouble() ?? 0;
-        } else if (row['payment_type'] == 'credit') {
-          _creditSalesAmount = (row['amount'] as num?)?.toDouble() ?? 0;
-        }
-      }
-
-      // إجمالي عدد العملاء
-      final customersResult = await db.rawQuery('''
-        SELECT COUNT(DISTINCT id) as count FROM customers
-      ''');
-      _totalCustomers = customersResult.first['count'] as int? ?? 0;
-
-      // أفضل يوم مبيعات
-      final bestDayResult = await db.rawQuery('''
-        SELECT date, SUM(total_amount) as total
-        FROM sales
-        WHERE date >= date('now', '-30 days')
-        GROUP BY date
-        ORDER BY total DESC
-        LIMIT 1
-      ''');
-
-      if (bestDayResult.isNotEmpty) {
-        final bestDay = bestDayResult.first;
-        final dateString = bestDay['date'] as String?;
-        if (dateString != null) {
-          try {
-            final date = DateTime.parse(dateString.split(' ')[0]);
-            final days = [
-              'الأحد',
-              'الاثنين',
-              'الثلاثاء',
-              'الأربعاء',
-              'الخميس',
-              'الجمعة',
-              'السبت',
-            ];
-            _bestSalesDay = days[date.weekday % 7];
-          } catch (e) {
-            _bestSalesDay = 'غير معروف';
-          }
-        }
-      } else {
-        _bestSalesDay = 'لا يوجد بيانات';
-      }
-    } catch (e) {
-      print('Error in _loadSalesStats: $e');
-    }
-  }
-
-  // reports_provider.dart - عدّل دالة _loadTopProducts
-
   Future<void> _loadTopProducts() async {
     try {
       final db = await _dbHelper.db;
@@ -206,21 +137,18 @@ class ReportsProvider extends ChangeNotifier {
       SELECT 
         p.name,
         p.base_unit,
-        -- حساب الكمية الإجمالية مع مراعاة نوع الوحدة
         SUM(
           CASE 
-            -- إذا كانت الوحدة الأساسية هي القطعة
             WHEN p.base_unit = 'piece' THEN 
               CASE 
                 WHEN si.unit_type = 'piece' THEN si.quantity
-                WHEN si.unit_type = 'kg' THEN si.quantity  -- لا يمكن التحويل بدون معرفة الوزن
+                WHEN si.unit_type = 'kg' THEN si.quantity
                 WHEN si.unit_type = 'custom' AND pu.contain_qty IS NOT NULL THEN si.quantity * pu.contain_qty
                 ELSE si.quantity
               END
-            -- إذا كانت الوحدة الأساسية هي الكيلو
             WHEN p.base_unit = 'kg' THEN 
               CASE 
-                WHEN si.unit_type = 'piece' THEN si.quantity  -- لا يمكن التحويل بدون معرفة الوزن
+                WHEN si.unit_type = 'piece' THEN si.quantity
                 WHEN si.unit_type = 'kg' THEN si.quantity
                 WHEN si.unit_type = 'custom' AND pu.contain_qty IS NOT NULL THEN si.quantity * pu.contain_qty
                 ELSE si.quantity
@@ -229,13 +157,10 @@ class ReportsProvider extends ChangeNotifier {
           END
         ) as total_quantity,
         
-        -- حساب عدد المرات التي تم بيع المنتج فيها (بغض النظر عن الكمية)
         COUNT(DISTINCT si.sale_id) as sale_count,
         
-        -- الإيراد الإجمالي
         SUM(si.subtotal) as total_revenue,
         
-        -- الربح الإجمالي
         SUM(si.profit) as total_profit
         
       FROM sale_items si
@@ -250,7 +175,6 @@ class ReportsProvider extends ChangeNotifier {
 
       _topProducts =
           result.map((row) {
-            // تحديد نوع الوحدة للعرض
             String displayUnit = _getDisplayUnit(row['base_unit'] as String?);
 
             return {
@@ -270,20 +194,6 @@ class ReportsProvider extends ChangeNotifier {
       _topProducts = [];
     }
   }
-
-  // دالة مساعدة لتحويل الوحدة الأساسية إلى نص مفهوم
-  String _getDisplayUnit(String? baseUnit) {
-    switch (baseUnit) {
-      case 'piece':
-        return 'قطعة';
-      case 'kg':
-        return 'كيلو';
-      default:
-        return 'وحدة';
-    }
-  }
-
-  // وأيضاً عدّل دالة _loadFilteredTopProducts بنفس الطريقة
 
   Future<void> _loadTopCustomers() async {
     try {
@@ -376,72 +286,72 @@ class ReportsProvider extends ChangeNotifier {
   // ████████████████████████████████ دوال التصفية ███████████████████████████████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
 
-  Future<void> _filterByPeriodAlternative(String period) async {
+  // الدالة الرئيسية للفلترة - تم تعديلها لدعم جميع أنواع الفلاتر
+  Future<void> _filterSales(String period, {int? month, int? year}) async {
     try {
       final db = await _dbHelper.db;
 
-      // جلب جميع المبيعات أولاً
-      final allSales = await db.rawQuery('SELECT * FROM sales');
+      String whereClause = '';
+      List<dynamic> whereArgs = [];
 
       final now = DateTime.now();
-      List<Map<String, dynamic>> filteredSales = [];
 
-      for (var sale in allSales) {
-        final saleDateStr = sale['date'] as String?;
-        if (saleDateStr == null) continue;
-
-        try {
-          // تحويل تاريخ الفاتورة إلى DateTime
-          final saleDate = _parseSaleDate(saleDateStr);
-          bool shouldInclude = false;
-
-          switch (period) {
-            case 'اليوم':
-              shouldInclude =
-                  saleDate.year == now.year &&
-                  saleDate.month == now.month &&
-                  saleDate.day == now.day;
-              break;
-
-            case 'الأسبوع':
-              final weekAgo = now.subtract(const Duration(days: 7));
-              shouldInclude =
-                  saleDate.isAfter(weekAgo) || _isSameDay(saleDate, weekAgo);
-              break;
-
-            case 'الشهر':
-              // نفس الشهر فقط
-              shouldInclude =
-                  saleDate.year == now.year && saleDate.month == now.month;
-              break;
-
-            case 'السنة':
-              // نفس السنة فقط
-              shouldInclude = saleDate.year == now.year;
-              break;
-
-            default:
-              shouldInclude = true;
-          }
-
-          if (shouldInclude) {
-            filteredSales.add(sale);
-          }
-        } catch (e) {
-          print('Error parsing date for sale ${sale['id']}: $e');
-        }
+      switch (period) {
+        case 'اليوم':
+          whereClause = "date(date) = date(?)";
+          whereArgs = [now.toIso8601String()];
+          break;
+        case 'الأسبوع':
+          final weekAgo = now.subtract(Duration(days: 7));
+          whereClause = "date(date) >= date(?)";
+          whereArgs = [weekAgo.toIso8601String()];
+          break;
+        case 'الشهر':
+          whereClause = "strftime('%Y-%m', date) = ?";
+          whereArgs = [now.toIso8601String().substring(0, 7)];
+          break;
+        case 'السنة':
+          whereClause = "strftime('%Y', date) = ?";
+          whereArgs = [now.year.toString()];
+          break;
+        case 'specific-month':
+          whereClause = "strftime('%Y-%m', date) = ?";
+          String formattedMonth = month!.toString().padLeft(2, '0');
+          whereArgs = ['$year-$formattedMonth'];
+          break;
+        case 'specific-year':
+          whereClause = "strftime('%Y', date) = ?";
+          whereArgs = [year.toString()];
+          break;
+        default:
+          whereClause = '1';
+          whereArgs = [];
       }
 
-      // حساب الإحصائيات من البيانات المصفاة
+      // جلب المبيعات المصفاة
+      final filteredSales = await db.rawQuery(
+        '''
+  SELECT * FROM sales
+  WHERE $whereClause
+  UNION ALL
+  SELECT * FROM sales_archive
+  WHERE $whereClause
+  ORDER BY date DESC
+''',
+        [...whereArgs, ...whereArgs],
+      );
+
+      // حساب الإحصائيات
       _calculateStatsFromFilteredData(filteredSales);
 
-      // إعادة تحميل المنتجات والعملاء بعد التصفية
-      await _loadFilteredTopProducts(period);
-      await _loadFilteredTopCustomers(period);
+      // إعادة تحميل أفضل المنتجات والعملاء حسب الفلترة
+      await _loadFilteredTopProducts(period, month: month, year: year);
+      await _loadFilteredTopCustomers(period, month: month, year: year);
 
-      print('تم تطبيق الفلتر بنجاح: ${filteredSales.length} فاتورة');
+      print('تم تطبيق الفلتر بنجاح ($period): ${filteredSales.length} فاتورة');
     } catch (e) {
-      print('Error in alternative filter: $e');
+      print('Error in _filterSales: $e');
+      rethrow;
     }
   }
 
@@ -483,19 +393,108 @@ class ReportsProvider extends ChangeNotifier {
       _lowestSaleAmount = 0;
     }
 
+    // متوسط الفاتورة
     _averageSaleAmount = _salesCount > 0 ? _totalSalesAmount / _salesCount : 0;
+
+    // نسبة الربح
     _profitPercentage =
         _totalSalesAmount > 0 ? (_totalProfit / _totalSalesAmount) * 100 : 0;
 
+    // أفضل يوم مبيعات
+    _calculateBestSalesDay(filteredSales);
+
     print(
-      'تم تطبيق الفلتر بنجاح: $_salesCount فاتورة، ${_totalSalesAmount.toStringAsFixed(0)} ل.س',
+      'تم حساب الإحصائيات: $_salesCount فاتورة، إجمالي المبيعات: ${_totalSalesAmount.toStringAsFixed(0)}، الربح: ${_totalProfit.toStringAsFixed(0)}',
     );
   }
 
-  Future<void> _loadFilteredTopProducts(String period) async {
+  void _calculateBestSalesDay(List<Map<String, dynamic>> sales) {
+    if (sales.isEmpty) {
+      _bestSalesDay = 'لا يوجد بيانات';
+      return;
+    }
+
+    Map<String, double> dailyTotals = {};
+
+    for (var sale in sales) {
+      final dateStr = (sale['date'] as String?)?.split(' ')[0];
+      if (dateStr == null) continue;
+
+      dailyTotals[dateStr] =
+          (dailyTotals[dateStr] ?? 0) +
+          ((sale['total_amount'] as num?)?.toDouble() ?? 0);
+    }
+
+    if (dailyTotals.isEmpty) {
+      _bestSalesDay = 'لا يوجد بيانات';
+      return;
+    }
+
+    final bestDayEntry = dailyTotals.entries.reduce(
+      (a, b) => a.value > b.value ? a : b,
+    );
+    try {
+      final date = DateTime.parse(bestDayEntry.key);
+      final days = [
+        'الأحد',
+        'الاثنين',
+        'الثلاثاء',
+        'الأربعاء',
+        'الخميس',
+        'الجمعة',
+        'السبت',
+      ];
+      _bestSalesDay = days[date.weekday % 7];
+    } catch (e) {
+      _bestSalesDay = 'غير معروف';
+    }
+  }
+
+  // تحميل أفضل المنتجات مع الفلاتر الجديدة
+  Future<void> _loadFilteredTopProducts(
+    String period, {
+    int? month,
+    int? year,
+  }) async {
     try {
       final db = await _dbHelper.db;
-      final whereClause = _getWhereClauseForPeriod(period);
+
+      String whereClause = '';
+      List<dynamic> whereArgs = [];
+
+      final now = DateTime.now();
+
+      switch (period) {
+        case 'اليوم':
+          whereClause = "date(s.date) = date(?)";
+          whereArgs = [now.toIso8601String()];
+          break;
+        case 'الأسبوع':
+          final weekAgo = now.subtract(Duration(days: 7));
+          whereClause = "date(s.date) >= date(?)";
+          whereArgs = [weekAgo.toIso8601String()];
+          break;
+        case 'الشهر':
+          whereClause = "strftime('%Y-%m', s.date) = ?";
+          whereArgs = [now.toIso8601String().substring(0, 7)];
+          break;
+        case 'السنة':
+          whereClause = "strftime('%Y', s.date) = ?";
+          whereArgs = [now.year.toString()];
+          break;
+        case 'specific-month':
+          whereClause = "strftime('%Y-%m', s.date) = ?";
+          String formattedMonth = month!.toString().padLeft(2, '0');
+          whereArgs = ['$year-$formattedMonth'];
+          break;
+        case 'specific-year':
+          whereClause = "strftime('%Y', s.date) = ?";
+          whereArgs = [year.toString()];
+          break;
+        default:
+          whereClause = "s.date >= date('now', '-30 days')";
+          whereArgs = [];
+      }
 
       final result = await db.rawQuery('''
       SELECT 
@@ -520,19 +519,22 @@ class ReportsProvider extends ChangeNotifier {
             ELSE si.quantity
           END
         ) as total_quantity,
+        
         COUNT(DISTINCT si.sale_id) as sale_count,
+        
         SUM(si.subtotal) as total_revenue,
+        
         SUM(si.profit) as total_profit
         
       FROM sale_items si
       JOIN products p ON si.product_id = p.id
       JOIN sales s ON si.sale_id = s.id
       LEFT JOIN product_units pu ON si.unit_id = pu.id
-      $whereClause
+      WHERE $whereClause
       GROUP BY p.id, p.name, p.base_unit
       ORDER BY total_revenue DESC, sale_count DESC
       LIMIT 10
-    ''');
+    ''', whereArgs);
 
       _topProducts =
           result.map((row) {
@@ -554,10 +556,51 @@ class ReportsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadFilteredTopCustomers(String period) async {
+  // تحميل أفضل العملاء مع الفلاتر الجديدة
+  Future<void> _loadFilteredTopCustomers(
+    String period, {
+    int? month,
+    int? year,
+  }) async {
     try {
       final db = await _dbHelper.db;
-      final whereClause = _getWhereClauseForPeriod(period);
+
+      String whereClause = '';
+      List<dynamic> whereArgs = [];
+
+      final now = DateTime.now();
+
+      switch (period) {
+        case 'اليوم':
+          whereClause = "date(s.date) = date(?)";
+          whereArgs = [now.toIso8601String()];
+          break;
+        case 'الأسبوع':
+          final weekAgo = now.subtract(Duration(days: 7));
+          whereClause = "date(s.date) >= date(?)";
+          whereArgs = [weekAgo.toIso8601String()];
+          break;
+        case 'الشهر':
+          whereClause = "strftime('%Y-%m', s.date) = ?";
+          whereArgs = [now.toIso8601String().substring(0, 7)];
+          break;
+        case 'السنة':
+          whereClause = "strftime('%Y', s.date) = ?";
+          whereArgs = [now.year.toString()];
+          break;
+        case 'specific-month':
+          whereClause = "strftime('%Y-%m', s.date) = ?";
+          String formattedMonth = month!.toString().padLeft(2, '0');
+          whereArgs = ['$year-$formattedMonth'];
+          break;
+        case 'specific-year':
+          whereClause = "strftime('%Y', s.date) = ?";
+          whereArgs = [year.toString()];
+          break;
+        default:
+          whereClause = "s.date >= date('now', '-30 days')";
+          whereArgs = [];
+      }
 
       final result = await db.rawQuery('''
         SELECT 
@@ -567,12 +610,12 @@ class ReportsProvider extends ChangeNotifier {
           SUM(s.total_profit) as total_profit
         FROM sales s
         LEFT JOIN customers c ON s.customer_id = c.id
-        $whereClause
+        WHERE $whereClause AND c.id IS NOT NULL
         GROUP BY c.id, c.name
         HAVING total_amount > 0
         ORDER BY total_amount DESC
         LIMIT 10
-      ''');
+      ''', whereArgs);
 
       _topCustomers =
           result.map((row) {
@@ -593,52 +636,15 @@ class ReportsProvider extends ChangeNotifier {
   // ████████████████████████████████ دوال مساعدة ████████████████████████████████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
 
-  String _getWhereClauseForPeriod(String period) {
-    switch (period) {
-      case 'اليوم':
-        // اليوم الحالي فقط - نفس اليوم والشهر والسنة
-        return "WHERE strftime('%Y-%m-%d', date) = strftime('%Y-%m-%d', 'now', 'localtime')";
-      case 'الأسبوع':
-        // آخر 7 أيام (كما هو) - حسب طلبك
-        return "WHERE date >= date('now', '-7 days')";
-      case 'الشهر':
-        // نفس الشهر الحالي فقط
-        return "WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime')";
-      case 'السنة':
-        // نفس السنة الحالية فقط
-        return "WHERE strftime('%Y', date) = strftime('%Y', 'now', 'localtime')";
+  String _getDisplayUnit(String? baseUnit) {
+    switch (baseUnit) {
+      case 'piece':
+        return 'قطعة';
+      case 'kg':
+        return 'كيلو';
       default:
-        return "WHERE date >= date('now', '-30 days')";
+        return 'وحدة';
     }
-  }
-
-  DateTime _parseSaleDate(String dateStr) {
-    try {
-      return DateTime.parse(dateStr);
-    } catch (e) {
-      try {
-        if (dateStr.contains(' ')) {
-          return DateTime.parse(dateStr.split(' ')[0]);
-        }
-        final parts = dateStr.split('-');
-        if (parts.length == 3) {
-          return DateTime(
-            int.parse(parts[0]),
-            int.parse(parts[1]),
-            int.parse(parts[2]),
-          );
-        }
-      } catch (e2) {
-        print('Failed to parse date: $dateStr');
-      }
-      return DateTime.now();
-    }
-  }
-
-  bool _isSameDay(DateTime date1, DateTime date2) {
-    return date1.year == date2.year &&
-        date1.month == date2.month &&
-        date1.day == date2.day;
   }
 
   String _formatDateForSQL(DateTime date) {
@@ -687,7 +693,6 @@ class ReportsProvider extends ChangeNotifier {
 
     print('=== Debug Date Issues ===');
 
-    // فحص التواريخ في قاعدة البيانات
     final sampleDates = await db.rawQuery('''
       SELECT date, id FROM sales ORDER BY id DESC LIMIT 5
     ''');
@@ -697,7 +702,6 @@ class ReportsProvider extends ChangeNotifier {
       print(' - الفاتورة ${row['id']}: ${row['date']}');
     }
 
-    // فحص التاريخ الحالي في SQLite
     final currentDate = await db.rawQuery(
       'SELECT date(\'now\') as current_date',
     );
@@ -706,12 +710,10 @@ class ReportsProvider extends ChangeNotifier {
     print('=== End Debug ===');
   }
 
-  //هاض خاص بحذف الفواتير الي مر عليها سنه ونوعها cash
-
+  // دالة لحذف الفواتير النقدية القديمة
   Future<void> deleteOldCashSales() async {
     final db = await _dbHelper.db;
 
-    // جلب الفواتير النقدية القديمة
     final oldSales = await db.rawQuery("""
     SELECT * FROM sales
     WHERE payment_type = 'cash'
@@ -721,10 +723,8 @@ class ReportsProvider extends ChangeNotifier {
     for (var sale in oldSales) {
       final saleId = sale['id'];
 
-      // حذف العناصر المرتبطة بالفاتورة
       await db.delete('sale_items', where: "sale_id = ?", whereArgs: [saleId]);
 
-      // حذف الفاتورة نفسها
       await db.delete('sales', where: "id = ?", whereArgs: [saleId]);
     }
 

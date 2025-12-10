@@ -14,6 +14,8 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   String _selectedPeriod = 'اليوم';
+  int? _selectedMonth;
+  int? _selectedYear;
 
   @override
   void initState() {
@@ -75,35 +77,173 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Widget _buildPeriodFilter(ReportsProvider provider) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey[300]!),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'الفترة:',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'الفترة:',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              DropdownButton<String>(
+                value: _selectedPeriod,
+                items:
+                    [
+                      'اليوم',
+                      'الأسبوع',
+                      'الشهر',
+                      'السنة',
+                      'شهر محدد',
+                      'سنة محددة',
+                    ].map((String period) {
+                      return DropdownMenuItem(
+                        value: period,
+                        child: Text(period),
+                      );
+                    }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedPeriod = value!;
+                    // إعادة تعيين القيم عند تغيير نوع الفلتر
+                    if (_selectedPeriod != 'شهر محدد') {
+                      _selectedMonth = null;
+                    }
+                    if (_selectedPeriod != 'سنة محددة') {
+                      _selectedYear = null;
+                    }
+                  });
+                  _applyFilter(provider);
+                },
+              ),
+            ],
           ),
-          DropdownButton<String>(
-            value: _selectedPeriod,
-            items:
-                ['اليوم', 'الأسبوع', 'الشهر', 'السنة'].map((String period) {
-                  return DropdownMenuItem(value: period, child: Text(period));
-                }).toList(),
-            onChanged: (value) {
-              setState(() {
-                _selectedPeriod = value!;
-              });
-              provider.filterByPeriod(_selectedPeriod);
-            },
-          ),
+
+          // فلتر الشهر المحدد
+          if (_selectedPeriod == 'شهر محدد') ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    value: _selectedMonth,
+                    decoration: const InputDecoration(
+                      labelText: 'الشهر',
+                      border: OutlineInputBorder(),
+                    ),
+                    items:
+                        List.generate(12, (index) => index + 1).map((
+                          int month,
+                        ) {
+                          return DropdownMenuItem(
+                            value: month,
+                            child: Text(_getMonthName(month)),
+                          );
+                        }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedMonth = value;
+                      });
+                      _applyFilter(provider);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    value: _selectedYear,
+                    decoration: const InputDecoration(
+                      labelText: 'السنة',
+                      border: OutlineInputBorder(),
+                    ),
+                    items:
+                        _getAvailableYears().map((int year) {
+                          return DropdownMenuItem(
+                            value: year,
+                            child: Text(year.toString()),
+                          );
+                        }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedYear = value;
+                      });
+                      _applyFilter(provider);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // فلتر السنة المحددة
+          if (_selectedPeriod == 'سنة محددة') ...[
+            const SizedBox(height: 10),
+            DropdownButtonFormField<int>(
+              value: _selectedYear,
+              decoration: const InputDecoration(
+                labelText: 'السنة',
+                border: OutlineInputBorder(),
+              ),
+              items:
+                  _getAvailableYears().map((int year) {
+                    return DropdownMenuItem(
+                      value: year,
+                      child: Text(year.toString()),
+                    );
+                  }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedYear = value;
+                });
+                _applyFilter(provider);
+              },
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  String _getMonthName(int month) {
+    final months = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
+    ];
+    return months[month - 1];
+  }
+
+  List<int> _getAvailableYears() {
+    final currentYear = DateTime.now().year;
+    return List.generate(10, (index) => currentYear - index);
+  }
+
+  void _applyFilter(ReportsProvider provider) {
+    if (_selectedPeriod == 'شهر محدد' &&
+        _selectedMonth != null &&
+        _selectedYear != null) {
+      provider.filterBySpecificMonth(_selectedMonth!, _selectedYear!);
+    } else if (_selectedPeriod == 'سنة محددة' && _selectedYear != null) {
+      provider.filterBySpecificYear(_selectedYear!);
+    } else {
+      provider.filterByPeriod(_selectedPeriod);
+    }
   }
 
   Widget _buildStatsCards(ReportsProvider provider) {
