@@ -23,6 +23,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   final ScrollController _verticalScrollController = ScrollController();
   Timer? _filterDebounceTimer;
 
+  // في SalesHistoryScreen
+  StreamSubscription? _newSaleSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -30,25 +33,38 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<SalesProvider>();
 
-      // ✅ تحميل السنة الحالية مسبقاً للأداء الأفضل
+      // ✅ تحميل السنة الحالية مسبقاً
       provider.prefetchCurrentYear();
 
       if (provider.selectedYear == null) {
         provider.setYearFilter(DateTime.now().year);
       } else {
-        provider.fetchSales();
+        // ✅ للسنة الحالية، استخدم forceRefresh دائمًا
+        final isCurrentYear = provider.selectedYear == DateTime.now().year;
+        provider.fetchSales(forceRefresh: isCurrentYear);
       }
+
+      // ✅ الاستماع إلى الفواتير الجديدة
+      _setupNewSaleListener();
     });
 
-    // ✅ تحسين مراقبة التمرير مع Debounce
-    _verticalScrollController.addListener(() {
-      final provider = context.read<SalesProvider>();
-      if (_verticalScrollController.position.pixels >=
-              _verticalScrollController.position.maxScrollExtent - 300 &&
-          !provider.isLoading &&
-          provider.hasMore) {
-        provider.loadMoreSales();
-      }
+    // ... باقي الكود
+  }
+
+  void _setupNewSaleListener() {
+    final provider = context.read<SalesProvider>();
+
+    _newSaleSubscription = provider.newSaleStream.listen((saleId) {
+      print('📥 تم استلام إشعار بفاتورة جديدة #$saleId');
+
+      // ✅ إذا كنا نعرض السنة الحالية، قم بتحديث البيانات
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final currentProvider = context.read<SalesProvider>();
+        if (currentProvider.selectedYear == DateTime.now().year) {
+          print('🔄 تحديث تلقائي لشاشة الفواتير بعد إضافة فاتورة جديدة');
+          currentProvider.fetchSales(forceRefresh: true);
+        }
+      });
     });
   }
 
