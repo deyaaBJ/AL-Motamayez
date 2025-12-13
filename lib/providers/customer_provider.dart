@@ -24,7 +24,7 @@ class CustomerProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get hasMore => _hasMore;
 
-  // جلب كل الزبائن من الداتا بيس مع حساب الدين والنقدي
+  // جلب كل الزبائن من الداتا بيس
   Future<void> fetchCustomers({bool reset = false}) async {
     if (_isLoading) return;
 
@@ -39,43 +39,61 @@ class CustomerProvider extends ChangeNotifier {
 
     notifyListeners();
 
-    final db = await _dbHelper.db;
+    try {
+      final db = await _dbHelper.db;
 
-    // حساب OFFSET للتحميل التدريجي
-    final offset = _currentPage * _itemsPerPage;
-
-    final result = await db.query(
-      'customers',
-      orderBy: 'name ASC',
-      limit: _itemsPerPage,
-      offset: offset,
-    );
-
-    // إذا كانت النتائج أقل من الحد المطلوب، فهذا يعني لا يوجد المزيد
-    if (result.length < _itemsPerPage) {
-      _hasMore = false;
-    }
-
-    for (var customerData in result) {
-      final customer = Customer.fromMap(customerData);
-
-      // حساب الدين والنقدي للعميل من الفواتير
-      final totals = await _calculateCustomerTotals(customer.id!);
-
-      final updatedCustomer = customer.copyWith(
-        debt: totals['debt'] ?? 0.0,
-        totalCash: totals['cash'] ?? 0.0,
+      // التحقق من وجود جدول customers
+      final tableInfo = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='customers'",
       );
 
-      _customers.add(updatedCustomer);
+      if (tableInfo.isEmpty) {
+        print('جدول customers غير موجود!');
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // حساب OFFSET للتحميل التدريجي
+      final offset = _currentPage * _itemsPerPage;
+
+      final result = await db.query(
+        'customers',
+        orderBy: 'name ASC',
+        limit: _itemsPerPage,
+        offset: offset,
+      );
+
+      print('تم جلب ${result.length} عميل من قاعدة البيانات');
+
+      // إذا كانت النتائج أقل من الحد المطلوب، فهذا يعني لا يوجد المزيد
+      if (result.length < _itemsPerPage) {
+        _hasMore = false;
+      }
+
+      // تحويل البيانات إلى كائنات Customer
+      for (var customerData in result) {
+        try {
+          final customer = Customer.fromMap(customerData);
+          print('تم تحويل العميل: ${customer.name} (ID: ${customer.id})');
+          _customers.add(customer);
+        } catch (e) {
+          print('خطأ في تحويل بيانات العميل: $e');
+          print('بيانات العميل: $customerData');
+        }
+      }
+
+      _displayedCustomers = List.from(_customers);
+      _filteredCustomers = _displayedCustomers;
+      _currentPage++;
+
+      print('إجمالي العملاء المحملين: ${_customers.length}');
+    } catch (e) {
+      print('خطأ في fetchCustomers: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-
-    _displayedCustomers = List.from(_customers);
-    _filteredCustomers = _displayedCustomers;
-    _currentPage++;
-    _isLoading = false;
-
-    notifyListeners();
   }
 
   // تحميل المزيد من العملاء
@@ -90,43 +108,6 @@ class CustomerProvider extends ChangeNotifier {
     await fetchCustomers(reset: true);
   }
 
-  // حساب إجمالي الدين والنقدي للعميل من الفواتير
-  Future<Map<String, double>> _calculateCustomerTotals(int customerId) async {
-    final db = await _dbHelper.db;
-
-    // جلب جميع فواتير العميل
-    final List<Map<String, dynamic>> sales = await db.query(
-      'sales',
-      where: 'customer_id = ?',
-      whereArgs: [customerId],
-    );
-
-    double totalDebt = 0.0;
-    double totalCash = 0.0;
-
-    for (var sale in sales) {
-      final paymentType = sale['payment_type'] as String? ?? 'cash';
-      final totalAmount = _safeToDouble(sale['total_amount']);
-
-      if (paymentType == 'credit') {
-        totalDebt += totalAmount;
-      } else if (paymentType == 'cash') {
-        totalCash += totalAmount;
-      }
-    }
-
-    return {'debt': totalDebt, 'cash': totalCash};
-  }
-
-  // دالة مساعدة للتحويل الآمن إلى double
-  double _safeToDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? 0.0;
-    return 0.0;
-  }
-
   Future<void> searchCustomers(String query) async {
     _searchQuery = query;
 
@@ -135,12 +116,12 @@ class CustomerProvider extends ChangeNotifier {
     } else {
       final results =
           _displayedCustomers.where((customer) {
-            final nameMatch = customer.name.toLowerCase().contains(
+            final nameMatch = (customer.name ?? '').toLowerCase().contains(
               query.toLowerCase(),
             );
-            final phoneMatch =
-                customer.phone?.toLowerCase().contains(query.toLowerCase()) ??
-                false;
+            final phoneMatch = (customer.phone ?? '').toLowerCase().contains(
+              query.toLowerCase(),
+            );
             return nameMatch || phoneMatch;
           }).toList();
 
@@ -152,216 +133,146 @@ class CustomerProvider extends ChangeNotifier {
 
   // إضافة زبون جديد
   Future<void> addCustomer(Customer customer) async {
-    final db = await _dbHelper.db;
-    final id = await db.insert('customers', customer.toMap());
+    try {
+      final db = await _dbHelper.db;
+      final id = await db.insert('customers', customer.toMap());
 
-    // إنشاء نسخة جديدة من العميل مع ID
-    final newCustomer = customer.copyWith(id: id);
-    _customers.insert(0, newCustomer); // إضافة في البداية
-    _displayedCustomers = List.from(_customers);
-    _filteredCustomers = _displayedCustomers;
+      print('تم إضافة عميل جديد بالـ ID: $id');
 
-    // إعادة تعيين التحميل التدريجي
-    _currentPage = 0;
-    _hasMore = true;
+      // إنشاء نسخة جديدة من العميل مع ID
+      final newCustomer = customer.copyWith(id: id);
+      _customers.insert(0, newCustomer); // إضافة في البداية
+      _displayedCustomers = List.from(_customers);
+      _filteredCustomers = _displayedCustomers;
 
-    notifyListeners();
+      // إعادة تعيين التحميل التدريجي
+      _currentPage = 0;
+      _hasMore = true;
+
+      notifyListeners();
+    } catch (e) {
+      print('خطأ في addCustomer: $e');
+      rethrow;
+    }
   }
 
   // تحديث زبون
   Future<void> updateCustomer(Customer customer) async {
-    final db = await _dbHelper.db;
-    await db.update(
-      'customers',
-      customer.toMap(),
-      where: 'id = ?',
-      whereArgs: [customer.id],
-    );
+    try {
+      final db = await _dbHelper.db;
+      await db.update(
+        'customers',
+        customer.toMap(),
+        where: 'id = ?',
+        whereArgs: [customer.id],
+      );
 
-    // تحديث في القائمة المحلية
-    final index = _customers.indexWhere((c) => c.id == customer.id);
-    if (index != -1) {
-      _customers[index] = customer;
-      _displayedCustomers = List.from(_customers);
-      _filteredCustomers = _displayedCustomers;
-      notifyListeners();
+      // تحديث في القائمة المحلية
+      final index = _customers.indexWhere((c) => c.id == customer.id);
+      if (index != -1) {
+        _customers[index] = customer;
+        _displayedCustomers = List.from(_customers);
+        _filteredCustomers = _displayedCustomers;
+        notifyListeners();
+      }
+    } catch (e) {
+      print('خطأ في updateCustomer: $e');
+      rethrow;
     }
   }
 
   // حذف زبون
   Future<void> deleteCustomer(int id) async {
-    final db = await _dbHelper.db;
+    try {
+      final db = await _dbHelper.db;
 
-    // التحقق مما إذا كان للعميل فواتير مرتبطة
-    final sales = await db.query(
-      'sales',
-      where: 'customer_id = ?',
-      whereArgs: [id],
-    );
+      // التحقق مما إذا كان للعميل فواتير مرتبطة
+      final sales = await db.query(
+        'sales',
+        where: 'customer_id = ?',
+        whereArgs: [id],
+      );
 
-    if (sales.isNotEmpty) {
-      throw Exception('لا يمكن حذف العميل لأنه لديه فواتير مرتبطة');
+      if (sales.isNotEmpty) {
+        throw Exception('لا يمكن حذف العميل لأنه لديه فواتير مرتبطة');
+      }
+
+      await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+
+      // حذف من القائمة المحلية
+      _customers.removeWhere((c) => c.id == id);
+      _displayedCustomers = List.from(_customers);
+      _filteredCustomers = _displayedCustomers;
+
+      notifyListeners();
+    } catch (e) {
+      print('خطأ في deleteCustomer: $e');
+      rethrow;
     }
-
-    await db.delete('customers', where: 'id = ?', whereArgs: [id]);
-
-    // حذف من القائمة المحلية
-    _customers.removeWhere((c) => c.id == id);
-    _displayedCustomers = List.from(_customers);
-    _filteredCustomers = _displayedCustomers;
-
-    notifyListeners();
-  }
-
-  // تسديد دين العميل
-  Future<void> payDebt(
-    int customerId,
-    double amount,
-    String paymentType,
-  ) async {
-    if (amount <= 0) {
-      throw Exception('المبلغ يجب أن يكون أكبر من الصفر');
-    }
-
-    final db = await _dbHelper.db;
-
-    // البحث عن العميل
-    final customerIndex = _customers.indexWhere((c) => c.id == customerId);
-    if (customerIndex == -1) {
-      throw Exception('العميل غير موجود');
-    }
-
-    final customer = _customers[customerIndex];
-
-    if (amount > customer.debt) {
-      throw Exception('المبلغ المسدد أكبر من الدين المتبقي');
-    }
-
-    // إضافة فاتورة دفع (فاتورة بسالب للمبلغ)
-    await db.insert('sales', {
-      'date': DateTime.now().toIso8601String(),
-      'total_amount': -amount, // سالب لأنها دفعة
-      'total_profit': 0.0,
-      'customer_id': customerId,
-      'payment_type': paymentType,
-      'show_for_tax': 0,
-    });
-
-    // تحديث الدين المحلي
-    final updatedCustomer = customer.copyWith(debt: customer.debt - amount);
-    _customers[customerIndex] = updatedCustomer;
-    _displayedCustomers = List.from(_customers);
-    _filteredCustomers = _displayedCustomers;
-
-    notifyListeners();
-  }
-
-  // الحصول على إحصائيات العملاء (من العملاء المحملين فقط)
-  Map<String, dynamic> getCustomerStats() {
-    final totalCustomers = _customers.length;
-    final totalDebt = _customers.fold(
-      0.0,
-      (sum, customer) => sum + customer.debt,
-    );
-    final totalCash = _customers.fold(
-      0.0,
-      (sum, customer) => sum + customer.totalCash,
-    );
-    final customersWithDebt = _customers.where((c) => c.debt > 0).length;
-    final totalPurchases = totalDebt + totalCash;
-
-    return {
-      'totalCustomers': totalCustomers,
-      'totalDebt': totalDebt,
-      'totalCash': totalCash,
-      'totalPurchases': totalPurchases,
-      'customersWithDebt': customersWithDebt,
-    };
   }
 
   // الحصول على فواتير العميل
   Future<List<Map<String, dynamic>>> getCustomerSales(int customerId) async {
-    final db = await _dbHelper.db;
+    try {
+      final db = await _dbHelper.db;
 
-    final List<Map<String, dynamic>> sales = await db.query(
-      'sales',
-      where: 'customer_id = ?',
-      whereArgs: [customerId],
-      orderBy: 'date DESC',
-    );
+      final List<Map<String, dynamic>> sales = await db.query(
+        'sales',
+        where: 'customer_id = ?',
+        whereArgs: [customerId],
+        orderBy: 'date DESC',
+      );
 
-    return sales;
+      return sales;
+    } catch (e) {
+      print('خطأ في getCustomerSales: $e');
+      return [];
+    }
   }
 
   // الحصول على إجمالي المشتريات للعميل
   Future<double> getCustomerTotalPurchases(int customerId) async {
-    final db = await _dbHelper.db;
-
-    final result = await db.rawQuery(
-      'SELECT SUM(total_amount) as total FROM sales WHERE customer_id = ? AND total_amount > 0',
-      [customerId],
-    );
-
-    return _safeToDouble(result.first['total']);
-  }
-
-  // تحديث الدين يدوياً (للتعديلات الطارئة)
-  Future<void> updateCustomerDebt(int customerId, double newDebt) async {
-    final customer = _customers.firstWhere((c) => c.id == customerId);
-    final currentDebt = customer.debt;
-    final difference = newDebt - currentDebt;
-
-    if (difference != 0) {
+    try {
       final db = await _dbHelper.db;
 
-      // إضافة فاتورة ضبط للفرق
-      await db.insert('sales', {
-        'date': DateTime.now().toIso8601String(),
-        'total_amount': difference,
-        'total_profit': 0.0,
-        'customer_id': customerId,
-        'payment_type': 'credit',
-        'show_for_tax': 0,
-      });
+      final result = await db.rawQuery(
+        'SELECT SUM(total_amount) as total FROM sales WHERE customer_id = ? AND total_amount > 0',
+        [customerId],
+      );
 
-      await fetchCustomers();
+      if (result.isEmpty || result.first['total'] == null) {
+        return 0.0;
+      }
+
+      return _safeToDouble(result.first['total']);
+    } catch (e) {
+      print('خطأ في getCustomerTotalPurchases: $e');
+      return 0.0;
     }
-  }
-
-  // إضافة فاتورة وتحديث الدين تلقائياً
-  Future<void> addSaleForCustomer(
-    int customerId,
-    double amount,
-    String paymentType,
-  ) async {
-    final db = await _dbHelper.db;
-
-    // إضافة الفاتورة
-    await db.insert('sales', {
-      'date': DateTime.now().toIso8601String(),
-      'total_amount': amount,
-      'total_profit': 0.0, // يمكن حساب الربح لاحقاً
-      'customer_id': customerId,
-      'payment_type': paymentType,
-      'show_for_tax': 0,
-    });
-
-    // إعادة تحميل العملاء لتحديث الأرقام
-    await fetchCustomers();
   }
 
   // الحصول على تفاصيل العميل مع إحصائياته
   Future<Map<String, dynamic>> getCustomerDetails(int customerId) async {
-    final customer = _customers.firstWhere((c) => c.id == customerId);
-    final sales = await getCustomerSales(customerId);
-    final totalPurchases = await getCustomerTotalPurchases(customerId);
+    try {
+      final customer = _customers.firstWhere((c) => c.id == customerId);
+      final sales = await getCustomerSales(customerId);
+      final totalPurchases = await getCustomerTotalPurchases(customerId);
 
-    return {
-      'customer': customer,
-      'sales': sales,
-      'totalPurchases': totalPurchases,
-      'salesCount': sales.length,
-    };
+      return {
+        'customer': customer,
+        'sales': sales,
+        'totalPurchases': totalPurchases,
+        'salesCount': sales.length,
+      };
+    } catch (e) {
+      print('خطأ في getCustomerDetails: $e');
+      return {
+        'customer': null,
+        'sales': [],
+        'totalPurchases': 0.0,
+        'salesCount': 0,
+      };
+    }
   }
 
   // الحصول على عميل بواسطة الـ ID
@@ -378,6 +289,15 @@ class CustomerProvider extends ChangeNotifier {
     _searchQuery = '';
     _filteredCustomers = _displayedCustomers;
     notifyListeners();
+  }
+
+  // دالة مساعدة للتحويل الآمن إلى double
+  double _safeToDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
   }
 
   @override

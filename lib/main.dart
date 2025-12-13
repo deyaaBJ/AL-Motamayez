@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/db/db_helper.dart';
+import 'package:shopmate/providers/DebtProvider.dart';
 import 'package:shopmate/providers/customer_provider.dart';
 import 'package:shopmate/providers/product_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
@@ -27,7 +28,11 @@ void main() async {
   databaseFactory = databaseFactoryFfi;
   final DBHelper dbHelper = DBHelper();
   await dbHelper.db;
-
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    setWindowTitle('ShopMate POS');
+    setWindowMinSize(const Size(1000, 700)); // الحد الأدنى
+    // setWindowMaxSize(const Size(1200, 1000)); // إذا بدك حد أقصى
+  }
   runApp(
     MultiProvider(
       providers: [
@@ -38,6 +43,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => ProductProvider()),
         ChangeNotifierProvider(create: (_) => SideBarProvider()),
+        ChangeNotifierProvider(create: (_) => DebtProvider()),
       ],
       child: const ShopMateApp(),
     ),

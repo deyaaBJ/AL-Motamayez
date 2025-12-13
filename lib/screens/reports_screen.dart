@@ -249,49 +249,59 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildStatsCards(ReportsProvider provider) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final currencyName = settings.currencyName;
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        int crossAxisCount = 3;
-        double screenWidth = constraints.maxWidth;
+        // المساحات والـ spacing
+        const double spacing = 10;
+        final double maxWidth = constraints.maxWidth;
 
-        if (screenWidth < 400) {
-          crossAxisCount = 1;
-        } else if (screenWidth < 700) {
-          crossAxisCount = 2;
+        // قواعد بسيطة للحجم: 3 أعمدة للكبار، 2 للمتوسط، 1 للصغير
+        int columns;
+        if (maxWidth >= 900) {
+          columns = 3;
+        } else if (maxWidth >= 600) {
+          columns = 2;
+        } else {
+          columns = 1;
         }
 
-        double childAspectRatio = 2;
+        // نحسب عرض كل كرت مع مراعاة الـ spacing
+        final double totalSpacing = spacing * (columns - 1);
+        final double cardWidth = (maxWidth - totalSpacing) / columns;
 
-        return GridView.count(
-          crossAxisCount: crossAxisCount,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: childAspectRatio,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          children: [
-            _buildStatCard(
-              'إجمالي المبيعات',
-              '${provider.totalSalesAmount.toStringAsFixed(0)} $currencyName',
-              Icons.shopping_cart,
-              Colors.blue,
-              '${provider.salesCount} فاتورة',
-            ),
-            _buildStatCard(
-              'إجمالي الأرباح',
-              '${provider.totalProfit.toStringAsFixed(0)} $currencyName',
-              Icons.attach_money,
-              Colors.green,
-              '${provider.profitPercentage.toStringAsFixed(1)}% من المبيعات',
-            ),
-            _buildStatCard(
-              'عدد الفواتير',
-              provider.salesCount.toString(),
-              Icons.receipt,
-              Colors.purple,
-              'إجمالي المعاملات',
-            ),
-          ],
+        // عناصر الكروت
+        final cards = [
+          _buildStatCard(
+            'إجمالي المبيعات',
+            '${provider.totalSalesAmount.toStringAsFixed(0)} $currencyName',
+            Icons.shopping_cart,
+            Colors.blue,
+            '${provider.salesCount} فاتورة',
+          ),
+          _buildStatCard(
+            'إجمالي الأرباح',
+            '${provider.totalProfit.toStringAsFixed(0)} $currencyName',
+            Icons.attach_money,
+            Colors.green,
+            '${provider.profitPercentage.toStringAsFixed(1)}% من المبيعات',
+          ),
+          _buildStatCard(
+            'عدد الفواتير',
+            provider.salesCount.toString(),
+            Icons.receipt,
+            Colors.purple,
+            'إجمالي المعاملات',
+          ),
+        ];
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children:
+              cards.map((card) {
+                return SizedBox(width: cardWidth, child: card);
+              }).toList(),
         );
       },
     );

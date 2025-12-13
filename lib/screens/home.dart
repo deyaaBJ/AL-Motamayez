@@ -18,13 +18,21 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+
     Provider.of<SalesProvider>(context, listen: false).loadTodaySalesCount();
+
     Provider.of<ProductProvider>(context, listen: false).loadTotalProducts();
 
-    Future.microtask(
-      () =>
-          Provider.of<SettingsProvider>(context, listen: false).loadSettings(),
-    );
+    Future.microtask(() async {
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+
+      await settings.loadSettings();
+
+      Provider.of<ProductProvider>(
+        context,
+        listen: false,
+      ).loadStockCounts(settings.lowStockThreshold);
+    });
   }
 
   @override
@@ -44,6 +52,8 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildMainContent(BuildContext context, String? role) {
     final salesProvider = Provider.of<SalesProvider>(context);
     final productProvider = Provider.of<ProductProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
+
     return Column(
       children: [
         // Header
@@ -84,7 +94,7 @@ class _MainScreenState extends State<MainScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 30),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end, // 🔥 محتوى يمين
+              crossAxisAlignment: CrossAxisAlignment.end, // كل شيء على اليمين
               children: [
                 // بطاقة الهيرو
                 Container(
@@ -93,7 +103,7 @@ class _MainScreenState extends State<MainScreen> {
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [Color(0xFF8B5FBF), Color(0xFF4A1C6D)],
-                      begin: Alignment.topRight, // 🔥 عربي
+                      begin: Alignment.topRight,
                       end: Alignment.bottomLeft,
                     ),
                     borderRadius: BorderRadius.circular(25),
@@ -108,7 +118,7 @@ class _MainScreenState extends State<MainScreen> {
                   child: Stack(
                     children: [
                       Positioned(
-                        left: -20, // 🔥 جهة اليسار بالعربي
+                        left: -30,
                         top: -20,
                         child: Icon(
                           Icons.shopping_cart,
@@ -119,7 +129,7 @@ class _MainScreenState extends State<MainScreen> {
                       Padding(
                         padding: const EdgeInsets.all(30),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end, // عربي
+                          crossAxisAlignment: CrossAxisAlignment.start, // عربي
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Text(
@@ -147,7 +157,7 @@ class _MainScreenState extends State<MainScreen> {
                                 foregroundColor: const Color(0xFF4A1C6D),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 24,
-                                  vertical: 12,
+                                  vertical: 20,
                                 ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -164,32 +174,62 @@ class _MainScreenState extends State<MainScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 20),
 
+                // نظرة عامة اليوم
                 const Text(
                   "نظرة عامة اليوم",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.right,
                 ),
+
                 const SizedBox(height: 15),
 
+                // الصف الأول من الكروت
                 Row(
+                  textDirection: TextDirection.rtl, // كل شيء من اليمين
                   children: [
                     Expanded(
                       child: _buildStatCard(
                         "المبيعات",
-                        "${salesProvider.todaySalesCount}", // ✔ عدد فواتير اليوم
+                        "${salesProvider.todaySalesCount}",
                         Icons.receipt_long,
                         Colors.orange,
                       ),
                     ),
                     const SizedBox(width: 15),
-
                     Expanded(
                       child: _buildStatCard(
                         "المنتجات",
-                        "${productProvider.totalProducts}", // ✔ عدد المنتجات
+                        "${productProvider.totalProducts}",
                         Icons.inventory,
                         Colors.blue,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                // الصف الثاني من الكروت
+                Row(
+                  textDirection: TextDirection.rtl, // كل شيء من اليمين
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        "المنتجات المنخفضة",
+                        "${productProvider.lowStockCount}",
+                        Icons.warning,
+                        Colors.amber,
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: _buildStatCard(
+                        "المنتجات غير المتوفرة",
+                        "${productProvider.outOfStockCount}",
+                        Icons.cancel,
+                        Colors.red,
                       ),
                     ),
                   ],
@@ -215,45 +255,62 @@ class _MainScreenState extends State<MainScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color.fromARGB(255, 26, 25, 25).withOpacity(0.05),
+            color: Colors.grey.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Row(
-        textDirection: TextDirection.rtl, // 🔥 أيقونة يمين ونص يسار
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // 🔹 الأيقونة – أقصى اليمين (لأن الاتجاه RTL)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 28),
             ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(width: 15),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  color: const Color.fromARGB(255, 29, 29, 29),
-                  fontSize: 12,
-                ),
+
+            const SizedBox(width: 15),
+
+            // 🔥 النص – بجوار الأيقونة على اليسار (لأن الاتجاه RTL)
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    title,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Cairo',
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    value,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Cairo',
+                      color: Colors.black,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

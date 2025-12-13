@@ -233,6 +233,29 @@ class DBHelper {
       );
     ''');
 
+    // جدول رصيد الزبائن (الدين)
+    await db.execute('''
+  CREATE TABLE customer_balance (
+    customer_id INTEGER PRIMARY KEY,
+    balance REAL NOT NULL DEFAULT 0,
+    last_updated TEXT,
+    FOREIGN KEY (customer_id) REFERENCES customers (id)
+  );
+''');
+
+    // جدول الدفعات
+    await db.execute('''
+  CREATE TABLE payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    date TEXT NOT NULL,
+    note TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers (id)
+  );
+''');
+
     // جدول الفواتير
     await db.execute('''
       CREATE TABLE sales (

@@ -10,6 +10,7 @@ import 'package:shopmate/models/product.dart';
 import 'package:shopmate/models/product_unit.dart';
 import 'package:shopmate/models/sale.dart';
 import 'package:shopmate/models/sale_item.dart';
+import 'package:shopmate/providers/DebtProvider.dart';
 import 'package:shopmate/providers/product_provider.dart';
 import 'package:shopmate/providers/customer_provider.dart';
 import 'package:shopmate/providers/auth_provider.dart';
@@ -1259,14 +1260,23 @@ class _PosScreenState extends State<PosScreen>
   Future<void> _finalizeSaleWithCustomer(Customer customer) async {
     final auth = context.read<AuthProvider>();
     final productProvider = context.read<ProductProvider>();
+    final debtProvider =
+        context.read<DebtProvider>(); // 🔹 استدعاء DebtProvider
 
     try {
+      // 1️⃣ إضافة الفاتورة الآجلة
       await productProvider.addSale(
         cartItems: _cartItems,
         totalAmount: _totalAmount,
-        paymentType: 'credit',
+        paymentType: 'credit', // فاتورة آجلة
         customerId: customer.id,
         userRole: auth.role ?? 'user',
+      );
+
+      // 2️⃣ تحديث الدين
+      await debtProvider.addDebt(
+        customerId: customer.id!,
+        amount: _totalAmount,
       );
 
       if (mounted) {

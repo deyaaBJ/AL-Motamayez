@@ -40,6 +40,38 @@ class ProductProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  int lowStockCount = 0;
+  int outOfStockCount = 0;
+
+  Future<void> loadStockCounts(int threshold) async {
+    lowStockCount = await loadLowStockProductsCount(threshold);
+    outOfStockCount = await loadOutOfStockProductsCount();
+    notifyListeners();
+  }
+
+  //تحميل عدد المنتجات المنخفضة
+  Future<int> loadLowStockProductsCount(int lowStockThreshold) async {
+    final db = await _dbHelper.db;
+
+    final res = await db.rawQuery(
+      "SELECT COUNT(*) as count FROM products WHERE quantity <= ?",
+      [lowStockThreshold],
+    );
+
+    return Sqflite.firstIntValue(res) ?? 0;
+  }
+
+  //تحميل عدد المنتجات الغير متوفرة
+  Future<int> loadOutOfStockProductsCount() async {
+    final db = await _dbHelper.db;
+
+    final res = await db.rawQuery(
+      "SELECT COUNT(*) as count FROM products WHERE quantity <= 0",
+    );
+
+    return Sqflite.firstIntValue(res) ?? 0;
+  }
+
   // ✅ التحميل التدريجي للمنتجات مع تحسين الأداء
   Future<List<Product>> loadProducts({bool reset = false}) async {
     if (!reset && !_hasMore) return [];

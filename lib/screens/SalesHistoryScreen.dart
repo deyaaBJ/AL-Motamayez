@@ -23,9 +23,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   final ScrollController _verticalScrollController = ScrollController();
   Timer? _filterDebounceTimer;
 
-  // في SalesHistoryScreen
-  StreamSubscription? _newSaleSubscription;
-
   @override
   void initState() {
     super.initState();
@@ -43,28 +40,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         final isCurrentYear = provider.selectedYear == DateTime.now().year;
         provider.fetchSales(forceRefresh: isCurrentYear);
       }
-
-      // ✅ الاستماع إلى الفواتير الجديدة
-      _setupNewSaleListener();
-    });
-
-    // ... باقي الكود
-  }
-
-  void _setupNewSaleListener() {
-    final provider = context.read<SalesProvider>();
-
-    _newSaleSubscription = provider.newSaleStream.listen((saleId) {
-      print('📥 تم استلام إشعار بفاتورة جديدة #$saleId');
-
-      // ✅ إذا كنا نعرض السنة الحالية، قم بتحديث البيانات
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final currentProvider = context.read<SalesProvider>();
-        if (currentProvider.selectedYear == DateTime.now().year) {
-          print('🔄 تحديث تلقائي لشاشة الفواتير بعد إضافة فاتورة جديدة');
-          currentProvider.fetchSales(forceRefresh: true);
-        }
-      });
     });
   }
 
@@ -75,7 +50,19 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     super.dispose();
   }
 
-  @override
+  // ✅ دالة لمسح جميع الفلاتر عدا التاريخ
+  void _clearFiltersExceptDate(SalesProvider provider) {
+    provider.setCustomerFilter('الكل');
+    provider.setPaymentTypeFilter('الكل');
+    provider.setTaxFilter('الكل');
+  }
+
+  // ✅ دالة لتحديد ما إذا كانت قيمة Dropdown موجودة في القائمة
+  bool _isValueInList(List<String> list, String? value) {
+    if (value == null) return false;
+    return list.contains(value);
+  }
+
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -101,28 +88,46 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
           backgroundColor: const Color(0xFF8B5FBF),
           child: const Icon(Icons.add, color: Colors.white, size: 28),
         ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // ✅ تحديد نوع العرض بناءً على حجم الشاشة
-            final bool isMobile = constraints.maxWidth < 600;
-            final bool isTablet =
-                constraints.maxWidth >= 600 && constraints.maxWidth < 1024;
-            final bool isDesktop = constraints.maxWidth >= 1024;
+        child: Consumer<SalesProvider>(
+          builder: (context, provider, _) {
+            // ✅ التحقق من صحة قيمة Dropdown قبل بناء الواجهة
+            final validCustomerValue =
+                _isValueInList(
+                      provider.customerNames,
+                      provider.selectedCustomer,
+                    )
+                    ? provider.selectedCustomer
+                    : 'الكل';
 
-            return Column(
-              children: [
-                // ✅ قسم الفلاتر المتجاوب
-                _buildResponsiveFiltersSection(isMobile, isTablet, isDesktop),
-                const SizedBox(height: 10),
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final bool isMobile = constraints.maxWidth < 600;
+                final bool isTablet =
+                    constraints.maxWidth >= 600 && constraints.maxWidth < 1024;
+                final bool isDesktop = constraints.maxWidth >= 1024;
 
-                // ✅ جدول/قائمة الفواتير المتجاوبة
-                Expanded(
-                  child:
-                      isMobile
-                          ? _buildMobileSalesList()
-                          : _buildDesktopDataTable(isTablet, isDesktop),
-                ),
-              ],
+                return Column(
+                  children: [
+                    // ✅ قسم الفلاتر المتجاوب
+                    _buildResponsiveFiltersSection(
+                      isMobile,
+                      isTablet,
+                      isDesktop,
+                      provider,
+                      validCustomerValue,
+                    ),
+                    const SizedBox(height: 10),
+
+                    // ✅ جدول/قائمة الفواتير المتجاوبة
+                    Expanded(
+                      child:
+                          isMobile
+                              ? _buildMobileSalesList()
+                              : _buildDesktopDataTable(isTablet, isDesktop),
+                    ),
+                  ],
+                );
+              },
             );
           },
         ),
@@ -135,73 +140,77 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     bool isMobile,
     bool isTablet,
     bool isDesktop,
+    SalesProvider provider,
+    String validCustomerValue,
   ) {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final role = auth.role;
 
-    return Consumer<SalesProvider>(
-      builder: (context, provider, _) {
-        return Container(
-          margin: EdgeInsets.all(isMobile ? 4 : 8),
-          padding: EdgeInsets.all(isMobile ? 8 : 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.blueGrey.withOpacity(0.1),
-                blurRadius: isMobile ? 10 : 20,
-                offset: const Offset(0, 4),
-                spreadRadius: 2,
-              ),
-            ],
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Colors.white, Colors.blue.shade50],
-            ),
+    return Container(
+      margin: EdgeInsets.all(isMobile ? 4 : 8),
+      padding: EdgeInsets.all(isMobile ? 8 : 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blueGrey.withOpacity(0.1),
+            blurRadius: isMobile ? 10 : 20,
+            offset: const Offset(0, 4),
+            spreadRadius: 2,
           ),
-          child: Column(
+        ],
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.white, Colors.blue.shade50],
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.filter_alt_rounded,
-                    color: Colors.blue.shade700,
-                    size: isMobile ? 18 : 22,
-                  ),
-                  SizedBox(width: isMobile ? 6 : 8),
-                  Text(
-                    'تصفية الفواتير',
-                    style: TextStyle(
-                      fontSize: isMobile ? 14 : 16,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.blue.shade800,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ],
+              Icon(
+                Icons.filter_alt_rounded,
+                color: Colors.blue.shade700,
+                size: isMobile ? 18 : 22,
               ),
-              const SizedBox(height: 12),
-
-              // ✅ ترتيب الفلاتر حسب حجم الشاشة
-              if (isMobile) _buildMobileFiltersLayout(provider, role),
-              if (isTablet) _buildTabletFiltersLayout(provider, role),
-              if (isDesktop) _buildDesktopFiltersLayout(provider, role),
+              SizedBox(width: isMobile ? 6 : 8),
+              Text(
+                'تصفية الفواتير',
+                style: TextStyle(
+                  fontSize: isMobile ? 14 : 16,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.blue.shade800,
+                  letterSpacing: -0.5,
+                ),
+              ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 12),
+
+          if (isMobile)
+            _buildMobileFiltersLayout(provider, role, validCustomerValue),
+          if (isTablet)
+            _buildTabletFiltersLayout(provider, role, validCustomerValue),
+          if (isDesktop)
+            _buildDesktopFiltersLayout(provider, role, validCustomerValue),
+        ],
+      ),
     );
   }
 
-  // ✅ تصميم الفلاتر للموبايل (كل شيء تحت بعض)
-  Widget _buildMobileFiltersLayout(SalesProvider provider, String? role) {
+  // ✅ تصميم الفلاتر للموبايل مع validCustomerValue
+  Widget _buildMobileFiltersLayout(
+    SalesProvider provider,
+    String? role,
+    String validCustomerValue,
+  ) {
     return Column(
       children: [
         _buildResponsivePaymentFilter(provider, true),
         const SizedBox(height: 10),
-        _buildResponsiveCustomerFilter(provider, true),
+        _buildResponsiveCustomerFilter(provider, true, validCustomerValue),
         const SizedBox(height: 10),
         _buildResponsiveDateFilter(provider, true),
         if (role != 'tax') ...[
@@ -215,7 +224,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   }
 
   // ✅ تصميم الفلاتر للتابلت
-  Widget _buildTabletFiltersLayout(SalesProvider provider, String? role) {
+  // ✅ تصميم الفلاتر للتابلت (محدث)
+  Widget _buildTabletFiltersLayout(
+    SalesProvider provider,
+    String? role,
+    String validCustomerValue,
+  ) {
     return Column(
       children: [
         // الصف الأول
@@ -223,7 +237,13 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
           children: [
             Expanded(child: _buildResponsivePaymentFilter(provider, false)),
             const SizedBox(width: 8),
-            Expanded(child: _buildResponsiveCustomerFilter(provider, false)),
+            Expanded(
+              child: _buildResponsiveCustomerFilter(
+                provider,
+                false,
+                validCustomerValue,
+              ),
+            ),
             const SizedBox(width: 8),
             _buildResponsiveClearButton(provider, false),
           ],
@@ -243,13 +263,23 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     );
   }
 
-  // ✅ تصميم الفلاتر للكمبيوتر
-  Widget _buildDesktopFiltersLayout(SalesProvider provider, String? role) {
+  // ✅ تصميم الفلاتر للكمبيوتر (محدث)
+  Widget _buildDesktopFiltersLayout(
+    SalesProvider provider,
+    String? role,
+    String validCustomerValue,
+  ) {
     return Row(
       children: [
         Expanded(child: _buildResponsivePaymentFilter(provider, false)),
         const SizedBox(width: 12),
-        Expanded(child: _buildResponsiveCustomerFilter(provider, false)),
+        Expanded(
+          child: _buildResponsiveCustomerFilter(
+            provider,
+            false,
+            validCustomerValue,
+          ),
+        ),
         const SizedBox(width: 12),
         Expanded(child: _buildResponsiveDateFilter(provider, false)),
         if (role != 'tax') ...[
@@ -261,6 +291,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       ],
     );
   }
+  // ✅ تصميم الفلاتر للكمبيوتر
 
   // ✅ فلتر نوع الدفع المتجاوب
   Widget _buildResponsivePaymentFilter(SalesProvider provider, bool isMobile) {
@@ -383,7 +414,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   }
 
   // ✅ فلتر العميل المتجاوب
-  Widget _buildResponsiveCustomerFilter(SalesProvider provider, bool isMobile) {
+  Widget _buildResponsiveCustomerFilter(
+    SalesProvider provider,
+    bool isMobile,
+    String validCustomerValue,
+  ) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
@@ -432,7 +467,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: provider.selectedCustomer,
+                value: validCustomerValue, // ✅ استخدام القيمة الصالحة
                 items:
                     provider.customerNames.map((String name) {
                       IconData icon = Icons.person_outline_rounded;
@@ -477,9 +512,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                       );
                     }).toList(),
                 onChanged:
-                    (value) => _applyFilterWithDebounce(
-                      () => provider.setCustomerFilter(value),
-                    ),
+                    (value) => _applyFilterWithDebounce(() {
+                      if (value != null) {
+                        provider.setCustomerFilter(value);
+                      }
+                    }),
                 icon: Padding(
                   padding: EdgeInsets.only(left: isMobile ? 4 : 8),
                   child: Icon(
@@ -682,7 +719,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   // ✅ فلتر اليوم المتجاوب
   Widget _buildResponsiveDayFilter(SalesProvider provider, bool isMobile) {
     return GestureDetector(
-      onTap: () => _selectDate(context, provider),
+      onTap: () => _selectDate(context, provider, isMobile),
       child: Container(
         height: isMobile ? 42 : 48,
         padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16),
@@ -778,6 +815,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                           if (provider.selectedYear == null) {
                             provider.setYearFilter(DateTime.now().year);
                           }
+                          // ✅ مسح جميع الفلاتر عدا التاريخ
+                          _clearFiltersExceptDate(provider);
                         }
                       }),
                   hint: Padding(
@@ -832,6 +871,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                           if (provider.selectedMonth == null) {
                             provider.setMonthFilter(DateTime.now().month);
                           }
+                          // ✅ مسح جميع الفلاتر عدا التاريخ
+                          _clearFiltersExceptDate(provider);
                         }
                       }),
                   hint: Padding(
@@ -887,7 +928,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
           items: _generateYearItems(isMobile),
           onChanged:
               (year) => _applyFilterWithDebounce(() {
-                if (year != null) provider.setYearFilter(year);
+                if (year != null) {
+                  provider.setYearFilter(year);
+                  // ✅ مسح جميع الفلاتر عدا التاريخ
+                  _clearFiltersExceptDate(provider);
+                }
               }),
           hint: Padding(
             padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 8),
@@ -1072,7 +1117,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
             height: isMobile ? 42 : 48,
             width: isMobile ? double.infinity : 48,
             child: ElevatedButton(
-              onPressed: provider.clearAllFilters,
+              onPressed: provider.clearFilters,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.grey.shade100,
                 foregroundColor: Colors.blueGrey.shade700,
@@ -2266,7 +2311,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     });
   }
 
-  Future<void> _selectDate(BuildContext context, SalesProvider provider) async {
+  Future<void> _selectDate(
+    BuildContext context,
+    SalesProvider provider,
+    bool isMobile,
+  ) async {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
@@ -2286,7 +2335,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       },
     );
     if (picked != null) {
-      _applyFilterWithDebounce(() => provider.setDateFilter(picked));
+      _applyFilterWithDebounce(() {
+        provider.setDateFilter(picked);
+        // ✅ مسح جميع الفلاتر عدا التاريخ
+        _clearFiltersExceptDate(provider);
+      });
     }
   }
 
