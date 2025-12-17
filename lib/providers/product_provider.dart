@@ -54,7 +54,7 @@ class ProductProvider with ChangeNotifier {
     final db = await _dbHelper.db;
 
     final res = await db.rawQuery(
-      "SELECT COUNT(*) as count FROM products WHERE quantity <= ?",
+      "SELECT COUNT(*) as count FROM products WHERE quantity <= ? AND quantity > 0",
       [lowStockThreshold],
     );
 
@@ -526,14 +526,13 @@ class ProductProvider with ChangeNotifier {
   }) async {
     final db = await _dbHelper.db;
 
-    // 🔹 تحديد قيمة showForTax
     int showForTax = await _determineShowForTax(userRole, db);
 
-    // التحقق من الكميات المتاحة
-    await _validateStockQuantities(cartItems, db);
+    final double oldTotal = originalSale.totalAmount;
+    final double difference = totalAmount - oldTotal;
 
     await db.transaction((txn) async {
-      // 1️⃣ تحديث بيانات الفاتورة الرئيسية
+      // 1️⃣ تحديث بيانات الفاتورة الرئيسية مبدئيًا
       await txn.update(
         'sales',
         {
@@ -552,7 +551,7 @@ class ProductProvider with ChangeNotifier {
         whereArgs: [originalSale.id],
       );
 
-      // 3️⃣ إرجاع الكميات الأصلية إلى المخزون أولاً
+      // 3️⃣ إرجاع الكميات القديمة إلى المخزون أولاً
       for (var originalItem in originalItems) {
         final int productId = originalItem['product_id'] as int;
         final double originalQuantity =
@@ -564,7 +563,6 @@ class ProductProvider with ChangeNotifier {
 
         double quantityToReturn = originalQuantity;
 
-        // إذا كانت وحدة مخصصة، نحتاج لمعرفة معامل التحويل
         if (unitType == 'custom' && unitId != null) {
           final unitResult = await txn.query(
             'product_units',
@@ -572,7 +570,6 @@ class ProductProvider with ChangeNotifier {
             where: 'id = ?',
             whereArgs: [unitId],
           );
-
           if (unitResult.isNotEmpty) {
             final double containQty =
                 (unitResult.first['contain_qty'] is int)
@@ -582,16 +579,14 @@ class ProductProvider with ChangeNotifier {
           }
         }
 
-        // إرجاع الكمية إلى المخزون
         await txn.rawUpdate(
           'UPDATE products SET quantity = quantity + ? WHERE id = ?',
           [quantityToReturn, productId],
         );
-
-        print(
-          '🔄 تم إرجاع ${quantityToReturn.toStringAsFixed(2)} إلى المخزون للمنتج ID: $productId',
-        );
       }
+
+      // 3.1️⃣ تحقق من المخزون بعد إرجاع القديم
+      await _validateStockQuantities(cartItems, txn);
 
       double totalProfit = 0.0;
 
@@ -602,13 +597,12 @@ class ProductProvider with ChangeNotifier {
         whereArgs: [originalSale.id],
       );
 
-      // 5️⃣ إضافة العناصر الجديدة
+      // 5️⃣ إضافة العناصر الجديدة وخصم المخزون
       for (var item in cartItems) {
         if (item.quantity == 0) continue;
 
         final product = item.product;
         final double costPrice = product.costPrice ?? 0.0;
-
         double actualPrice = item.selectedUnit?.sellPrice ?? product.price;
         int? unitId = item.selectedUnit?.id;
 
@@ -625,7 +619,6 @@ class ProductProvider with ChangeNotifier {
 
         final double subtotal = actualPrice * item.quantity;
         final double profit = (actualPrice - costPrice) * item.quantity;
-
         totalProfit += profit;
 
         Map<String, dynamic> saleItemData = {
@@ -640,28 +633,22 @@ class ProductProvider with ChangeNotifier {
           'subtotal': subtotal,
           'profit': profit,
         };
-
         saleItemData.removeWhere((key, value) => value == null);
 
         await txn.insert('sale_items', saleItemData);
 
-        // 6️⃣ خصم الكميات الجديدة من المخزون
+        // خصم المخزون
         double quantityToDeduct = item.quantity;
         if (item.selectedUnit != null) {
           quantityToDeduct = item.quantity * item.selectedUnit!.containQty;
         }
-
         await txn.rawUpdate(
           'UPDATE products SET quantity = quantity - ? WHERE id = ?',
           [quantityToDeduct, product.id],
         );
-
-        print(
-          '📦 تم خصم ${quantityToDeduct.toStringAsFixed(2)} ${product.baseUnit} من منتج ${product.name}',
-        );
       }
 
-      // 7️⃣ تحديث إجمالي الربح
+      // 6️⃣ تحديث إجمالي الربح
       await txn.update(
         'sales',
         {'total_profit': totalProfit},
@@ -669,12 +656,25 @@ class ProductProvider with ChangeNotifier {
         whereArgs: [originalSale.id],
       );
 
-      print('💰 إجمالي الربح في الفاتورة بعد التعديل: $totalProfit');
+      // 7️⃣ تعديل دين الزبون بالفرق فقط
+      if (originalSale.paymentType == 'credit' &&
+          originalSale.customerId != null &&
+          difference != 0) {
+        await txn.rawUpdate(
+          '''
+        UPDATE customer_balance
+        SET balance = balance + ?, last_updated = ?
+        WHERE customer_id = ?
+        ''',
+          [
+            difference,
+            DateTime.now().toIso8601String(),
+            originalSale.customerId,
+          ],
+        );
+      }
     });
 
-    print(
-      '✅ تم تحديث الفاتورة #${originalSale.id} بنجاح - showForTax: $showForTax',
-    );
     notifyListeners();
   }
 
@@ -699,7 +699,7 @@ class ProductProvider with ChangeNotifier {
 
   Future<void> _validateStockQuantities(
     List<CartItem> cartItems,
-    Database db,
+    DatabaseExecutor db, // ✅ بدل Database
   ) async {
     for (var item in cartItems) {
       final product = item.product;
@@ -720,7 +720,6 @@ class ProductProvider with ChangeNotifier {
 
         final String productName = result.first['name'] as String;
 
-        // حساب الكمية المطلوبة بالوحدة الأساسية
         double requiredQuantity = item.quantity;
         if (item.selectedUnit != null) {
           requiredQuantity = item.quantity * item.selectedUnit!.containQty;

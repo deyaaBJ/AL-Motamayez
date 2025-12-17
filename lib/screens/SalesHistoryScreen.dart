@@ -63,6 +63,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     return list.contains(value);
   }
 
+  @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -224,7 +225,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   }
 
   // ✅ تصميم الفلاتر للتابلت
-  // ✅ تصميم الفلاتر للتابلت (محدث)
   Widget _buildTabletFiltersLayout(
     SalesProvider provider,
     String? role,
@@ -263,7 +263,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     );
   }
 
-  // ✅ تصميم الفلاتر للكمبيوتر (محدث)
+  // ✅ تصميم الفلاتر للكمبيوتر
   Widget _buildDesktopFiltersLayout(
     SalesProvider provider,
     String? role,
@@ -291,7 +291,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       ],
     );
   }
-  // ✅ تصميم الفلاتر للكمبيوتر
 
   // ✅ فلتر نوع الدفع المتجاوب
   Widget _buildResponsivePaymentFilter(SalesProvider provider, bool isMobile) {
@@ -467,7 +466,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: validCustomerValue, // ✅ استخدام القيمة الصالحة
+                value: validCustomerValue,
                 items:
                     provider.customerNames.map((String name) {
                       IconData icon = Icons.person_outline_rounded;
@@ -815,7 +814,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                           if (provider.selectedYear == null) {
                             provider.setYearFilter(DateTime.now().year);
                           }
-                          // ✅ مسح جميع الفلاتر عدا التاريخ
                           _clearFiltersExceptDate(provider);
                         }
                       }),
@@ -871,7 +869,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                           if (provider.selectedMonth == null) {
                             provider.setMonthFilter(DateTime.now().month);
                           }
-                          // ✅ مسح جميع الفلاتر عدا التاريخ
                           _clearFiltersExceptDate(provider);
                         }
                       }),
@@ -930,7 +927,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
               (year) => _applyFilterWithDebounce(() {
                 if (year != null) {
                   provider.setYearFilter(year);
-                  // ✅ مسح جميع الفلاتر عدا التاريخ
                   _clearFiltersExceptDate(provider);
                 }
               }),
@@ -1181,10 +1177,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
         return Column(
           children: [
-            // رأس المعلومات
+            // ✅ رأس المعلومات مع أدوات التحديد
             _buildMobileTableHeader(salesProvider),
 
-            // قائمة الفواتير
+            // ✅ قائمة الفواتير
             Expanded(
               child: ListView.builder(
                 controller: _verticalScrollController,
@@ -1209,6 +1205,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                     sale,
                     salesProvider,
                     settingsProvider,
+                    index,
                   );
                 },
               ),
@@ -1224,8 +1221,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     Sale sale,
     SalesProvider salesProvider,
     SettingsProvider settingsProvider,
+    int index,
   ) {
     final isCurrentArchiveMode = salesProvider.isArchiveMode;
+    final isSelected = salesProvider.selectedSaleIds.contains(sale.id);
 
     return Card(
       margin: const EdgeInsets.all(8),
@@ -1236,8 +1235,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
           color:
               isCurrentArchiveMode
                   ? Colors.orange.shade100
+                  : isSelected
+                  ? Colors.blue.shade300
                   : Colors.grey.shade200,
-          width: 1,
+          width: isSelected ? 2 : 1,
         ),
       ),
       child: InkWell(
@@ -1248,10 +1249,34 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // الصف الأول: رقم الفاتورة والحالة
+              // الصف الأول: رقم التسلسلي، Checkbox، رقم الفاتورة
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  // ✅ الرقم التسلسلي
+                  Container(
+                    width: 30,
+                    alignment: Alignment.center,
+                    child: Text(
+                      (index + 1).toString(),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
+
+                  // ✅ Checkbox التحديد
+                  if (!isCurrentArchiveMode)
+                    Checkbox(
+                      value: isSelected,
+                      onChanged: (value) {
+                        salesProvider.toggleSaleSelection(sale.id!);
+                      },
+                    ),
+
+                  const Spacer(),
+
+                  // رقم الفاتورة
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -1276,6 +1301,15 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                       ),
                     ),
                   ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              // الصف الثاني: نوع الدفع
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -1337,28 +1371,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.green[700],
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'الربح',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        Text(
-                          '${sale.totalProfit.toStringAsFixed(0)} ${settingsProvider.currencyName}',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.blue[700],
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -1468,6 +1480,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     return Consumer2<SalesProvider, SettingsProvider>(
       builder: (context, salesProvider, settingsProvider, _) {
         final currencyName = settingsProvider.currencyName;
+        final hasSelectedSales = salesProvider.selectedSaleIds.isNotEmpty;
 
         if (salesProvider.sales.isEmpty && !salesProvider.isLoading) {
           return _buildEmptyState(salesProvider);
@@ -1479,92 +1492,189 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         final showTimeColumn = isDesktop;
         final showCustomerColumn = isDesktop || isTablet;
 
-        return Container(
-          margin: EdgeInsets.symmetric(
-            horizontal: isTablet ? 8 : 16,
-            vertical: 0,
-          ),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey[200]!),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          constraints: const BoxConstraints(minHeight: 200),
-          child: Column(
-            children: [
-              // رأس المعلومات مع مؤشر الأرشيف
-              _buildTableHeader(salesProvider),
-
-              // ✅ الجدول مع التمرير
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: _verticalScrollController,
-                  scrollDirection: Axis.vertical,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      headingRowColor:
-                          MaterialStateProperty.resolveWith<Color?>(
-                            (Set<MaterialState> states) =>
-                                salesProvider.isArchiveMode
-                                    ? Colors.orange[50]
-                                    : Colors.blue[50],
-                          ),
-                      dataRowMaxHeight: 56,
-                      dataRowMinHeight: 48,
-                      headingTextStyle: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color:
-                            salesProvider.isArchiveMode
-                                ? Colors.orange[800]
-                                : Colors.blue[800],
-                        fontSize: isTablet ? 14 : 15,
-                      ),
-                      dataTextStyle: TextStyle(fontSize: isTablet ? 13 : 14),
-                      columnSpacing: isTablet ? 40 : 70,
-                      horizontalMargin: isTablet ? 10 : 20,
-                      columns: _buildDataTableColumns(
-                        showProfitColumn,
-                        showTimeColumn,
-                        showCustomerColumn,
-                        salesProvider,
-                      ),
-                      rows: _buildDataTableRows(
-                        salesProvider,
-                        settingsProvider,
-                        salesProvider.sales,
-                        showProfitColumn,
-                        showTimeColumn,
-                        showCustomerColumn,
+        return Column(
+          children: [
+            // ✅ شريط التحديد Sticky (يظهر فقط عند التحديد)
+            if (hasSelectedSales && !salesProvider.isArchiveMode)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  border: Border.all(color: Colors.blue[100]!),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.blue[700], size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${salesProvider.selectedSaleIds.length} فاتورة محددة',
+                      style: TextStyle(
+                        color: Colors.blue[800],
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
                       ),
                     ),
-                  ),
+                    const Spacer(),
+
+                    // زر تحويل للكاش
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.money_off, size: 16),
+                      label: Text('تحويل لكاش'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[500],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () {
+                        _showBatchPaymentDialog(context, salesProvider, 'cash');
+                      },
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // زر تحويل لأجل
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.credit_card, size: 16),
+                      label: Text('تحويل لأجل'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange[500],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () {
+                        _showBatchPaymentDialog(
+                          context,
+                          salesProvider,
+                          'credit',
+                        );
+                      },
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // زر إلغاء التحديد
+                    IconButton(
+                      icon: Icon(Icons.clear, size: 20),
+                      onPressed: () {
+                        salesProvider.clearSelection();
+                      },
+                      tooltip: 'إلغاء التحديد',
+                      color: Colors.grey[600],
+                    ),
+                  ],
                 ),
               ),
 
-              // ✅ مؤشرات التحميل والرسائل
-              if (salesProvider.isLoading)
-                _buildLoadingIndicator(salesProvider),
+            // الجدول الرئيسي
+            Expanded(
+              child: Container(
+                margin: EdgeInsets.symmetric(
+                  horizontal: isTablet ? 8 : 16,
+                  vertical: 0,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey[200]!),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                constraints: const BoxConstraints(minHeight: 200),
+                child: Column(
+                  children: [
+                    // رأس المعلومات مع مؤشر الأرشيف
+                    _buildTableHeader(salesProvider),
 
-              if (!salesProvider.hasMore &&
-                  salesProvider.sales.isNotEmpty &&
-                  !salesProvider.isLoading)
-                _buildEndOfListIndicator(salesProvider),
+                    // ✅ الجدول مع التمرير
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: _verticalScrollController,
+                        scrollDirection: Axis.vertical,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
+                            showCheckboxColumn: false,
+                            headingRowColor:
+                                MaterialStateProperty.resolveWith<Color?>(
+                                  (Set<MaterialState> states) =>
+                                      salesProvider.isArchiveMode
+                                          ? Colors.orange[50]
+                                          : Colors.blue[50],
+                                ),
+                            dataRowMaxHeight: 56,
+                            dataRowMinHeight: 48,
+                            headingTextStyle: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color:
+                                  salesProvider.isArchiveMode
+                                      ? Colors.orange[800]
+                                      : Colors.blue[800],
+                              fontSize: isTablet ? 14 : 15,
+                            ),
+                            dataTextStyle: TextStyle(
+                              fontSize: isTablet ? 13 : 14,
+                            ),
+                            columnSpacing: isTablet ? 40 : 70,
+                            horizontalMargin: isTablet ? 10 : 20,
+                            columns: _buildDataTableColumns(
+                              showProfitColumn,
+                              showTimeColumn,
+                              showCustomerColumn,
+                              salesProvider,
+                            ),
+                            rows: _buildDataTableRows(
+                              salesProvider,
+                              settingsProvider,
+                              salesProvider.sales,
+                              showProfitColumn,
+                              showTimeColumn,
+                              showCustomerColumn,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
 
-              // ✅ زر تحميل المزيد
-              if (salesProvider.hasMore &&
-                  !salesProvider.isLoading &&
-                  salesProvider.sales.isNotEmpty)
-                _buildLoadMoreButton(salesProvider),
-            ],
-          ),
+                    // ✅ مؤشرات التحميل والرسائل
+                    if (salesProvider.isLoading)
+                      _buildLoadingIndicator(salesProvider),
+
+                    if (!salesProvider.hasMore &&
+                        salesProvider.sales.isNotEmpty &&
+                        !salesProvider.isLoading)
+                      _buildEndOfListIndicator(salesProvider),
+
+                    // ✅ زر تحميل المزيد
+                    if (salesProvider.hasMore &&
+                        !salesProvider.isLoading &&
+                        salesProvider.sales.isNotEmpty)
+                      _buildLoadMoreButton(salesProvider),
+                  ],
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -1577,15 +1687,19 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     bool showCustomerColumn,
     SalesProvider salesProvider,
   ) {
-    final columns = <DataColumn>[
+    final columns = <DataColumn>[];
+    if (!salesProvider.isArchiveMode) {
+      columns.add(DataColumn(label: _buildSelectAllHeader(salesProvider)));
+    }
+    // ✅ عمود الرقم التسلسلي
+    columns.add(
       DataColumn(
-        label: Text(
-          'رقم الفاتورة',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        label: Text('#', style: TextStyle(fontWeight: FontWeight.bold)),
         numeric: true,
       ),
-    ];
+    );
+
+    // ✅ عمود Checkbox التحديد (مخفي في الأرشيف)
 
     if (showCustomerColumn) {
       columns.add(
@@ -1602,15 +1716,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       ),
     ]);
 
-    if (showProfitColumn) {
-      columns.add(
-        DataColumn(
-          label: Text('الربح', style: TextStyle(fontWeight: FontWeight.bold)),
-          numeric: true,
-        ),
-      );
-    }
-
     columns.addAll([
       DataColumn(
         label: Text('النوع', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1620,14 +1725,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       ),
     ]);
 
-    if (showTimeColumn) {
-      columns.add(
-        DataColumn(
-          label: Text('الوقت', style: TextStyle(fontWeight: FontWeight.bold)),
-        ),
-      );
-    }
-
     columns.add(
       DataColumn(
         label: Text('الإجراءات', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1635,6 +1732,27 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     );
 
     return columns;
+  }
+
+  // ✅ دالة لبناء header التحديد (Select All)
+  Widget _buildSelectAllHeader(SalesProvider salesProvider) {
+    final shownSales = salesProvider.sales;
+    final allSelected =
+        shownSales.isNotEmpty &&
+        shownSales.every(
+          (sale) => salesProvider.selectedSaleIds.contains(sale.id),
+        );
+
+    return Checkbox(
+      value: allSelected,
+      onChanged: (value) {
+        if (value == true) {
+          salesProvider.selectAllShownSales(shownSales);
+        } else {
+          salesProvider.clearSelection();
+        }
+      },
+    );
   }
 
   // ✅ بناء صفوف الجدول بشكل ديناميكي
@@ -1656,6 +1774,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         showProfitColumn,
         showTimeColumn,
         showCustomerColumn,
+        index,
       ),
       growable: false,
     );
@@ -1670,26 +1789,35 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     bool showProfitColumn,
     bool showTimeColumn,
     bool showCustomerColumn,
+    int index,
   ) {
     final isCurrentArchiveMode = salesProvider.isArchiveMode;
+    final isSelected = salesProvider.selectedSaleIds.contains(sale.id);
     final cells = <DataCell>[];
-
-    // خلية رقم الفاتورة
+    // ✅ خلية Checkbox التحديد (مخفية في الأرشيف)
+    if (!isCurrentArchiveMode) {
+      cells.add(
+        DataCell(
+          Checkbox(
+            value: isSelected,
+            onChanged: (value) {
+              salesProvider.toggleSaleSelection(sale.id!);
+            },
+          ),
+        ),
+      );
+    }
+    // ✅ خلية الرقم التسلسلي
     cells.add(
       DataCell(
         Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            color: isCurrentArchiveMode ? Colors.orange[50] : Colors.blue[50],
-          ),
+          alignment: Alignment.center,
           child: Text(
-            sale.id.toString(),
+            (index + 1).toString(),
             style: TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color:
-                  isCurrentArchiveMode ? Colors.orange[800] : Colors.blue[800],
+              color: isCurrentArchiveMode ? Colors.grey[600] : Colors.grey[800],
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),
@@ -1704,7 +1832,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
             sale.customerName ?? "بدون عميل",
             style: TextStyle(
               fontSize: 14,
-              color: isCurrentArchiveMode ? Colors.grey[700] : Colors.grey[800],
+              color:
+                  isSelected
+                      ? Colors.blue[700]
+                      : isCurrentArchiveMode
+                      ? Colors.grey[700]
+                      : Colors.grey[800],
             ),
           ),
         ),
@@ -1725,45 +1858,29 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       ),
     );
 
-    // خلية الربح (إذا كانت معروضة)
-    if (showProfitColumn) {
-      cells.add(
-        DataCell(
-          Text(
-            '${sale.totalProfit.toStringAsFixed(0)} ${settingsProvider.currencyName}',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.blue[700],
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      );
-    }
-
     // خلية النوع
     cells.add(
       DataCell(
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: _getPaymentTypeColor(
-              sale.paymentType,
-            ).withOpacity(isCurrentArchiveMode ? 0.05 : 0.1),
+            color: _getPaymentTypeColor(sale.paymentType).withOpacity(
+              isSelected ? 0.15 : (isCurrentArchiveMode ? 0.05 : 0.1),
+            ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: _getPaymentTypeColor(
-                sale.paymentType,
-              ).withOpacity(isCurrentArchiveMode ? 0.2 : 0.3),
+              color: _getPaymentTypeColor(sale.paymentType).withOpacity(
+                isSelected ? 0.3 : (isCurrentArchiveMode ? 0.2 : 0.3),
+              ),
               width: 1,
             ),
           ),
           child: Text(
             sale.paymentType == 'cash' ? 'نقدي' : 'آجل',
             style: TextStyle(
-              color: _getPaymentTypeColor(
-                sale.paymentType,
-              ).withOpacity(isCurrentArchiveMode ? 0.6 : 1.0),
+              color: _getPaymentTypeColor(sale.paymentType).withOpacity(
+                isSelected ? 1.0 : (isCurrentArchiveMode ? 0.6 : 1.0),
+              ),
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -1779,26 +1896,16 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
           sale.formattedDate,
           style: TextStyle(
             fontSize: 14,
-            color: isCurrentArchiveMode ? Colors.grey[600] : Colors.grey[800],
+            color:
+                isSelected
+                    ? Colors.blue[700]
+                    : isCurrentArchiveMode
+                    ? Colors.grey[600]
+                    : Colors.grey[800],
           ),
         ),
       ),
     );
-
-    // خلية الوقت (إذا كانت معروضة)
-    if (showTimeColumn) {
-      cells.add(
-        DataCell(
-          Text(
-            sale.formattedTime,
-            style: TextStyle(
-              fontSize: 14,
-              color: isCurrentArchiveMode ? Colors.grey[600] : Colors.grey[800],
-            ),
-          ),
-        ),
-      );
-    }
 
     // خلية الإجراءات
     cells.add(
@@ -1924,12 +2031,22 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     return DataRow(
       key: ValueKey(key),
       onSelectChanged: (_) => _showSaleDetails(sale.id!, context),
+      color: MaterialStateProperty.resolveWith<Color?>((
+        Set<MaterialState> states,
+      ) {
+        if (isSelected) {
+          return Colors.blue[50];
+        }
+        return null;
+      }),
       cells: cells,
     );
   }
 
   // ✅ رأس الجدول للكمبيوتر/التابلت
   Widget _buildTableHeader(SalesProvider salesProvider) {
+    final hasSelectedSales = salesProvider.selectedSaleIds.isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1977,7 +2094,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'عرض ${salesProvider.sales.length} من إجمالي ${salesProvider.loadedSalesCount} فاتورة',
+                      hasSelectedSales
+                          ? '${salesProvider.selectedSaleIds.length} فاتورة محددة من ${salesProvider.sales.length} فاتورة معروضة'
+                          : 'عرض ${salesProvider.sales.length} من إجمالي ${salesProvider.loadedSalesCount} فاتورة',
                       style: TextStyle(
                         color:
                             salesProvider.isArchiveMode
@@ -1999,6 +2118,77 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                 ),
               ),
               const Spacer(),
+
+              // ✅ أزرار التعديل الجماعي في Header
+              if (hasSelectedSales && !salesProvider.isArchiveMode)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // زر تحويل للكاش
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.green[100],
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.green[300]!),
+                      ),
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.money_off,
+                          size: 16,
+                          color: Colors.green[700],
+                        ),
+                        onPressed: () {
+                          _showBatchPaymentDialog(
+                            context,
+                            salesProvider,
+                            'cash',
+                          );
+                        },
+                        tooltip: 'تحويل الفواتير المحددة لكاش',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // زر تحويل لأجل
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.orange[100],
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.orange[300]!),
+                      ),
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.credit_card,
+                          size: 16,
+                          color: Colors.orange[700],
+                        ),
+                        onPressed: () {
+                          _showBatchPaymentDialog(
+                            context,
+                            salesProvider,
+                            'credit',
+                          );
+                        },
+                        tooltip: 'تحويل الفواتير المحددة لأجل',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // زر إلغاء التحديد
+                    IconButton(
+                      icon: Icon(
+                        Icons.clear,
+                        size: 18,
+                        color: Colors.grey[600],
+                      ),
+                      onPressed: () {
+                        salesProvider.clearSelection();
+                      },
+                      tooltip: 'إلغاء التحديد',
+                    ),
+                  ],
+                ),
+
               if (salesProvider.isLoading)
                 SizedBox(
                   width: 16,
@@ -2049,6 +2239,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
   // ✅ رأس الجدول للعرض على الموبايل
   Widget _buildMobileTableHeader(SalesProvider salesProvider) {
+    final hasSelectedSales = salesProvider.selectedSaleIds.isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -2063,57 +2255,160 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
           ),
         ),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Icon(
-            salesProvider.isArchiveMode ? Icons.archive : Icons.list_alt,
-            size: 18,
-            color:
-                salesProvider.isArchiveMode
-                    ? Colors.orange[700]
-                    : Colors.blue[700],
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  salesProvider.isArchiveMode
-                      ? 'أرشيف الفواتير'
-                      : 'الفواتير الحالية',
-                  style: TextStyle(
+          Row(
+            children: [
+              Icon(
+                salesProvider.isArchiveMode ? Icons.archive : Icons.list_alt,
+                size: 18,
+                color:
+                    salesProvider.isArchiveMode
+                        ? Colors.orange[700]
+                        : Colors.blue[700],
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      salesProvider.isArchiveMode
+                          ? 'أرشيف الفواتير'
+                          : 'الفواتير الحالية',
+                      style: TextStyle(
+                        color:
+                            salesProvider.isArchiveMode
+                                ? Colors.orange[700]
+                                : Colors.blue[700],
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      hasSelectedSales
+                          ? '${salesProvider.selectedSaleIds.length} فاتورة محددة'
+                          : 'عرض ${salesProvider.sales.length} فاتورة',
+                      style: TextStyle(
+                        color:
+                            salesProvider.isArchiveMode
+                                ? Colors.orange[600]
+                                : Colors.blue[600],
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ✅ أزرار التعديل الجماعي في الموبايل
+              if (hasSelectedSales && !salesProvider.isArchiveMode)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.money_off,
+                        size: 18,
+                        color: Colors.green[700],
+                      ),
+                      onPressed: () {
+                        _showBatchPaymentDialog(context, salesProvider, 'cash');
+                      },
+                      tooltip: 'تحويل للكاش',
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.credit_card,
+                        size: 18,
+                        color: Colors.orange[700],
+                      ),
+                      onPressed: () {
+                        _showBatchPaymentDialog(
+                          context,
+                          salesProvider,
+                          'credit',
+                        );
+                      },
+                      tooltip: 'تحويل لأجل',
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.clear,
+                        size: 18,
+                        color: Colors.grey[600],
+                      ),
+                      onPressed: () {
+                        salesProvider.clearSelection();
+                      },
+                      tooltip: 'إلغاء التحديد',
+                    ),
+                  ],
+                ),
+
+              if (salesProvider.isLoading)
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
                     color:
                         salesProvider.isArchiveMode
-                            ? Colors.orange[700]
-                            : Colors.blue[700],
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                            ? Colors.orange
+                            : Colors.blue,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'عرض ${salesProvider.sales.length} فاتورة',
-                  style: TextStyle(
-                    color:
-                        salesProvider.isArchiveMode
-                            ? Colors.orange[600]
-                            : Colors.blue[600],
-                    fontSize: 11,
-                  ),
+            ],
+          ),
+
+          // ✅ أزرار التعديل الجماعي أسفل Header في الموبايل
+          if (hasSelectedSales && !salesProvider.isArchiveMode)
+            Column(
+              children: [
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: Icon(Icons.money_off, size: 16),
+                        label: Text('تحويل للكاش'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green[500],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        onPressed: () {
+                          _showBatchPaymentDialog(
+                            context,
+                            salesProvider,
+                            'cash',
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: Icon(Icons.credit_card, size: 16),
+                        label: Text('تحويل لأجل'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange[500],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        onPressed: () {
+                          _showBatchPaymentDialog(
+                            context,
+                            salesProvider,
+                            'credit',
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ),
-          if (salesProvider.isLoading)
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color:
-                    salesProvider.isArchiveMode ? Colors.orange : Colors.blue,
-              ),
             ),
         ],
       ),
@@ -2337,9 +2632,104 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     if (picked != null) {
       _applyFilterWithDebounce(() {
         provider.setDateFilter(picked);
-        // ✅ مسح جميع الفلاتر عدا التاريخ
         _clearFiltersExceptDate(provider);
       });
+    }
+  }
+
+  // ✅ دالة لعرض تأكيد التعديل الجماعي
+  Future<void> _showBatchPaymentDialog(
+    BuildContext context,
+    SalesProvider salesProvider,
+    String targetPaymentType,
+  ) async {
+    final paymentName = targetPaymentType == 'cash' ? 'نقدي' : 'آجل';
+    final count = salesProvider.selectedSaleIds.length;
+
+    bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('تغيير طريقة الدفع'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'هل تريد تغيير طريقة الدفع لـ $count فاتورة إلى $paymentName؟',
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color:
+                        targetPaymentType == 'cash'
+                            ? Colors.green[50]
+                            : Colors.orange[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color:
+                          targetPaymentType == 'cash'
+                              ? Colors.green[200]!
+                              : Colors.orange[200]!,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color:
+                            targetPaymentType == 'cash'
+                                ? Colors.green[700]
+                                : Colors.orange[700],
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'سيتم تطبيق التغيير على جميع الفواتير المحددة',
+                          style: TextStyle(
+                            color:
+                                targetPaymentType == 'cash'
+                                    ? Colors.green[700]
+                                    : Colors.orange[700],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text('تأكيد التغيير ($count فاتورة)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      targetPaymentType == 'cash'
+                          ? Colors.green
+                          : Colors.orange,
+                ),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await salesProvider.updateMultiplePaymentTypes(targetPaymentType);
+        showAppToast(
+          context,
+          'تم تغيير طريقة الدفع لـ $count فاتورة إلى $paymentName',
+          ToastType.success,
+        );
+      } catch (e) {
+        showAppToast(context, 'حدث خطأ أثناء التغيير: $e', ToastType.error);
+      }
     }
   }
 

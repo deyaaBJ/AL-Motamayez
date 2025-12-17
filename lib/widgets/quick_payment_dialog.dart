@@ -1,187 +1,52 @@
-// widgets/quick_payment_dialog.dart - بدون تكرار
+// widgets/quick_payment_dialog.dart - النسخة المصححة
 import 'package:flutter/material.dart';
 import 'package:shopmate/models/customer.dart';
 
-class QuickPaymentDialog extends StatelessWidget {
-  final Customer customer;
-  final double currentDebt;
-  final Function(Customer customer, double amount) onPayment;
+class QuickPaymentDialog {
+  // دالة لفتح نافذة المبلغ المخصص مباشرة
+  static void show({
+    required BuildContext context,
+    required Customer customer,
+    required double currentDebt,
+    required Future<void> Function(
+      Customer customer,
+      double amount,
+      String? note,
+    )
+    onPayment,
+  }) {
+    if (currentDebt <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يوجد دين للعميل'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
 
-  const QuickPaymentDialog({
-    Key? key,
-    required this.customer,
-    required this.currentDebt,
-    required this.onPayment,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.only(top: 20, left: 20, right: 20, bottom: 10),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // العنوان
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'دفعة سريعة',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-
-          // معلومات العميل والدين
-          Container(
-            padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: currentDebt > 0 ? Colors.red[50] : Colors.green[50],
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6A3093).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Center(
-                    child: Text(
-                      customer.name.substring(0, 1),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF6A3093),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        customer.name,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'الدين الحالي: ${currentDebt.toStringAsFixed(2)} دينار',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: currentDebt > 0 ? Colors.red : Colors.green,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // التحذير إذا كان الدين صفر
-          if (currentDebt <= 0)
-            Container(
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.green[50],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'لا يوجد دين للعميل',
-                      style: TextStyle(fontSize: 14, color: Colors.green[700]),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.grey[600],
-                    side: BorderSide(color: Colors.grey[300]!),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Text(
-                    'إلغاء',
-                    style: TextStyle(color: Colors.black),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed:
-                      currentDebt > 0
-                          ? () => _showCustomAmountDialog(context)
-                          : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    disabledBackgroundColor: Colors.grey[300],
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Text(
-                    'تسديد دفعة',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 40),
-        ],
-      ),
-    );
+    _showCustomAmountDialog(context, customer, currentDebt, onPayment);
   }
 
-  void _showCustomAmountDialog(BuildContext context) {
+  // دالة لعرض نافذة المبلغ المخصص
+  static void _showCustomAmountDialog(
+    BuildContext outerContext,
+    Customer customer,
+    double currentDebt,
+    Future<void> Function(Customer customer, double amount, String? note)
+    onPayment,
+  ) {
     final TextEditingController amountController = TextEditingController();
-    String? errorMessage;
-    bool showError = false;
+    final TextEditingController noteController = TextEditingController();
 
     showDialog(
-      context: context,
-      builder: (context) {
+      context: outerContext,
+      builder: (dialogContext) {
+        String? errorMessage;
+        bool showError = false;
+        bool isProcessing = false;
+
         return StatefulBuilder(
           builder: (context, setState) {
             void validateAmount(String value) {
@@ -232,11 +97,55 @@ class QuickPaymentDialog extends StatelessWidget {
             }
 
             return AlertDialog(
-              title: const Text('مبلغ مخصص'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(
+                      Icons.payment,
+                      color: Colors.green,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'تسديد دفعة',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        Text(
+                          customer.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // حقل إدخال المبلغ
                     TextField(
                       controller: amountController,
                       keyboardType: TextInputType.numberWithOptions(
@@ -245,9 +154,13 @@ class QuickPaymentDialog extends StatelessWidget {
                       autofocus: true,
                       decoration: InputDecoration(
                         hintText: 'أدخل المبلغ',
-                        prefixIcon: const Icon(Icons.money),
+                        labelText: 'المبلغ (دينار)',
+                        prefixIcon: const Icon(
+                          Icons.money,
+                          color: Colors.green,
+                        ),
                         suffixIcon: IconButton(
-                          icon: const Icon(Icons.clear),
+                          icon: const Icon(Icons.clear, size: 18),
                           onPressed: () {
                             amountController.clear();
                             setState(() {
@@ -259,28 +172,59 @@ class QuickPaymentDialog extends StatelessWidget {
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Colors.green,
+                            width: 2,
+                          ),
+                        ),
                       ),
                       onChanged: (value) {
                         validateAmount(value);
                       },
                     ),
 
+                    const SizedBox(height: 16),
+
+                    // حقل الملاحظة
+                    TextField(
+                      controller: noteController,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText: 'ملاحظة (اختياري)',
+                        labelText: 'ملاحظة',
+                        prefixIcon: const Icon(Icons.note, color: Colors.blue),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Colors.blue,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+
                     // عرض الدين الحالي
                     Container(
-                      margin: const EdgeInsets.only(top: 12),
-                      padding: const EdgeInsets.all(10),
+                      margin: const EdgeInsets.only(top: 16),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blue[100]!),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
+                          Text(
                             'الدين الحالي:',
                             style: TextStyle(
                               fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
                             ),
                           ),
                           Text(
@@ -302,7 +246,7 @@ class QuickPaymentDialog extends StatelessWidget {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: Colors.red[50],
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: Colors.red[200]!),
                         ),
                         child: Row(
@@ -315,26 +259,12 @@ class QuickPaymentDialog extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'تحذير!',
-                                    style: TextStyle(
-                                      color: Colors.red,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    errorMessage!,
-                                    style: const TextStyle(
-                                      color: Colors.red,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
+                              child: Text(
+                                errorMessage!,
+                                style: const TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                           ],
@@ -345,17 +275,16 @@ class QuickPaymentDialog extends StatelessWidget {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'إلغاء',
-                    style: TextStyle(color: Colors.black),
-                  ),
+                  onPressed: isProcessing ? null : () => Navigator.pop(context),
+                  child: const Text('إلغاء'),
                 ),
                 ElevatedButton(
                   onPressed:
-                      errorMessage != null || amountController.text.isEmpty
+                      (errorMessage != null ||
+                              amountController.text.isEmpty ||
+                              isProcessing)
                           ? null
-                          : () {
+                          : () async {
                             final normalizedValue = amountController.text
                                 .replaceAll(',', '.');
                             final amount = double.tryParse(normalizedValue);
@@ -365,15 +294,59 @@ class QuickPaymentDialog extends StatelessWidget {
                                 amount > currentDebt) {
                               return;
                             }
-                            onPayment(customer, amount);
-                            Navigator.pop(context);
-                            Navigator.pop(context);
+
+                            setState(() => isProcessing = true);
+
+                            try {
+                              await onPayment(
+                                customer,
+                                amount,
+                                noteController.text.trim().isEmpty
+                                    ? null
+                                    : noteController.text.trim(),
+                              );
+
+                              // إغلاق الديلوج
+                              Navigator.pop(context);
+
+                              // عرض رسالة النجاح في الـ outerContext (الكونتكس الأصلي)
+                              ScaffoldMessenger.of(outerContext).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'تم تسديد ${amount.toStringAsFixed(2)} دينار بنجاح',
+                                  ),
+                                  backgroundColor: Colors.green,
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            } catch (e) {
+                              // في حالة خطأ، لا نغلق الديلوج ونعرض رسالة الخطأ
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('خطأ: ${e.toString()}'),
+                                  backgroundColor: Colors.red,
+                                  duration: const Duration(seconds: 3),
+                                ),
+                              );
+                            } finally {
+                              setState(() => isProcessing = false);
+                            }
                           },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     disabledBackgroundColor: Colors.grey[400],
                   ),
-                  child: const Text('تسديد'),
+                  child:
+                      isProcessing
+                          ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                          : const Text('تسديد'),
                 ),
               ],
             );

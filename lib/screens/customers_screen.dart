@@ -323,122 +323,20 @@ class _CustomersScreenState extends State<CustomersScreen> {
     _isProcessingAction = false;
   }
 
-  Future<void> _makePayment(Customer customer) async {
-    if (_isProcessingAction) return;
-    _isProcessingAction = true;
-
-    final currentDebt = _customerDebts[customer.id!] ?? 0.0;
-
-    showDialog(
+  void _showPaymentDialog(Customer customer, double currentDebt) {
+    QuickPaymentDialog.show(
       context: context,
-      builder:
-          (context) => PaymentDialog(
-            customer: customer,
-            currentDebt: currentDebt,
-            onPayment: (amount, note) async {
-              _isProcessingAction = false;
-              try {
-                final debtProvider = Provider.of<DebtProvider>(
-                  context,
-                  listen: false,
-                );
-                await debtProvider.addPayment(
-                  customerId: customer.id!,
-                  amount: amount,
-                  note: note,
-                );
-
-                final newDebt = currentDebt - amount;
-                _customerDebts[customer.id!] = newDebt;
-
-                if (!mounted) return;
-                showAppToast(
-                  context,
-                  'تم تسديد دفعة بقيمة ${amount.toStringAsFixed(2)} لـ ${customer.name}',
-                  ToastType.success,
-                );
-
-                if (mounted) setState(() {});
-              } catch (e) {
-                if (mounted) {
-                  showAppToast(
-                    context,
-                    'خطأ: ${e.toString()}',
-                    ToastType.error,
-                  );
-                }
-              }
-            },
-          ),
-    ).then((_) {
-      _isProcessingAction = false;
-    });
-  }
-
-  void _quickPayment(Customer customer, double amount) async {
-    if (_isProcessingAction) return;
-    _isProcessingAction = true;
-
-    try {
-      final debtProvider = Provider.of<DebtProvider>(context, listen: false);
-      final currentDebt = _customerDebts[customer.id!] ?? 0.0;
-
-      if (amount > currentDebt) {
-        if (mounted) {
-          showAppToast(
-            context,
-            'المبلغ أكبر من الدين المتبقي',
-            ToastType.error,
-          );
-        }
-        return;
-      }
-
-      await debtProvider.addPayment(
-        customerId: customer.id!,
-        amount: amount,
-        note: 'دفعة سريعة',
-      );
-
-      final newDebt = currentDebt - amount;
-      _customerDebts[customer.id!] = newDebt;
-
-      if (!mounted) return;
-      showAppToast(
-        context,
-        'تم تسديد دفعة سريعة بقيمة ${amount.toStringAsFixed(2)}',
-        ToastType.success,
-      );
-
-      if (mounted) setState(() {});
-    } catch (e) {
-      if (mounted) {
-        showAppToast(context, 'خطأ: ${e.toString()}', ToastType.error);
-      }
-    } finally {
-      _isProcessingAction = false;
-    }
-  }
-
-  void _showQuickPaymentOptions(Customer customer) {
-    final currentDebt = _customerDebts[customer.id!] ?? 0.0;
-
-    if (currentDebt <= 0) {
-      showAppToast(context, 'لا يوجد دين للعميل', ToastType.warning);
-      return;
-    }
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder:
-          (context) => QuickPaymentDialog(
-            customer: customer,
-            currentDebt: currentDebt,
-            onPayment: _quickPayment,
-          ),
+      customer: customer,
+      currentDebt: currentDebt,
+      onPayment: (customer, amount, note) async {
+        // هنا عملية الدفع الفعلية
+        final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+        await debtProvider.addPayment(
+          customerId: customer.id!,
+          amount: amount,
+          note: note,
+        );
+      },
     );
   }
 
@@ -754,7 +652,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget _buildTableRow(Customer customer, int index) {
     final debt = _customerDebts[customer.id!] ?? 0.0;
     final hasDebt = debt > 0;
-    final isDebtLoaded = _customerDebts.containsKey(customer.id!);
     final isEven = index.isEven;
     final isSelected = _selectedRowIndex == index;
 
@@ -938,7 +835,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         icon: Icons.payment,
                         color: Colors.green,
                         tooltip: 'دفعة سريعة',
-                        onPressed: () => _showQuickPaymentOptions(customer),
+                        onPressed: () => _showPaymentDialog(customer, debt),
                       ),
                     if (hasDebt) const SizedBox(width: 4),
                     // حذف

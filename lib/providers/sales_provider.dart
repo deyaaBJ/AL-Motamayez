@@ -815,19 +815,7 @@ class SalesProvider extends ChangeNotifier {
       _displayedSales = List.from(_allSales);
 
       // ✅ طباعة معلومات التصحيح
-      print('═══════════════════════════════════════════════════════');
-      print('📊 جلب الفواتير - الصفحة: $_page');
-      print('📋 الجدول المستخدم: ${shouldUseArchive ? 'الأرشيف' : 'الحالي'}');
-      print('🔍 فلتر التاريخ: $_dateFilterType');
-      print('📅 السنة: $_selectedYear');
-      print('🔍 الشروط: $whereClause');
-      print('✅ تم تحميل ${newSales.length} فاتورة');
-      print('🔑 مفتاح الـ cache: $cacheKey');
-      print('💾 إجمالي مفاتيح الـ cache: ${_salesCache.length}');
-      print('⏰ آخر تحديث للسنة الحالية: $_lastCurrentYearCacheUpdate');
-      print('═══════════════════════════════════════════════════════');
     } catch (e) {
-      print('❌ خطأ في جلب الفواتير: $e');
       print('❌ تفاصيل الخطأ: ${e.toString()}');
     } finally {
       _isLoading = false;
@@ -1046,6 +1034,44 @@ class SalesProvider extends ChangeNotifier {
   // ████████████████████████████████ دوال التحديث المعدلة (بدون copyWith) ███████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
 
+  List<int> selectedSaleIds = [];
+  bool isBatchEditing = false;
+
+  // دالة لتحديد/إلغاء تحديد فاتورة
+  void toggleSaleSelection(int saleId) {
+    if (selectedSaleIds.contains(saleId)) {
+      selectedSaleIds.remove(saleId);
+    } else {
+      selectedSaleIds.add(saleId);
+    }
+    notifyListeners();
+  }
+
+  // دالة لتحديد كل الفواتير المعروضة
+  void selectAllShownSales(List<Sale> shownSales) {
+    selectedSaleIds = shownSales.map((sale) => sale.id!).toList();
+    notifyListeners();
+  }
+
+  // دالة لإلغاء تحديد الكل
+  void clearSelection() {
+    selectedSaleIds.clear();
+    notifyListeners();
+  }
+
+  // دالة لتغيير طريقة الدفع للفواتير المحددة
+  Future<void> updateMultiplePaymentTypes(String paymentType) async {
+    if (selectedSaleIds.isEmpty) return;
+
+    for (int saleId in selectedSaleIds) {
+      await updatePaymentType(saleId, paymentType);
+    }
+
+    // مسح التحديد بعد التعديل
+    selectedSaleIds.clear();
+    notifyListeners();
+  }
+
   Future<void> updatePaymentType(
     int saleId,
     String paymentType, {
@@ -1228,26 +1254,47 @@ class SalesProvider extends ChangeNotifier {
     final db = await _dbHelper.db;
 
     await db.transaction((txn) async {
-      // 1. جلب عناصر الفاتورة أولاً
+      // 0️⃣ جلب بيانات الفاتورة (للدين)
+      final saleResult = await txn.query(
+        'sales',
+        where: 'id = ?',
+        whereArgs: [saleId],
+        limit: 1,
+      );
+
+      if (saleResult.isEmpty) {
+        throw Exception('الفاتورة غير موجودة');
+      }
+
+      final sale = saleResult.first;
+      final double totalAmount =
+          (sale['total_amount'] is int)
+              ? (sale['total_amount'] as int).toDouble()
+              : sale['total_amount'] as double;
+
+      final String paymentType = sale['payment_type'] as String;
+      final int? customerId = sale['customer_id'] as int?;
+
+      // 1️⃣ جلب عناصر الفاتورة
       final saleItems = await txn.query(
         'sale_items',
         where: 'sale_id = ?',
         whereArgs: [saleId],
       );
 
-      // 2. إرجاع الكميات إلى المخزون
+      // 2️⃣ إرجاع الكميات إلى المخزون
       for (var item in saleItems) {
         final int productId = item['product_id'] as int;
         final double quantity =
             (item['quantity'] is int)
                 ? (item['quantity'] as int).toDouble()
                 : item['quantity'] as double;
+
         final String unitType = item['unit_type'] as String;
         final int? unitId = item['unit_id'] as int?;
 
         double quantityToReturn = quantity;
 
-        // إذا كانت وحدة مخصصة، نحتاج لمعرفة معامل التحويل
         if (unitType == 'custom' && unitId != null) {
           final unitResult = await txn.query(
             'product_units',
@@ -1261,48 +1308,42 @@ class SalesProvider extends ChangeNotifier {
                 (unitResult.first['contain_qty'] is int)
                     ? (unitResult.first['contain_qty'] as int).toDouble()
                     : unitResult.first['contain_qty'] as double;
+
             quantityToReturn = quantity * containQty;
           }
         }
 
-        // إرجاع الكمية إلى المخزون
         await txn.rawUpdate(
           'UPDATE products SET quantity = quantity + ? WHERE id = ?',
           [quantityToReturn, productId],
         );
       }
 
-      // 3. حذف عناصر الفاتورة
+      // 3️⃣ إلغاء الدين إذا كانت الفاتورة آجل
+      if (paymentType == 'credit' && customerId != null) {
+        await txn.rawUpdate(
+          '''
+        UPDATE customer_balance
+        SET balance = balance - ?, last_updated = ?
+        WHERE customer_id = ?
+        ''',
+          [totalAmount, DateTime.now().toIso8601String(), customerId],
+        );
+      }
+
+      // 4️⃣ حذف عناصر الفاتورة
       await txn.delete('sale_items', where: 'sale_id = ?', whereArgs: [saleId]);
 
-      // 4. حذف الفاتورة الرئيسية
+      // 5️⃣ حذف الفاتورة
       await txn.delete('sales', where: 'id = ?', whereArgs: [saleId]);
     });
 
-    // 5. إزالة الفاتورة من القائمة المحلية
+    // 6️⃣ تحديث القوائم المحلية
     _allSales.removeWhere((sale) => sale.id == saleId);
     _displayedSales.removeWhere((sale) => sale.id == saleId);
 
-    // 6. تحديث الـ cache
     _updateCache();
-
-    // 7. إلغاء cache السنة الحالية إذا كانت الفاتورة من السنة الحالية
-    try {
-      final saleIndex = _allSales.indexWhere((sale) => sale.id == saleId);
-      if (saleIndex != -1) {
-        final sale = _allSales[saleIndex];
-        final saleDate = DateTime.parse(sale.date);
-        if (saleDate.year == DateTime.now().year) {
-          invalidateCurrentYearCache();
-        }
-      }
-    } catch (e) {
-      print('❌ خطأ في تحديد سنة الفاتورة المحذوفة: $e');
-    }
-
     notifyListeners();
-
-    print('🗑️ تم حذف الفاتورة #$saleId وإرجاع الكميات إلى المخزون');
   }
 
   // █████████████████████████████████████████████████████████████████████████

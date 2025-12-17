@@ -20,15 +20,9 @@ import 'package:shopmate/widgets/customer_form_dialog.dart';
 
 class PosScreen extends StatefulWidget {
   final Sale? existingSale;
-  final bool isReturnMode;
   final bool isEditMode;
 
-  const PosScreen({
-    super.key,
-    this.existingSale,
-    this.isReturnMode = false,
-    this.isEditMode = false,
-  });
+  const PosScreen({super.key, this.existingSale, this.isEditMode = false});
 
   @override
   State<PosScreen> createState() => _PosScreenState();
@@ -132,8 +126,7 @@ class _PosScreenState extends State<PosScreen>
             // إنشاء CartItem من SaleItem
             final cartItem = CartItem(
               product: product,
-              quantity:
-                  widget.isReturnMode ? -saleItem.quantity : saleItem.quantity,
+              quantity: saleItem.quantity,
               availableUnits: units,
               selectedUnit: selectedUnit,
             );
@@ -201,7 +194,7 @@ class _PosScreenState extends State<PosScreen>
         child: Column(
           children: [
             // عرض معلومات الوضع الحالي
-            if (widget.isReturnMode || widget.isEditMode) _buildModeBanner(),
+            if (widget.isEditMode) _buildModeBanner(),
 
             // قسم البحث
             SearchSection(
@@ -243,27 +236,18 @@ class _PosScreenState extends State<PosScreen>
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      color:
-          widget.isReturnMode
-              ? Colors.orangeAccent.withOpacity(0.2)
-              : Colors.blueAccent.withOpacity(0.2),
+      color: Colors.blueAccent.withOpacity(0.2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            widget.isReturnMode ? Icons.assignment_return : Icons.edit,
-            color: widget.isReturnMode ? Colors.orange : Colors.blue,
-            size: 20,
-          ),
+          Icon(Icons.edit, color: Colors.blue, size: 20),
           const SizedBox(width: 8),
           Text(
-            widget.isReturnMode
-                ? 'وضع الإرجاع - الفاتورة الأصلية #${_originalSale?.id}'
-                : 'وضع التعديل - الفاتورة #${_originalSale?.id}',
+            'وضع التعديل - الفاتورة #${_originalSale?.id}',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
-              color: widget.isReturnMode ? Colors.orange : Colors.blue,
+              color: Colors.blue,
             ),
           ),
         ],
@@ -624,7 +608,7 @@ class _PosScreenState extends State<PosScreen>
           _cartItems.add(
             CartItem(
               product: product,
-              quantity: widget.isReturnMode ? -1 : 1,
+              quantity: 1,
               availableUnits: distinctUnits,
               selectedUnit: unit,
             ),
@@ -636,8 +620,8 @@ class _PosScreenState extends State<PosScreen>
       if (!mounted) return;
       showAppToast(
         context,
-        'تم ${widget.isReturnMode ? 'إرجاع' : 'إضافة'} ${product.name} (${unit.unitName}) ${widget.isReturnMode ? 'من' : 'إلى'} السلة',
-        widget.isReturnMode ? ToastType.warning : ToastType.success,
+        'تم إضافة ${product.name} (${unit.unitName}) إلى السله',
+        ToastType.success,
       );
     } catch (e) {
       print('Error adding unit to cart: $e');
@@ -672,13 +656,12 @@ class _PosScreenState extends State<PosScreen>
       if (!mounted) return;
       setState(() {
         if (existingItemIndex != -1) {
-          _cartItems[existingItemIndex].quantity +=
-              widget.isReturnMode ? -1 : 1;
+          _cartItems[existingItemIndex].quantity += 1;
         } else {
           _cartItems.add(
             CartItem(
               product: product,
-              quantity: widget.isReturnMode ? -1 : 1,
+              quantity: 1,
               availableUnits: units,
               selectedUnit: units.isNotEmpty ? units.first : null,
             ),
@@ -690,8 +673,8 @@ class _PosScreenState extends State<PosScreen>
       if (!mounted) return;
       showAppToast(
         context,
-        'تم ${widget.isReturnMode ? 'إرجاع' : 'إضافة'} ${product.name} ${widget.isReturnMode ? 'من' : 'إلى'} السلة',
-        widget.isReturnMode ? ToastType.warning : ToastType.success,
+        'تم إضافة ${product.name} إلى السلة',
+        ToastType.success,
       );
     } catch (e) {
       print('Error adding product to cart: $e');
@@ -738,7 +721,6 @@ class _PosScreenState extends State<PosScreen>
                           (item, change) => _updateQuantity(item, change),
                       onRemove: _removeFromCart,
                       onUnitChange: _updateSelectedUnit,
-                      // isReturnMode: widget.isReturnMode, // ✅ تم إصلاح الخطأ هنا
                     ),
                   )
                   .toList(),
@@ -783,7 +765,7 @@ class _PosScreenState extends State<PosScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  widget.isReturnMode ? 'المبلغ المسترجع:' : 'المجموع الكلي:',
+                  'المجموع الكلي:',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -810,12 +792,12 @@ class _PosScreenState extends State<PosScreen>
           const SizedBox(height: 16),
           Row(
             children: [
-              if (widget.isReturnMode || widget.isEditMode) ...[
+              if (widget.isEditMode) ...[
                 Expanded(
                   child: _buildActionButton(
-                    widget.isReturnMode ? 'إتمام الإرجاع' : 'حفظ التعديلات',
-                    widget.isReturnMode ? Icons.assignment_return : Icons.save,
-                    widget.isReturnMode ? Colors.orange : Colors.blue,
+                    'حفظ التعديلات',
+                    Icons.save,
+                    Colors.blue,
                     _completeReturnOrEdit,
                   ),
                 ),
@@ -829,7 +811,7 @@ class _PosScreenState extends State<PosScreen>
                   _printInvoice,
                 ),
               ),
-              if (!widget.isReturnMode && !widget.isEditMode) ...[
+              if (!widget.isEditMode) ...[
                 const SizedBox(width: 8),
                 Expanded(
                   child: _buildActionButton(
@@ -969,14 +951,13 @@ class _PosScreenState extends State<PosScreen>
       context: context,
       builder:
           (context) => AlertDialog(
-            title: Text(widget.isReturnMode ? 'تأكيد الإرجاع' : 'تأكيد البيع'),
+            title: Text('تأكيد البيع'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('المجموع: ₪${_totalAmount.abs().toStringAsFixed(2)}'),
                 if (isDebtSale) const Text('نوع البيع: بيع مؤجل'),
                 if (printInvoice) const Text('سيتم طباعة الفاتورة'),
-                if (widget.isReturnMode) const Text('نوع العملية: إرجاع'),
               ],
             ),
             actions: [
@@ -989,9 +970,7 @@ class _PosScreenState extends State<PosScreen>
                   Navigator.pop(context);
                   _finalizeSale(printInvoice, isDebtSale);
                 },
-                child: Text(
-                  widget.isReturnMode ? 'تأكيد الإرجاع' : 'تأكيد البيع',
-                ),
+                child: Text('تأكيد البيع'),
               ),
             ],
           ),
@@ -1002,10 +981,8 @@ class _PosScreenState extends State<PosScreen>
     _clearCart();
     showAppToast(
       context,
-      widget.isReturnMode
-          ? 'تم إتمام الإرجاع بنجاح'
-          : 'تم إتمام البيع ${isDebtSale ? 'المؤجل ' : ''}بنجاح',
-      widget.isReturnMode ? ToastType.warning : ToastType.success,
+      'تم إتمام البيع ${isDebtSale ? 'المؤجل ' : ''}بنجاح',
+      ToastType.success,
     );
   }
 
@@ -1029,19 +1006,6 @@ class _PosScreenState extends State<PosScreen>
 
     try {
       if (widget.isEditMode) {
-        print("===== الفاتورة قبل الحفظ (Edit Mode) =====");
-        print("Original Sale: $_originalSale");
-
-        print("Cart Items:");
-        for (var item in _cartItems) {
-          print(
-            " - ${item.product.name} | qty: ${item.quantity} | price: ${item.product.price} | total: ${item.totalPrice}",
-          );
-        }
-
-        print("Total Amount: $_totalAmount");
-        print("=================================");
-
         await productProvider.updateSale(
           originalSale: _originalSale!,
           cartItems: _cartItems,
@@ -1051,19 +1015,13 @@ class _PosScreenState extends State<PosScreen>
       }
 
       if (mounted) {
-        showAppToast(
-          context,
-          widget.isReturnMode
-              ? 'تم إتمام الإرجاع بنجاح'
-              : 'تم تحديث الفاتورة بنجاح',
-          ToastType.success,
-        );
+        showAppToast(context, 'تم تحديث الفاتورة بنجاح', ToastType.success);
 
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        showAppToast(context, 'خطأ: $e', ToastType.error);
+        showAppToast(context, 'خطأ: $e', ToastType.warning);
       }
     }
   }
