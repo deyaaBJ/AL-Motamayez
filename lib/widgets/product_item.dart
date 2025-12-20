@@ -30,18 +30,6 @@ class ProductItem extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            // صورة المنتج
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE1D4F7),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(Icons.shopping_bag, color: Color(0xFF6A3093)),
-            ),
-            const SizedBox(width: 12),
-
             // معلومات المنتج
             Expanded(
               flex: 3,

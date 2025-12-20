@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
 import '../models/customer_balance.dart';
-import '../models/payments.dart';
+import '../models/transaction.dart'; // تم تغييرها من payments.dart
 
 class DebtProvider extends ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
@@ -11,10 +11,10 @@ class DebtProvider extends ChangeNotifier {
   // بيانات محملة
   // ==============================
   CustomerBalance? _balance;
-  List<Payment> _payments = [];
+  List<Transaction> _transactions = []; // تم تغييرها من List<Payment>
 
   CustomerBalance? get balance => _balance;
-  List<Payment> get payments => _payments;
+  List<Transaction> get transactions => _transactions;
 
   // ==============================
   // 1️⃣ تحميل رصيد الزبون
@@ -67,43 +67,85 @@ class DebtProvider extends ChangeNotifier {
   }
 
   // ==============================
-  // 3️⃣ تسجيل دفعة
+  // 3️⃣ إضافة معاملة (الآن تدعم نوعين)
   // ==============================
+  Future<void> addTransaction({
+    required int customerId,
+    required double amount,
+    String? note,
+    required TransactionType type,
+  }) async {
+    final db = await _dbHelper.db;
+
+    // 1️⃣ أضف المعاملة في جدول transactions
+    await db.insert('transactions', {
+      'customer_id': customerId,
+      'amount': amount,
+      'type': type.name,
+      'date': DateTime.now().toIso8601String(),
+      'note': note,
+    });
+
+    // 2️⃣ عدل الرصيد بناءً على نوع المعاملة
+    if (type == TransactionType.payment) {
+      // تسديد دفعة: يخصم من الرصيد (يقلل الدين)
+      await db.rawUpdate(
+        '''
+        UPDATE customer_balance
+        SET balance = balance - ?, last_updated = CURRENT_TIMESTAMP
+        WHERE customer_id = ?
+        ''',
+        [amount, customerId],
+      );
+    } else {
+      // صرف رصيد: يضيف للرصيد (يزيد الرصيد المتاح أو يقلل الدين)
+      await db.rawUpdate(
+        '''
+        UPDATE customer_balance
+        SET balance = balance + ?, last_updated = CURRENT_TIMESTAMP
+        WHERE customer_id = ?
+        ''',
+        [amount, customerId],
+      );
+    }
+
+    await loadCustomerBalance(customerId);
+    await loadTransactionsPage(customerId); // تم تغيير اسم الدالة
+    notifyListeners();
+  }
+
+  // دالة مساعدة للتوافق مع الكود القديم (تسديد دفعة)
   Future<void> addPayment({
     required int customerId,
     required double amount,
     String? note,
   }) async {
-    final db = await _dbHelper.db;
-
-    // 1️⃣ أضف الدفعة
-    await db.insert('payments', {
-      'customer_id': customerId,
-      'amount': amount,
-      'date': DateTime.now().toIso8601String(),
-      'note': note,
-    });
-
-    // 2️⃣ خصم من الدين
-    await db.rawUpdate(
-      '''
-      UPDATE customer_balance
-      SET balance = balance - ?, last_updated = CURRENT_TIMESTAMP
-      WHERE customer_id = ?
-    ''',
-      [amount, customerId],
+    return addTransaction(
+      customerId: customerId,
+      amount: amount,
+      note: note,
+      type: TransactionType.payment,
     );
+  }
 
-    await loadCustomerBalance(customerId);
-    await loadPaymentsPage(customerId);
-
-    notifyListeners();
+  // دالة جديدة لصرف الرصيد
+  Future<void> addWithdrawal({
+    required int customerId,
+    required double amount,
+    String? note,
+  }) async {
+    return addTransaction(
+      customerId: customerId,
+      amount: amount,
+      note: note,
+      type: TransactionType.withdrawal,
+    );
   }
 
   // ==============================
-  // 4️⃣ تحميل الدفعات لزبون
+  // 4️⃣ تحميل المعاملات لزبون (دفعات + صرف رصيد)
   // ==============================
-  Future<List<Payment>> loadPaymentsPage(
+  Future<List<Transaction>> loadTransactionsPage(
     int customerId, {
     int page = 0,
     int limit = 20,
@@ -112,7 +154,7 @@ class DebtProvider extends ChangeNotifier {
 
     final offset = page * limit;
     final List<Map<String, dynamic>> maps = await db.query(
-      'payments',
+      'transactions', // تم تغيير اسم الجدول من payments
       where: 'customer_id = ?',
       whereArgs: [customerId],
       orderBy: 'date DESC, id DESC',
@@ -120,7 +162,13 @@ class DebtProvider extends ChangeNotifier {
       offset: offset,
     );
 
-    return List.generate(maps.length, (i) => Payment.fromMap(maps[i]));
+    _transactions = List.generate(
+      maps.length,
+      (i) => Transaction.fromMap(maps[i]),
+    );
+    notifyListeners();
+
+    return _transactions;
   }
 
   // ==============================
@@ -130,7 +178,7 @@ class DebtProvider extends ChangeNotifier {
     return _balance?.balance ?? 0;
   }
 
-  // في DebtProvider.dart - أضف هذه الدالة
+  // دالة للحصول على إجمالي الدين من خلال customerId
   Future<double> getTotalDebtByCustomerId(int customerId) async {
     final db = await _dbHelper.db;
 
@@ -138,30 +186,34 @@ class DebtProvider extends ChangeNotifier {
       // 1. مجموع المبيعات الآجلة (credit)
       final salesResult = await db.rawQuery(
         '''
-      SELECT COALESCE(SUM(total_amount), 0) as total_credit
-      FROM sales 
-      WHERE customer_id = ? AND payment_type = 'credit'
-    ''',
+        SELECT COALESCE(SUM(total_amount), 0) as total_credit
+        FROM sales 
+        WHERE customer_id = ? AND payment_type = 'credit'
+        ''',
         [customerId],
       );
 
       final totalCredit = salesResult.first['total_credit'] as double? ?? 0.0;
 
-      // 2. مجموع الدفعات المدفوعة
-      final paymentsResult = await db.rawQuery(
+      // 2. مجموع المعاملات: الدفعات تخصم، وصرف الرصيد يضيف
+      final transactionsResult = await db.rawQuery(
         '''
-      SELECT COALESCE(SUM(amount), 0) as total_payments
-      FROM payments 
-      WHERE customer_id = ?
-    ''',
+        SELECT 
+          COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as total_payments,
+          COALESCE(SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END), 0) as total_withdrawals
+        FROM transactions 
+        WHERE customer_id = ?
+        ''',
         [customerId],
       );
 
       final totalPayments =
-          paymentsResult.first['total_payments'] as double? ?? 0.0;
+          transactionsResult.first['total_payments'] as double? ?? 0.0;
+      final totalWithdrawals =
+          transactionsResult.first['total_withdrawals'] as double? ?? 0.0;
 
-      // 3. الدين الإجمالي = مجموع المشتريات الآجلة - مجموع الدفعات
-      return totalCredit - totalPayments;
+      // 3. الدين الإجمالي = مجموع المشتريات الآجلة - مجموع الدفعات + مجموع صرف الرصيد
+      return totalCredit - totalPayments + totalWithdrawals;
     } catch (e) {
       print('Error calculating debt for customer $customerId: $e');
       return 0.0;
@@ -169,7 +221,7 @@ class DebtProvider extends ChangeNotifier {
   }
 
   // ==============================
-  // 6️⃣ حساب إجمالي الدين من الصفر (مجموع الفواتير الآجلة ناقص الدفعات)
+  // 6️⃣ حساب إجمالي الدين من الصفر (مجموع الفواتير الآجلة ناقص الدفعات + صرف الرصيد)
   // ==============================
   Future<double> calculateTotalDebtFromScratch(int customerId) async {
     final db = await _dbHelper.db;
@@ -181,27 +233,31 @@ class DebtProvider extends ChangeNotifier {
         SELECT COALESCE(SUM(total_amount), 0) as total_credit
         FROM sales 
         WHERE customer_id = ? AND payment_type = 'credit'
-      ''',
+        ''',
         [customerId],
       );
 
       final totalCredit = salesResult.first['total_credit'] as double? ?? 0.0;
 
-      // 2. مجموع الدفعات المدفوعة
-      final paymentsResult = await db.rawQuery(
+      // 2. مجموع المعاملات
+      final transactionsResult = await db.rawQuery(
         '''
-        SELECT COALESCE(SUM(amount), 0) as total_payments
-        FROM payments 
+        SELECT 
+          COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as total_payments,
+          COALESCE(SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END), 0) as total_withdrawals
+        FROM transactions 
         WHERE customer_id = ?
-      ''',
+        ''',
         [customerId],
       );
 
       final totalPayments =
-          paymentsResult.first['total_payments'] as double? ?? 0.0;
+          transactionsResult.first['total_payments'] as double? ?? 0.0;
+      final totalWithdrawals =
+          transactionsResult.first['total_withdrawals'] as double? ?? 0.0;
 
-      // 3. الدين الإجمالي = مجموع المشتريات الآجلة - مجموع الدفعات
-      return totalCredit - totalPayments;
+      // 3. الدين الإجمالي = مجموع المشتريات الآجلة - مجموع الدفعات + مجموع صرف الرصيد
+      return totalCredit - totalPayments + totalWithdrawals;
     } catch (e) {
       print('Error calculating total debt from scratch: $e');
       return 0.0;
@@ -221,7 +277,7 @@ class DebtProvider extends ChangeNotifier {
         INSERT OR REPLACE INTO customer_balance 
         (customer_id, balance, last_updated) 
         VALUES (?, ?, CURRENT_TIMESTAMP)
-      ''',
+        ''',
         [customerId, totalDebt],
       );
 
@@ -232,7 +288,8 @@ class DebtProvider extends ChangeNotifier {
     }
   }
 
-  // 9️⃣ الحصول على إحصائيات مفصلة للدين
+  // ==============================
+  // 8️⃣ الحصول على إحصائيات مفصلة للدين
   // ==============================
   Future<Map<String, dynamic>> getDebtStatistics(int customerId) async {
     final db = await _dbHelper.db;
@@ -245,7 +302,7 @@ class DebtProvider extends ChangeNotifier {
         COUNT(*) as credit_count
       FROM sales 
       WHERE customer_id = ? AND payment_type = 'credit'
-    ''',
+      ''',
       [customerId],
     );
 
@@ -253,41 +310,65 @@ class DebtProvider extends ChangeNotifier {
         creditSalesResult.first['total_credit'] as double? ?? 0.0;
     final creditCount = creditSalesResult.first['credit_count'] as int? ?? 0;
 
-    // 2. إجمالي الدفعات
-    final paymentsResult = await db.rawQuery(
+    // 2. إجمالي المعاملات
+    final transactionsResult = await db.rawQuery(
       '''
       SELECT 
-        COALESCE(SUM(amount), 0) as total_payments,
-        COUNT(*) as payments_count,
-        MIN(date) as first_payment,
-        MAX(date) as last_payment
-      FROM payments 
+        COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as total_payments,
+        COALESCE(SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END), 0) as total_withdrawals,
+        COUNT(*) as transactions_count,
+        MIN(date) as first_transaction,
+        MAX(date) as last_transaction
+      FROM transactions 
       WHERE customer_id = ?
-    ''',
+      ''',
       [customerId],
     );
 
     final totalPayments =
-        paymentsResult.first['total_payments'] as double? ?? 0.0;
-    final paymentsCount = paymentsResult.first['payments_count'] as int? ?? 0;
-    final firstPayment = paymentsResult.first['first_payment'] as String?;
-    final lastPayment = paymentsResult.first['last_payment'] as String?;
+        transactionsResult.first['total_payments'] as double? ?? 0.0;
+    final totalWithdrawals =
+        transactionsResult.first['total_withdrawals'] as double? ?? 0.0;
+    final transactionsCount =
+        transactionsResult.first['transactions_count'] as int? ?? 0;
+    final firstTransaction =
+        transactionsResult.first['first_transaction'] as String?;
+    final lastTransaction =
+        transactionsResult.first['last_transaction'] as String?;
 
     // 3. الدين الحالي
-    final currentDebt = totalCredit - totalPayments;
+    final currentDebt = totalCredit - totalPayments + totalWithdrawals;
 
     return {
       'total_credit': totalCredit,
       'credit_count': creditCount,
       'total_payments': totalPayments,
-      'payments_count': paymentsCount,
+      'total_withdrawals': totalWithdrawals,
+      'transactions_count': transactionsCount,
       'current_debt': currentDebt,
-      'first_payment': firstPayment,
-      'last_payment': lastPayment,
+      'first_transaction': firstTransaction,
+      'last_transaction': lastTransaction,
       'average_credit': creditCount > 0 ? totalCredit / creditCount : 0.0,
-      'average_payment':
-          paymentsCount > 0 ? totalPayments / paymentsCount : 0.0,
+      'average_transaction':
+          transactionsCount > 0
+              ? (totalPayments + totalWithdrawals) / transactionsCount
+              : 0.0,
     };
+  }
+
+  // ==============================
+  // 9️⃣ تصفية المعاملات حسب النوع
+  // ==============================
+  List<Transaction> getPaymentsOnly() {
+    return _transactions
+        .where((t) => t.type == TransactionType.payment)
+        .toList();
+  }
+
+  List<Transaction> getWithdrawalsOnly() {
+    return _transactions
+        .where((t) => t.type == TransactionType.withdrawal)
+        .toList();
   }
 
   // ==============================
@@ -295,7 +376,7 @@ class DebtProvider extends ChangeNotifier {
   // ==============================
   void clear() {
     _balance = null;
-    _payments = [];
+    _transactions.clear();
     notifyListeners();
   }
 }

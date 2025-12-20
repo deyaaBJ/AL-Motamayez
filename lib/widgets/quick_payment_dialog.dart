@@ -1,10 +1,15 @@
-// widgets/quick_payment_dialog.dart - النسخة المصححة
+// widgets/quick_payment_dialog.dart - النسخة المحسنة
 import 'package:flutter/material.dart';
 import 'package:shopmate/models/customer.dart';
 
+enum PaymentMode {
+  payment, // تسديد دفعة (العميل يدفع للمتجر)
+  withdrawal, // صرف رصيد (المتجر يدفع للعميل)
+}
+
 class QuickPaymentDialog {
-  // دالة لفتح نافذة المبلغ المخصص مباشرة
-  static void show({
+  // دالة لفتح نافذة المبلغ المخصص لتسديد دفعة
+  static void showPayment({
     required BuildContext context,
     required Customer customer,
     required double currentDebt,
@@ -15,33 +20,54 @@ class QuickPaymentDialog {
     )
     onPayment,
   }) {
-    if (currentDebt <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('لا يوجد دين للعميل'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    _showCustomAmountDialog(context, customer, currentDebt, onPayment);
+    _showAmountDialog(
+      context: context,
+      customer: customer,
+      currentBalance: currentDebt,
+      mode: PaymentMode.payment,
+      onConfirm: onPayment,
+    );
   }
 
-  // دالة لعرض نافذة المبلغ المخصص
-  static void _showCustomAmountDialog(
-    BuildContext outerContext,
-    Customer customer,
-    double currentDebt,
-    Future<void> Function(Customer customer, double amount, String? note)
-    onPayment,
-  ) {
+  // دالة لفتح نافذة المبلغ المخصص لصرف رصيد
+  static void showWithdrawal({
+    required BuildContext context,
+    required Customer customer,
+    required double currentBalance,
+    required Future<void> Function(
+      Customer customer,
+      double amount,
+      String? note,
+    )
+    onWithdrawal,
+  }) {
+    _showAmountDialog(
+      context: context,
+      customer: customer,
+      currentBalance: currentBalance,
+      mode: PaymentMode.withdrawal,
+      onConfirm: onWithdrawal,
+    );
+  }
+
+  // الدالة الرئيسية لعرض نافذة إدخال المبلغ
+  static void _showAmountDialog({
+    required BuildContext context,
+    required Customer customer,
+    required double currentBalance,
+    required PaymentMode mode,
+    required Future<void> Function(
+      Customer customer,
+      double amount,
+      String? note,
+    )
+    onConfirm,
+  }) {
     final TextEditingController amountController = TextEditingController();
     final TextEditingController noteController = TextEditingController();
 
     showDialog(
-      context: outerContext,
+      context: context,
       builder: (dialogContext) {
         String? errorMessage;
         bool showError = false;
@@ -78,16 +104,30 @@ class QuickPaymentDialog {
                 return;
               }
 
-              // التحقق من أن المبلغ لا يتجاوز الدين الحالي
-              if (amount > currentDebt) {
-                setState(() {
-                  errorMessage =
-                      '⚠️ المبلغ (${amount.toStringAsFixed(2)}) أكبر من الدين الحالي!\n'
-                      'الدين الحالي: ${currentDebt.toStringAsFixed(2)} دينار\n'
-                      'الفرق: ${(amount - currentDebt).toStringAsFixed(2)} دينار';
-                  showError = true;
-                });
-                return;
+              // التحقق من الشروط بناءً على نوع العملية
+              if (mode == PaymentMode.payment) {
+                // في حالة تسديد دفعة: يجب ألا يتجاوز المبلغ الدين الحالي
+                if (currentBalance <= 0) {
+                  setState(() {
+                    errorMessage = 'لا يوجد دين للعميل';
+                    showError = true;
+                  });
+                  return;
+                }
+
+                if (amount > currentBalance) {
+                  setState(() {
+                    errorMessage =
+                        '⚠️ المبلغ (${amount.toStringAsFixed(2)}) أكبر من الدين الحالي!\n'
+                        'الدين الحالي: ${currentBalance.toStringAsFixed(2)} دينار\n'
+                        'الفرق: ${(amount - currentBalance).toStringAsFixed(2)} دينار';
+                    showError = true;
+                  });
+                  return;
+                }
+              } else if (mode == PaymentMode.withdrawal) {
+                // في حالة صرف رصيد: يمكن سحب أي مبلغ (لا توجد حدود)
+                // يمكنك إضافة شروط هنا إذا لزم الأمر
               }
 
               setState(() {
@@ -95,6 +135,23 @@ class QuickPaymentDialog {
                 showError = false;
               });
             }
+
+            // تحديد النصوص بناءً على نوع العملية
+            final titleText =
+                mode == PaymentMode.payment ? 'تسديد دفعة' : 'صرف رصيد';
+            final buttonText = mode == PaymentMode.payment ? 'تسديد' : 'صرف';
+            final iconColor =
+                mode == PaymentMode.payment ? Colors.green : Colors.blue;
+            final buttonColor =
+                mode == PaymentMode.payment ? Colors.green : Colors.blue;
+            final hintText =
+                mode == PaymentMode.payment
+                    ? 'أدخل مبلغ التسديد'
+                    : 'أدخل مبلغ الصرف';
+            final labelText =
+                mode == PaymentMode.payment
+                    ? 'مبلغ التسديد (دينار)'
+                    : 'مبلغ الصرف (دينار)';
 
             return AlertDialog(
               shape: RoundedRectangleBorder(
@@ -106,12 +163,12 @@ class QuickPaymentDialog {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
+                      color: iconColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Icon(
-                      Icons.payment,
-                      color: Colors.green,
+                    child: Icon(
+                      mode == PaymentMode.payment ? Icons.payment : Icons.money,
+                      color: iconColor,
                       size: 20,
                     ),
                   ),
@@ -121,7 +178,7 @@ class QuickPaymentDialog {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'تسديد دفعة',
+                          titleText,
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -153,12 +210,9 @@ class QuickPaymentDialog {
                       ),
                       autofocus: true,
                       decoration: InputDecoration(
-                        hintText: 'أدخل المبلغ',
-                        labelText: 'المبلغ (دينار)',
-                        prefixIcon: const Icon(
-                          Icons.money,
-                          color: Colors.green,
-                        ),
+                        hintText: hintText,
+                        labelText: labelText,
+                        prefixIcon: Icon(Icons.money, color: iconColor),
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.clear, size: 18),
                           onPressed: () {
@@ -174,10 +228,7 @@ class QuickPaymentDialog {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Colors.green,
-                            width: 2,
-                          ),
+                          borderSide: BorderSide(color: iconColor, width: 2),
                         ),
                       ),
                       onChanged: (value) {
@@ -194,52 +245,57 @@ class QuickPaymentDialog {
                       decoration: InputDecoration(
                         hintText: 'ملاحظة (اختياري)',
                         labelText: 'ملاحظة',
-                        prefixIcon: const Icon(Icons.note, color: Colors.blue),
+                        prefixIcon: const Icon(Icons.note, color: Colors.grey),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: const BorderSide(
-                            color: Colors.blue,
+                            color: Colors.grey,
                             width: 2,
                           ),
                         ),
                       ),
                     ),
 
-                    // عرض الدين الحالي
+                    // عرض الرصيد الحالي
                     Container(
                       margin: const EdgeInsets.only(top: 16),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.blue[50],
+                        color: Colors.grey[50],
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.blue[100]!),
+                        border: Border.all(color: Colors.grey[300]!),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'الدين الحالي:',
+                            mode == PaymentMode.payment
+                                ? 'الدين الحالي:'
+                                : 'الرصيد الحالي:',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[700],
                             ),
                           ),
                           Text(
-                            '${currentDebt.toStringAsFixed(2)} دينار',
-                            style: const TextStyle(
+                            '${currentBalance.toStringAsFixed(2)} دينار',
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.red,
+                              color:
+                                  mode == PaymentMode.payment
+                                      ? Colors.red
+                                      : Colors.blue,
                             ),
                           ),
                         ],
                       ),
                     ),
 
-                    // رسالة التحذير إذا كان المبلغ أكبر من الدين
+                    // رسالة التحذير إذا كان هناك خطأ
                     if (showError && errorMessage != null)
                       Container(
                         margin: const EdgeInsets.only(top: 12),
@@ -289,16 +345,21 @@ class QuickPaymentDialog {
                                 .replaceAll(',', '.');
                             final amount = double.tryParse(normalizedValue);
 
-                            if (amount == null ||
-                                amount <= 0 ||
-                                amount > currentDebt) {
+                            if (amount == null || amount <= 0) {
+                              return;
+                            }
+
+                            // التحقق الإضافي للتأكد
+                            if (mode == PaymentMode.payment &&
+                                (currentBalance <= 0 ||
+                                    amount > currentBalance)) {
                               return;
                             }
 
                             setState(() => isProcessing = true);
 
                             try {
-                              await onPayment(
+                              await onConfirm(
                                 customer,
                                 amount,
                                 noteController.text.trim().isEmpty
@@ -309,13 +370,15 @@ class QuickPaymentDialog {
                               // إغلاق الديلوج
                               Navigator.pop(context);
 
-                              // عرض رسالة النجاح في الـ outerContext (الكونتكس الأصلي)
-                              ScaffoldMessenger.of(outerContext).showSnackBar(
+                              // عرض رسالة النجاح
+                              ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'تم تسديد ${amount.toStringAsFixed(2)} دينار بنجاح',
+                                    mode == PaymentMode.payment
+                                        ? 'تم تسديد ${amount.toStringAsFixed(2)} دينار بنجاح'
+                                        : 'تم صرف ${amount.toStringAsFixed(2)} دينار بنجاح',
                                   ),
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: buttonColor,
                                   duration: const Duration(seconds: 2),
                                 ),
                               );
@@ -333,7 +396,7 @@ class QuickPaymentDialog {
                             }
                           },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: buttonColor,
                     disabledBackgroundColor: Colors.grey[400],
                   ),
                   child:
@@ -346,7 +409,7 @@ class QuickPaymentDialog {
                               color: Colors.white,
                             ),
                           )
-                          : const Text('تسديد'),
+                          : Text(buttonText),
                 ),
               ],
             );

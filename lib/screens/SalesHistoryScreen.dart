@@ -821,12 +821,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                     padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 8),
                     child: Row(
                       children: [
-                        Icon(
-                          Icons.calendar_view_month_rounded,
-                          size: isMobile ? 14 : 16,
-                          color: Colors.black87,
-                        ),
-                        SizedBox(width: isMobile ? 4 : 6),
                         Text(
                           'اختر الشهر',
                           style: TextStyle(

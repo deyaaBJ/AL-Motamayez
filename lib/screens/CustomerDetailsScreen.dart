@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/models/customer.dart';
+import 'package:shopmate/models/transaction.dart';
 import 'package:shopmate/providers/DebtProvider.dart';
-import 'package:shopmate/providers/customer_provider.dart';
 import 'package:shopmate/utils/date_formatter.dart';
 import 'package:shopmate/widgets/quick_payment_dialog.dart';
 
@@ -24,32 +24,32 @@ class CustomerDetailsScreen extends StatefulWidget {
 
 class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   bool _isLoading = true;
-  bool _isLoadingPayments = false;
-  List<Map<String, dynamic>> _payments = [];
-  int _paymentPage = 0;
-  final int _paymentPageSize = 20;
-  bool _hasMorePayments = true;
-  final ScrollController _paymentScrollController = ScrollController();
-  Map<String, List<Map<String, dynamic>>> _groupedPayments = {};
+  bool _isLoadingTransactions = false;
+  List<Transaction> _transactions = [];
+  int _transactionPage = 0;
+  final int _transactionPageSize = 20;
+  bool _hasMoreTransactions = true;
+  final ScrollController _transactionScrollController = ScrollController();
+  Map<String, List<Transaction>> _groupedTransactions = {};
 
   @override
   void initState() {
     super.initState();
     _loadInitialData();
-    _paymentScrollController.addListener(_onPaymentScroll);
+    _transactionScrollController.addListener(_onTransactionScroll);
   }
 
   @override
   void dispose() {
-    _paymentScrollController.dispose();
+    _transactionScrollController.dispose();
     super.dispose();
   }
 
-  void _onPaymentScroll() {
-    if (_paymentScrollController.position.pixels ==
-        _paymentScrollController.position.maxScrollExtent) {
-      if (_hasMorePayments && !_isLoadingPayments) {
-        _loadMorePayments();
+  void _onTransactionScroll() {
+    if (_transactionScrollController.position.pixels ==
+        _transactionScrollController.position.maxScrollExtent) {
+      if (_hasMoreTransactions && !_isLoadingTransactions) {
+        _loadMoreTransactions();
       }
     }
   }
@@ -58,49 +58,46 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     setState(() => _isLoading = true);
     final debtProvider = Provider.of<DebtProvider>(context, listen: false);
 
-    // تحميل الدفعات الأولى
-    await _loadPaymentsPage(0);
+    // تحميل المعاملات الأولى
+    await _loadTransactionsPage(0);
 
     setState(() => _isLoading = false);
   }
 
-  Future<void> _loadPaymentsPage(int page) async {
-    if (!_hasMorePayments && page > 0) return;
+  Future<void> _loadTransactionsPage(int page) async {
+    if (!_hasMoreTransactions && page > 0) return;
 
-    setState(() => _isLoadingPayments = true);
+    setState(() => _isLoadingTransactions = true);
 
     final debtProvider = Provider.of<DebtProvider>(context, listen: false);
-    final newPayments = await debtProvider.loadPaymentsPage(
+    final newTransactions = await debtProvider.loadTransactionsPage(
       widget.customer.id!,
       page: page,
-      limit: _paymentPageSize,
+      limit: _transactionPageSize,
     );
 
     setState(() {
       if (page == 0) {
-        _payments = newPayments.map((p) => p.toMap()).toList();
+        _transactions = newTransactions;
       } else {
-        _payments.addAll(newPayments.map((p) => p.toMap()).toList());
+        _transactions.addAll(newTransactions);
       }
 
-      // تجميع الدفعات حسب الشهر
-      _groupPaymentsByMonth();
+      // تجميع المعاملات حسب الشهر
+      _groupTransactionsByMonth();
 
-      _paymentPage = page;
-      _hasMorePayments = newPayments.length == _paymentPageSize;
-      _isLoadingPayments = false;
+      _transactionPage = page;
+      _hasMoreTransactions = newTransactions.length == _transactionPageSize;
+      _isLoadingTransactions = false;
     });
   }
 
-  void _groupPaymentsByMonth() {
-    final Map<String, List<Map<String, dynamic>>> grouped = {};
+  void _groupTransactionsByMonth() {
+    final Map<String, List<Transaction>> grouped = {};
 
-    for (var payment in _payments) {
+    for (var transaction in _transactions) {
       try {
-        final dateString = payment['date'].toString();
-        final dateTime = DateTime.parse(
-          dateString.contains('T') ? dateString : '${dateString}T00:00:00',
-        );
+        final dateTime = transaction.date;
 
         // استخدام الشهر والسنة كمفتاح (مثال: "2024-01")
         final key =
@@ -111,9 +108,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         if (!grouped.containsKey(displayKey)) {
           grouped[displayKey] = [];
         }
-        grouped[displayKey]!.add(payment);
+        grouped[displayKey]!.add(transaction);
       } catch (e) {
-        // تجاهل الدفعات ذات التواريخ غير الصالحة
         continue;
       }
     }
@@ -123,26 +119,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         grouped.keys.toList()
           ..sort((a, b) => _parseMonthYear(b).compareTo(_parseMonthYear(a)));
 
-    final sortedGrouped = <String, List<Map<String, dynamic>>>{};
+    final sortedGrouped = <String, List<Transaction>>{};
     for (var key in sortedKeys) {
-      // ترتيب الدفعات داخل كل شهر تنازلياً حسب التاريخ
-      grouped[key]!.sort(
-        (a, b) => DateTime.parse(
-          b['date'].toString().contains('T')
-              ? b['date'].toString()
-              : '${b['date']}T00:00:00',
-        ).compareTo(
-          DateTime.parse(
-            a['date'].toString().contains('T')
-                ? a['date'].toString()
-                : '${a['date']}T00:00:00',
-          ),
-        ),
-      );
+      // ترتيب المعاملات داخل كل شهر تنازلياً حسب التاريخ
+      grouped[key]!.sort((a, b) => b.date.compareTo(a.date));
       sortedGrouped[key] = grouped[key]!;
     }
 
-    _groupedPayments = sortedGrouped;
+    _groupedTransactions = sortedGrouped;
   }
 
   String _getArabicMonthName(int month) {
@@ -189,187 +173,200 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     return DateTime(year, month);
   }
 
-  Future<void> _loadMorePayments() async {
-    await _loadPaymentsPage(_paymentPage + 1);
+  Future<void> _loadMoreTransactions() async {
+    await _loadTransactionsPage(_transactionPage + 1);
   }
 
   Future<void> _refreshData() async {
     setState(() {
-      _paymentPage = 0;
-      _hasMorePayments = true;
-      _groupedPayments.clear();
+      _transactionPage = 0;
+      _hasMoreTransactions = true;
+      _groupedTransactions.clear();
     });
-    await _loadPaymentsPage(0);
+    await _loadTransactionsPage(0);
   }
 
   Widget _buildCompactHeader() {
     return Consumer<DebtProvider>(
       builder: (context, debtProvider, child) {
-        final futureBalance = debtProvider.getTotalDebtByCustomerId(
-          widget.customer.id!,
-        );
+        final balance = debtProvider.totalDebt;
 
-        return FutureBuilder<double>(
-          future: futureBalance,
-          builder: (context, snapshot) {
-            final balance = snapshot.data ?? 0.0;
-            // يمكنك تخصيص العرض أثناء التحميل أو الخطأ إذا أردت
-            return Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-              ),
-              child: Column(
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+          ),
+          child: Column(
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: const Color(
-                          0xFF6A3093,
-                        ).withOpacity(0.1),
-                        child: Text(
-                          widget.customer.name.substring(0, 1),
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF6A3093),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.customer.name,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (widget.customer.phone != null)
-                              Text(
-                                widget.customer.phone!,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      // زر التسديد (معطّل أثناء التحميل)
-                      if (snapshot.connectionState == ConnectionState.waiting)
-                        const SizedBox(
-                          width: 120,
-                          child: Center(child: SizedBox(height: 24)),
-                        )
-                      else if (balance > 0)
-                        ElevatedButton.icon(
-                          onPressed:
-                              () =>
-                                  _showPaymentDialog(widget.customer, balance),
-
-                          icon: const Icon(Icons.payment, size: 18),
-                          label: const Text('تسديد'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF6A3093),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: balance > 0 ? Colors.red[50] : Colors.green[50],
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color:
-                            balance > 0
-                                ? Colors.red.withOpacity(0.2)
-                                : Colors.green.withOpacity(0.2),
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: const Color(0xFF6A3093).withOpacity(0.1),
+                    child: Text(
+                      widget.customer.name.substring(0, 1),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF6A3093),
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'الرصيد الحالي',
-                          style: TextStyle(
-                            fontSize: 14,
+                        Text(
+                          widget.customer.name,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                             color: Colors.black87,
-                            fontWeight: FontWeight.w500,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        Row(
-                          children: [
-                            Text(
-                              '${balance.abs().toStringAsFixed(2)}',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: balance > 0 ? Colors.red : Colors.green,
-                              ),
+                        if (widget.customer.phone != null)
+                          Text(
+                            widget.customer.phone!,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black87,
                             ),
-                            const SizedBox(width: 4),
-                            const Text(
-                              'دينار',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              balance > 0
-                                  ? Icons.arrow_upward
-                                  : Icons.check_circle,
-                              size: 18,
-                              color: balance > 0 ? Colors.red : Colors.green,
-                            ),
-                          ],
-                        ),
+                          ),
                       ],
                     ),
                   ),
+                  // أزرار التسديد وصرف الرصيد
+                  Row(
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed:
+                            () => _showPaymentDialog(widget.customer, balance),
+                        icon: const Icon(Icons.payment, size: 18),
+                        label: const Text('تسديد'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed:
+                            () =>
+                                _showWithdrawalDialog(widget.customer, balance),
+                        icon: const Icon(Icons.money, size: 18),
+                        label: const Text('صرف رصيد'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
-            );
-          },
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: balance > 0 ? Colors.red[50] : Colors.green[50],
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color:
+                        balance > 0
+                            ? Colors.red.withOpacity(0.2)
+                            : Colors.green.withOpacity(0.2),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'الرصيد الحالي',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Text(
+                          '${balance.abs().toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: balance > 0 ? Colors.red : Colors.green,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'دينار',
+                          style: TextStyle(fontSize: 14, color: Colors.black87),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          balance > 0 ? Icons.arrow_upward : Icons.check_circle,
+                          size: 18,
+                          color: balance > 0 ? Colors.red : Colors.green,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
   void _showPaymentDialog(Customer customer, double currentDebt) {
-    QuickPaymentDialog.show(
+    QuickPaymentDialog.showPayment(
       context: context,
       customer: customer,
       currentDebt: currentDebt,
       onPayment: (customer, amount, note) async {
-        // هنا عملية الدفع الفعلية
         final debtProvider = Provider.of<DebtProvider>(context, listen: false);
         await debtProvider.addPayment(
           customerId: customer.id!,
           amount: amount,
           note: note,
         );
-        await _refreshData();
+      },
+    );
+  }
+
+  void _showWithdrawalDialog(Customer customer, double currentBalance) {
+    QuickPaymentDialog.showWithdrawal(
+      context: context,
+      customer: customer,
+      currentBalance: currentBalance,
+      onWithdrawal: (customer, amount, note) async {
+        final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+        await debtProvider.addWithdrawal(
+          customerId: customer.id!,
+          amount: amount,
+          note: note,
+        );
       },
     );
   }
@@ -391,7 +388,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           const Icon(Icons.calendar_month, color: Color(0xFF6A3093), size: 20),
           const SizedBox(width: 12),
           Text(
-            'دفعات شهر $monthYear',
+            'معاملات شهر $monthYear',
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -400,7 +397,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           ),
           const Spacer(),
           Text(
-            '${_groupedPayments[monthYear]?.length ?? 0} دفعة',
+            '${_groupedTransactions[monthYear]?.length ?? 0} معاملة',
             style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
         ],
@@ -408,8 +405,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     );
   }
 
-  Widget _buildPaymentItem(Map<String, dynamic> payment, int sequentialNumber) {
-    final dateTime = DateFormatter.formatDateTime(payment['date'].toString());
+  Widget _buildTransactionItem(Transaction transaction, int sequentialNumber) {
+    final dateTime = DateFormatter.formatDateTime(transaction.date.toString());
+    final isPayment = transaction.type == TransactionType.payment;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -431,18 +429,23 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
+                color:
+                    isPayment
+                        ? Colors.green.withOpacity(0.1)
+                        : Colors.blue.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.green.withOpacity(0.3)),
+                border: Border.all(
+                  color:
+                      isPayment
+                          ? Colors.green.withOpacity(0.3)
+                          : Colors.blue.withOpacity(0.3),
+                ),
               ),
               child: Center(
-                child: Text(
-                  sequentialNumber.toString(),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
+                child: Icon(
+                  isPayment ? Icons.payment : Icons.money,
+                  color: isPayment ? Colors.green : Colors.blue,
+                  size: 24,
                 ),
               ),
             ),
@@ -450,19 +453,19 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'دفعة',
-                  style: const TextStyle(
+                  transaction.typeText,
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: isPayment ? Colors.green : Colors.blue,
                   ),
                 ),
                 Text(
-                  '${double.parse(payment['amount'].toString()).toStringAsFixed(2)} دينار',
-                  style: const TextStyle(
+                  '${transaction.amount.toStringAsFixed(2)} دينار',
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Colors.green,
+                    color: isPayment ? Colors.green : Colors.blue,
                   ),
                 ),
               ],
@@ -511,8 +514,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   ),
                   const SizedBox(height: 8),
                   // الملاحظة
-                  if (payment['note'] != null &&
-                      payment['note'].toString().isNotEmpty)
+                  if (transaction.note != null && transaction.note!.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -531,7 +533,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              payment['note'].toString(),
+                              transaction.note!,
                               style: const TextStyle(
                                 fontSize: 13,
                                 color: Colors.black87,
@@ -552,30 +554,30 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     );
   }
 
-  Widget _buildGroupedPaymentsList() {
+  Widget _buildGroupedTransactionsList() {
     final List<Widget> widgets = [];
 
     int overallCounter = 1;
 
-    for (var monthKey in _groupedPayments.keys) {
+    for (var monthKey in _groupedTransactions.keys) {
       // إضافة عنوان الشهر
       widgets.add(_buildMonthHeader(monthKey));
 
-      // إضافة دفعات هذا الشهر
-      final monthPayments = _groupedPayments[monthKey]!;
-      for (var payment in monthPayments) {
-        widgets.add(_buildPaymentItem(payment, overallCounter));
+      // إضافة معاملات هذا الشهر
+      final monthTransactions = _groupedTransactions[monthKey]!;
+      for (var transaction in monthTransactions) {
+        widgets.add(_buildTransactionItem(transaction, overallCounter));
         overallCounter++;
       }
     }
 
-    if (_hasMorePayments) {
+    if (_hasMoreTransactions) {
       widgets.add(
         Padding(
           padding: const EdgeInsets.all(16),
           child: Center(
             child:
-                _isLoadingPayments
+                _isLoadingTransactions
                     ? const CircularProgressIndicator()
                     : const SizedBox(),
           ),
@@ -584,13 +586,13 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     }
 
     return ListView(
-      controller: _paymentScrollController,
+      controller: _transactionScrollController,
       padding: const EdgeInsets.only(bottom: 80),
       children: widgets,
     );
   }
 
-  Widget _buildPaymentsTab() {
+  Widget _buildTransactionsTab() {
     if (_isLoading) {
       return Center(
         child: Column(
@@ -599,7 +601,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             CircularProgressIndicator(color: const Color(0xFF6A3093)),
             const SizedBox(height: 16),
             Text(
-              'جاري تحميل الدفعات...',
+              'جاري تحميل المعاملات...',
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
           ],
@@ -607,20 +609,20 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       );
     }
 
-    if (_payments.isEmpty) {
+    if (_transactions.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.payments_outlined, size: 60, color: Colors.grey[300]),
+            Icon(Icons.list_alt, size: 60, color: Colors.grey[300]),
             const SizedBox(height: 16),
             Text(
-              'لا توجد دفعات',
+              'لا توجد معاملات',
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
             Text(
-              'لم يتم تسجيل أي دفعات لهذا العميل',
+              'لم يتم تسجيل أي معاملات لهذا العميل',
               style: TextStyle(fontSize: 13, color: Colors.grey[500]),
               textAlign: TextAlign.center,
             ),
@@ -632,7 +634,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     return RefreshIndicator(
       onRefresh: _refreshData,
       color: const Color(0xFF6A3093),
-      child: _buildGroupedPaymentsList(),
+      child: _buildGroupedTransactionsList(),
     );
   }
 
@@ -655,7 +657,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           children: [
             _buildCompactHeader(),
             const SizedBox(height: 8),
-            Expanded(child: _buildPaymentsTab()),
+            Expanded(child: _buildTransactionsTab()),
           ],
         ),
       ),

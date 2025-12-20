@@ -1072,119 +1072,163 @@ class _PosScreenState extends State<PosScreen>
 
     final customerProvider = context.read<CustomerProvider>();
 
-    await customerProvider.fetchCustomers();
-    final List<Customer> customers = customerProvider.customers ?? [];
+    // 1. أعِد تعيين الحالة أولاً
+    customerProvider.resetCustomers();
+
+    // 2. احمل العملاء من البداية
+    await customerProvider.fetchCustomers(reset: true);
 
     if (!mounted) return;
 
+    // 3. افتح الـ dialog مع التحقق من البيانات
     showDialog(
       context: context,
-      builder: (context) => _buildCustomerSelectionDialog(customers),
+      builder: (context) => _buildCustomerSelectionDialog(),
     );
   }
 
-  Widget _buildCustomerSelectionDialog(List<Customer> customers) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+  // أضف هذه الدالة في CustomerProvider
+
+  Widget _buildCustomerSelectionDialog() {
+    return Consumer<CustomerProvider>(
+      builder: (context, customerProvider, child) {
+        final customers = customerProvider.displayedCustomers;
+        final isLoading = customerProvider.isLoading;
+        final hasMore = customerProvider.hasMore;
+
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8F5FF),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.people, color: Color(0xFF6A3093)),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'اختر عميل',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF6A3093),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 300),
-              child:
-                  customers.isEmpty
-                      ? const Center(
-                        child: Text(
-                          'لا توجد عملاء',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      )
-                      : ListView.builder(
-                        itemCount: customers.length,
-                        itemBuilder: (context, index) {
-                          final customer = customers[index];
-                          return ListTile(
-                            leading: const Icon(
-                              Icons.person,
-                              color: Color(0xFF8B5FBF),
-                            ),
-                            title: Text(customer.name),
-                            subtitle: Text(customer.phone!),
-                            onTap: () {
-                              Navigator.pop(context);
-                              _finalizeSaleWithCustomer(customer);
-                            },
-                          );
-                        },
+                // ... العنوان
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8F5FF),
+                        shape: BoxShape.circle,
                       ),
-            ),
-            const SizedBox(height: 20),
-            const Divider(),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF6A3093),
-                      side: const BorderSide(color: Color(0xFF6A3093)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: const Icon(Icons.people, color: Color(0xFF6A3093)),
                     ),
-                    child: const Text('إلغاء'),
-                  ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'اختر عميل',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF6A3093),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(height: 20),
+
+                // قائمة العملاء مع التحميل التدريجي
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _showAddCustomerDialog();
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      if (notification is ScrollEndNotification &&
+                          notification.metrics.pixels ==
+                              notification.metrics.maxScrollExtent &&
+                          hasMore &&
+                          !isLoading) {
+                        // تحميل المزيد
+                        customerProvider.loadMoreCustomers();
+                      }
+                      return false;
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6A3093),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: const Text('إضافة عميل جديد'),
+                    child:
+                        customers.isEmpty
+                            ? const Center(
+                              child: Text(
+                                'لا توجد عملاء',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            )
+                            : ListView.builder(
+                              itemCount: customers.length + (hasMore ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (index == customers.length) {
+                                  return const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                }
+
+                                final customer = customers[index];
+                                return ListTile(
+                                  leading: const Icon(
+                                    Icons.person,
+                                    color: Color(0xFF8B5FBF),
+                                  ),
+                                  title: Text(customer.name),
+                                  subtitle: Text(customer.phone ?? 'بدون رقم'),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _finalizeSaleWithCustomer(customer);
+                                  },
+                                );
+                              },
+                            ),
                   ),
+                ),
+
+                const SizedBox(height: 20),
+                const Divider(),
+                const SizedBox(height: 12),
+
+                // الأزرار
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF6A3093),
+                          side: const BorderSide(color: Color(0xFF6A3093)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text('إلغاء'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showAddCustomerDialog();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6A3093),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text('إضافة عميل جديد'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -1198,9 +1242,9 @@ class _PosScreenState extends State<PosScreen>
             onSave: (customer) async {
               try {
                 await customerProvider.addCustomer(customer);
-                if (mounted) {
-                  _finalizeSaleWithCustomer(customer);
-                }
+                // if (mounted) {
+                //   _finalizeSaleWithCustomer(customer);
+                // }
               } catch (e) {
                 if (mounted) {
                   showAppToast(
@@ -1247,16 +1291,14 @@ class _PosScreenState extends State<PosScreen>
         _clearCart();
       }
     } catch (e) {
-      if (mounted) {
-        final errorMessage =
-            e
-                .toString()
-                .replaceAll("Exception: ", "")
-                .replaceAll("Bad state: ", "")
-                .trim();
+      final errorMessage =
+          e
+              .toString()
+              .replaceAll("Exception: ", "")
+              .replaceAll("Bad state: ", "")
+              .trim();
 
-        showAppToast(context, 'خطأ: $errorMessage', ToastType.error);
-      }
+      // showAppToast(context, 'خطأ: $errorMessage', ToastType.error);
     }
   }
 }

@@ -177,10 +177,12 @@ class _MainScreenState extends State<MainScreen> {
                 const SizedBox(height: 20),
 
                 // نظرة عامة اليوم
-                const Text(
-                  "نظرة عامة اليوم",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.right,
+                const Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    "نظرة عامة اليوم",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                 ),
 
                 const SizedBox(height: 15),

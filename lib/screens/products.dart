@@ -23,6 +23,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   final ScrollController _scrollController = ScrollController();
   final ProductProvider _provider = ProductProvider();
+  final List<HeaderColumn> productTableColumns = [
+    HeaderColumn(label: 'المنتج', flex: 3),
+    HeaderColumn(label: 'سعر البيع', flex: 2),
+    HeaderColumn(label: 'سعر الشراء', flex: 2),
+    HeaderColumn(label: 'الكمية', flex: 2),
+    HeaderColumn(label: 'الحالة', flex: 1),
+    HeaderColumn(label: 'الإجراءات', flex: 1),
+  ];
 
   @override
   void initState() {
@@ -131,7 +139,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
               },
             ),
             _buildSearchBar(),
-            ProductTableHeader(columns: const [/* أضف الأعمدة هنا */]),
+            ProductTableHeader(columns: productTableColumns),
+
             Expanded(child: _buildProductsList()),
           ],
         ),

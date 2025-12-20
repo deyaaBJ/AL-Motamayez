@@ -323,14 +323,34 @@ class _CustomersScreenState extends State<CustomersScreen> {
     _isProcessingAction = false;
   }
 
+  void _showCreditPaymentDialog(Customer customer, double currentBalance) {
+    QuickPaymentDialog.showWithdrawal(
+      context: context,
+      customer: customer,
+      currentBalance: currentBalance,
+      onWithdrawal: (customer, amount, note) async {
+        final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+
+        // استخدم الدالة الجديدة addWithdrawal
+        await debtProvider.addWithdrawal(
+          customerId: customer.id!,
+          amount: amount,
+          note: note,
+        );
+      },
+    );
+  }
+
+  // للدفعات العادية (تسديد الدين)
   void _showPaymentDialog(Customer customer, double currentDebt) {
-    QuickPaymentDialog.show(
+    QuickPaymentDialog.showPayment(
       context: context,
       customer: customer,
       currentDebt: currentDebt,
       onPayment: (customer, amount, note) async {
-        // هنا عملية الدفع الفعلية
         final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+
+        // استخدم addPayment للتوافق
         await debtProvider.addPayment(
           customerId: customer.id!,
           amount: amount,
@@ -652,6 +672,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget _buildTableRow(Customer customer, int index) {
     final debt = _customerDebts[customer.id!] ?? 0.0;
     final hasDebt = debt > 0;
+    final hasCredit = debt < 0;
     final isEven = index.isEven;
     final isSelected = _selectedRowIndex == index;
 
@@ -837,7 +858,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         tooltip: 'دفعة سريعة',
                         onPressed: () => _showPaymentDialog(customer, debt),
                       ),
-                    if (hasDebt) const SizedBox(width: 4),
+                    const SizedBox(width: 4),
+
+                    if (hasCredit)
+                      _buildActionButton(
+                        icon: Icons.credit_score,
+                        color: Colors.purple,
+                        tooltip: 'سداد رصيد',
+                        onPressed:
+                            () => _showCreditPaymentDialog(customer, debt),
+                      ),
                     // حذف
                     _buildActionButton(
                       icon: Icons.delete,
@@ -907,15 +937,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'العملاء',
-        showAppBar: true,
-        title: 'إدارة العملاء',
-        actions: [
-          IconButton(
-            onPressed: _refreshAllData,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'تحديث العملاء',
-          ),
-        ],
+        showAppBar: false,
+
         floatingActionButton: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [

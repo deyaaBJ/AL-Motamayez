@@ -245,10 +245,11 @@ class DBHelper {
 
     // جدول الدفعات
     await db.execute('''
-  CREATE TABLE payments (
+  CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id INTEGER NOT NULL,
     amount REAL NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('payment', 'withdrawal')),
     date TEXT NOT NULL,
     note TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,

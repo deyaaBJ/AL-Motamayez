@@ -35,6 +35,7 @@ class CustomerProvider extends ChangeNotifier {
       _hasMore = true;
       _customers.clear();
       _displayedCustomers.clear();
+      _filteredCustomers.clear();
     }
 
     notifyListeners();
@@ -64,27 +65,36 @@ class CustomerProvider extends ChangeNotifier {
         offset: offset,
       );
 
-      print('تم جلب ${result.length} عميل من قاعدة البيانات');
+      print(
+        'تم جلب ${result.length} عميل من قاعدة البيانات (الصفحة $_currentPage)',
+      );
 
       // إذا كانت النتائج أقل من الحد المطلوب، فهذا يعني لا يوجد المزيد
       if (result.length < _itemsPerPage) {
         _hasMore = false;
       }
 
+      // منع التكرار: تحقق من IDs الموجودة
+      final existingIds = _customers.map((c) => c.id).toSet();
+
       // تحويل البيانات إلى كائنات Customer
       for (var customerData in result) {
         try {
           final customer = Customer.fromMap(customerData);
-          print('تم تحويل العميل: ${customer.name} (ID: ${customer.id})');
-          _customers.add(customer);
+
+          // إضافة فقط إذا لم يكن موجوداً مسبقاً
+          if (!existingIds.contains(customer.id)) {
+            print('تم إضافة العميل: ${customer.name} (ID: ${customer.id})');
+            _customers.add(customer);
+            existingIds.add(customer.id);
+          }
         } catch (e) {
           print('خطأ في تحويل بيانات العميل: $e');
-          print('بيانات العميل: $customerData');
         }
       }
 
       _displayedCustomers = List.from(_customers);
-      _filteredCustomers = _displayedCustomers;
+      _filteredCustomers = List.from(_displayedCustomers);
       _currentPage++;
 
       print('إجمالي العملاء المحملين: ${_customers.length}');
@@ -96,10 +106,42 @@ class CustomerProvider extends ChangeNotifier {
     }
   }
 
+  void resetCustomers() {
+    _currentPage = 0;
+    _hasMore = true;
+    _customers.clear();
+    _displayedCustomers.clear();
+    _filteredCustomers.clear();
+    _searchQuery = '';
+    notifyListeners();
+  }
+
   // تحميل المزيد من العملاء
   Future<void> loadMoreCustomers() async {
     if (!_isLoading && _hasMore && _searchQuery.isEmpty) {
       await fetchCustomers();
+    }
+  }
+
+  // في CustomerProvider.dart
+  Future<void> addCustomerWithRefresh(Customer customer) async {
+    try {
+      // 1. أضف العميل إلى قاعدة البيانات
+      await addCustomer(customer);
+
+      // 2. أعِد تحميل العملاء من البداية
+      await fetchCustomers(reset: true);
+
+      // 3. تأكد من أن العميل الجديد موجود في القائمة
+      if (!_customers.any((c) => c.id == customer.id)) {
+        _customers.insert(0, customer); // أضفه في البداية
+        _displayedCustomers = List.from(_customers);
+        _filteredCustomers = List.from(_displayedCustomers);
+        notifyListeners();
+      }
+    } catch (e) {
+      print('خطأ في addCustomerWithRefresh: $e');
+      rethrow;
     }
   }
 
