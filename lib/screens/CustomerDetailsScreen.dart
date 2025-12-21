@@ -186,159 +186,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     await _loadTransactionsPage(0);
   }
 
-  Widget _buildCompactHeader() {
-    return Consumer<DebtProvider>(
-      builder: (context, debtProvider, child) {
-        final balance = debtProvider.totalDebt;
-
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: const Color(0xFF6A3093).withOpacity(0.1),
-                    child: Text(
-                      widget.customer.name.substring(0, 1),
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF6A3093),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.customer.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (widget.customer.phone != null)
-                          Text(
-                            widget.customer.phone!,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.black87,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  // أزرار التسديد وصرف الرصيد
-                  Row(
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed:
-                            () => _showPaymentDialog(widget.customer, balance),
-                        icon: const Icon(Icons.payment, size: 18),
-                        label: const Text('تسديد'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed:
-                            () =>
-                                _showWithdrawalDialog(widget.customer, balance),
-                        icon: const Icon(Icons.money, size: 18),
-                        label: const Text('صرف رصيد'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: balance > 0 ? Colors.red[50] : Colors.green[50],
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color:
-                        balance > 0
-                            ? Colors.red.withOpacity(0.2)
-                            : Colors.green.withOpacity(0.2),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'الرصيد الحالي',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.black87,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Text(
-                          '${balance.abs().toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: balance > 0 ? Colors.red : Colors.green,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Text(
-                          'دينار',
-                          style: TextStyle(fontSize: 14, color: Colors.black87),
-                        ),
-                        const SizedBox(width: 8),
-                        Icon(
-                          balance > 0 ? Icons.arrow_upward : Icons.check_circle,
-                          size: 18,
-                          color: balance > 0 ? Colors.red : Colors.green,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   void _showPaymentDialog(Customer customer, double currentDebt) {
     QuickPaymentDialog.showPayment(
       context: context,
@@ -366,6 +213,221 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           customerId: customer.id!,
           amount: amount,
           note: note,
+        );
+      },
+    );
+  }
+
+  Widget _buildCompactHeader(Customer customer) {
+    return Consumer<DebtProvider>(
+      builder: (context, debtProvider, child) {
+        return FutureBuilder<double>(
+          future: debtProvider.getTotalDebtByCustomerId(customer.id!),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Container(
+                padding: const EdgeInsets.all(16),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: const Color(0xFF6A3093),
+                  ),
+                ),
+              );
+            }
+
+            if (snapshot.hasError) {
+              print('Error loading balance: ${snapshot.error}');
+
+              // حاول إعادة الحساب
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                await debtProvider.recalculateAndUpdateBalance(customer.id!);
+              });
+
+              return Container(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Text(
+                      'خطأ في تحميل الرصيد',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: () async {
+                        await debtProvider.recalculateAndUpdateBalance(
+                          customer.id!,
+                        );
+                      },
+                      child: Text('إعادة حساب الرصيد'),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final balance = snapshot.data ?? 0.0;
+            print('Customer ID: ${customer.id}');
+            print('Current balance: $balance');
+
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: const Color(
+                          0xFF6A3093,
+                        ).withOpacity(0.1),
+                        child: Text(
+                          widget.customer.name.substring(0, 1),
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF6A3093),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.customer.name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (widget.customer.phone != null)
+                              Text(
+                                widget.customer.phone!,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      // أزرار التسديد وصرف الرصيد
+                      Row(
+                        children: [
+                          if (balance > 0)
+                            ElevatedButton.icon(
+                              onPressed:
+                                  () => _showPaymentDialog(
+                                    widget.customer,
+                                    balance,
+                                  ),
+                              icon: const Icon(Icons.payment, size: 18),
+                              label: const Text('تسديد'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                            ),
+                          const SizedBox(width: 8),
+                          if (balance < 0)
+                            ElevatedButton.icon(
+                              onPressed:
+                                  () => _showWithdrawalDialog(
+                                    widget.customer,
+                                    balance,
+                                  ),
+                              icon: const Icon(Icons.money, size: 18),
+                              label: const Text('صرف رصيد'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: balance > 0 ? Colors.red[50] : Colors.green[50],
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color:
+                            balance > 0
+                                ? Colors.red.withOpacity(0.2)
+                                : Colors.green.withOpacity(0.2),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'الرصيد الحالي',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Text(
+                              '${balance.abs().toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: balance > 0 ? Colors.red : Colors.green,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'دينار',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              balance > 0
+                                  ? Icons.arrow_upward
+                                  : Icons.check_circle,
+                              size: 18,
+                              color: balance > 0 ? Colors.red : Colors.green,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -655,7 +717,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         ],
         child: Column(
           children: [
-            _buildCompactHeader(),
+            _buildCompactHeader(widget.customer),
             const SizedBox(height: 8),
             Expanded(child: _buildTransactionsTab()),
           ],

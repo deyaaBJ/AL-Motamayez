@@ -36,9 +36,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       if (provider.selectedYear == null) {
         provider.setYearFilter(DateTime.now().year);
       } else {
-        // ✅ للسنة الحالية، استخدم forceRefresh دائمًا
+        // ✅ للسنة الحالية، استخدم resetForNewSearch
         final isCurrentYear = provider.selectedYear == DateTime.now().year;
-        provider.fetchSales(forceRefresh: isCurrentYear);
+        provider.fetchSales(resetPagination: isCurrentYear);
       }
     });
   }
@@ -1153,10 +1153,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   // ✅ دالة مساعدة للـ Debounce على الفلاتر
   void _applyFilterWithDebounce(Function() filterFunction) {
     _filterDebounceTimer?.cancel();
-    _filterDebounceTimer = Timer(
-      const Duration(milliseconds: 300),
-      filterFunction,
-    );
+    _filterDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      filterFunction();
+      // ✅ الدالة filterFunction بالفعل تستدعي resetForNewSearch
+    });
   }
 
   // ✅ بناء قائمة الفواتير للعرض على الموبايل

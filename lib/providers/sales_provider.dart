@@ -23,24 +23,13 @@ class SalesProvider extends ChangeNotifier {
   // ████████████████████████████████ نظام الـ Cache ███████████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
 
-  // ✅ Cache للبيانات المحملة مسبقاً
   final Map<String, List<Sale>> _salesCache = {};
   String? _currentCacheKey;
   Timer? _cacheCleanupTimer;
-
-  // ✅ متغير لتتبع آخر تحديث للسنة الحالية
   DateTime? _lastCurrentYearCacheUpdate;
 
-  // ✅ بيانات محملة ومعروضة
-  List<Sale> _allSales = [];
-  List<Sale> _displayedSales = [];
-
-  List<Sale> get sales => _displayedSales;
-  int get loadedSalesCount => _allSales.length;
-  bool get hasLoadedSales => _allSales.isNotEmpty;
-
   // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ الفلاتر ██████████████████████████████████████████████████
+  // ████████████████████████████████ الفلاتر الحقيقية (المطبقة) ███████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
 
   String _selectedPaymentType = 'الكل';
@@ -51,7 +40,7 @@ class SalesProvider extends ChangeNotifier {
   int? _selectedMonth;
   int? _selectedYear;
 
-  // Getters
+  // Getters للفلاتر المطبقة
   String get selectedPaymentType => _selectedPaymentType;
   String get selectedCustomer => _selectedCustomer;
   DateTime? get selectedDate => _selectedDate;
@@ -59,6 +48,46 @@ class SalesProvider extends ChangeNotifier {
   String get dateFilterType => _dateFilterType;
   int? get selectedMonth => _selectedMonth;
   int? get selectedYear => _selectedYear;
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ الفلاتر المؤقتة (للاختيار) ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
+  String _tempSelectedPaymentType = 'الكل';
+  String _tempSelectedCustomer = 'الكل';
+  String _tempSelectedTaxFilter = 'الكل';
+  DateTime? _tempSelectedDate;
+  String _tempDateFilterType = 'day';
+  int? _tempSelectedMonth;
+  int? _tempSelectedYear;
+
+  // Getters للفلاتر المؤقتة
+  String get tempSelectedPaymentType => _tempSelectedPaymentType;
+  String get tempSelectedCustomer => _tempSelectedCustomer;
+  DateTime? get tempSelectedDate => _tempSelectedDate;
+  String get tempSelectedTaxFilter => _tempSelectedTaxFilter;
+  String get tempDateFilterType => _tempDateFilterType;
+  int? get tempSelectedMonth => _tempSelectedMonth;
+  int? get tempSelectedYear => _tempSelectedYear;
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ بيانات الفواتير ███████████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
+  List<Sale> _allSales = [];
+  List<Sale> _displayedSales = [];
+
+  List<Sale> get sales => _displayedSales;
+  int get loadedSalesCount => _allSales.length;
+  bool get hasLoadedSales => _allSales.isNotEmpty;
+
+  List<int> selectedSaleIds = [];
+  bool isBatchEditing = false;
+  int todaySalesCount = 0;
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ Getters جديدة ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
 
   List<String> get paymentTypes => ['الكل', 'cash', 'credit'];
 
@@ -94,11 +123,6 @@ class SalesProvider extends ChangeNotifier {
     return List.generate(5, (index) => currentYear - index);
   }
 
-  // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ Getters جديدة ███████████████████████████████████████
-  // █████████████████████████████████████████████████████████████████████████
-
-  // ✅ Getter للحصول على نسبة الفلاتر
   String get filteredPercentage {
     if (_allSales.isEmpty) return "0%";
     final percentage =
@@ -106,17 +130,6 @@ class SalesProvider extends ChangeNotifier {
     return "$percentage%";
   }
 
-  // ✅ Getter لملخص الفلاتر
-  Map<String, dynamic> get filterSummary {
-    return {
-      'totalLoaded': _allSales.length,
-      'displayed': _displayedSales.length,
-      'filteredOut': _allSales.length - _displayedSales.length,
-      'percentage': filteredPercentage,
-    };
-  }
-
-  // ✅ Getter للتحقق من وجود فلاتر نشطة
   bool get isFilterActive {
     return _selectedPaymentType != 'الكل' ||
         _selectedCustomer != 'الكل' ||
@@ -127,7 +140,6 @@ class SalesProvider extends ChangeNotifier {
         _dateFilterType != 'day';
   }
 
-  // ✅ Getter للتحقق من وضع الأرشيف
   bool get isArchiveMode {
     if (_dateFilterType == 'year' && _selectedYear != null) {
       return _selectedYear! < DateTime.now().year;
@@ -141,7 +153,6 @@ class SalesProvider extends ChangeNotifier {
     return false;
   }
 
-  // ✅ Getter لوصف الفلاتر النشطة
   String get activeFiltersDescription {
     final filters = <String>[];
 
@@ -172,10 +183,19 @@ class SalesProvider extends ChangeNotifier {
   }
 
   // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ نظام الـ Cache ███████████████████████████████████████████
+  // ████████████████████████████████ Constructor ███████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
 
   SalesProvider() {
+    // تهيئة الفلاتر المؤقتة بقيم الفلاتر الحقيقية
+    _tempSelectedPaymentType = _selectedPaymentType;
+    _tempSelectedCustomer = _selectedCustomer;
+    _tempSelectedTaxFilter = _selectedTaxFilter;
+    _tempSelectedDate = _selectedDate;
+    _tempDateFilterType = _dateFilterType;
+    _tempSelectedMonth = _selectedMonth;
+    _tempSelectedYear = _selectedYear;
+
     // تنظيف الـ cache كل 5 دقائق
     _cacheCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       _cleanupOldCache();
@@ -188,7 +208,265 @@ class SalesProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  // ✅ دالة لإنشاء مفتاح cache
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ دوال الفلاتر المؤقتة ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
+  void setTempDateFilterType(String type) {
+    _tempDateFilterType = type;
+    // إعادة تعيين القيم المؤقتة الأخرى عند تغيير النوع
+    if (type == 'day') {
+      _tempSelectedMonth = null;
+      _tempSelectedYear = null;
+    } else if (type == 'month') {
+      _tempSelectedDate = null;
+    } else if (type == 'year') {
+      _tempSelectedDate = null;
+      _tempSelectedMonth = null;
+    }
+    notifyListeners();
+  }
+
+  void setTempMonthFilter(int month) {
+    _tempSelectedMonth = month;
+    _tempDateFilterType = 'month';
+    notifyListeners();
+  }
+
+  void setTempYearFilter(int year) {
+    _tempSelectedYear = year;
+    _tempDateFilterType = 'year';
+    notifyListeners();
+  }
+
+  void setTempDateFilter(DateTime? date) {
+    _tempSelectedDate = date;
+    _tempDateFilterType = 'day';
+    notifyListeners();
+  }
+
+  void setTempPaymentTypeFilter(String? value) {
+    _tempSelectedPaymentType = value ?? 'الكل';
+    notifyListeners();
+  }
+
+  void setTempCustomerFilter(String? value) {
+    _tempSelectedCustomer = value ?? 'الكل';
+    notifyListeners();
+  }
+
+  void setTempTaxFilter(String? value) {
+    _tempSelectedTaxFilter = value ?? 'الكل';
+    notifyListeners();
+  }
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ دوال التطبيق والتحقق ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
+  // ✅ تحقق من اكتمال الاختيار (لتمكين زر التطبيق)
+  bool get isTempFilterComplete {
+    switch (_tempDateFilterType) {
+      case 'day':
+        return _tempSelectedDate != null;
+      case 'month':
+        return _tempSelectedMonth != null && _tempSelectedYear != null;
+      case 'year':
+        return _tempSelectedYear != null;
+      default:
+        return false;
+    }
+  }
+
+  // ✅ تطبيق الفلاتر المؤقتة (نسخ من المؤقت إلى الحقيقي وتنفيذ البحث)
+  Future<void> applyTempFilters() async {
+    if (!isTempFilterComplete) return;
+
+    // نسخ القيم المؤقتة إلى الحقيقية
+    _selectedPaymentType = _tempSelectedPaymentType;
+    _selectedCustomer = _tempSelectedCustomer;
+    _selectedTaxFilter = _tempSelectedTaxFilter;
+    _selectedDate = _tempSelectedDate;
+    _dateFilterType = _tempDateFilterType;
+    _selectedMonth = _tempSelectedMonth;
+    _selectedYear = _tempSelectedYear;
+
+    // إعادة تعيين وجلب البيانات
+    _resetAndFetch();
+    notifyListeners();
+  }
+
+  // ✅ إعادة تعيين الفلاتر المؤقتة إلى القيم الحالية
+  void resetTempFilters() {
+    _tempSelectedPaymentType = _selectedPaymentType;
+    _tempSelectedCustomer = _selectedCustomer;
+    _tempSelectedTaxFilter = _selectedTaxFilter;
+    _tempSelectedDate = _selectedDate;
+    _tempDateFilterType = _dateFilterType;
+    _tempSelectedMonth = _selectedMonth;
+    _tempSelectedYear = _selectedYear;
+    notifyListeners();
+  }
+
+  void resetPagination() {
+    _page = 0;
+    _hasMore = true;
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  // ✅ دالة لإعادة تعيين كل شيء مع الحفاظ على Cache
+  void resetForNewSearch() {
+    _page = 0;
+    _allSales.clear();
+    _displayedSales.clear();
+    _hasMore = true;
+    _isLoading = false;
+    selectedSaleIds.clear();
+    _currentCacheKey = null;
+    notifyListeners();
+  }
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ دوال الفلاتر الحقيقية ███████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+  void setPaymentTypeFilter(String? value) {
+    _selectedPaymentType = value ?? 'الكل';
+    _tempSelectedPaymentType = _selectedPaymentType;
+    resetForNewSearch(); // ✅ إعادة تعيين للبحث الجديد
+    _fetchSalesWithFilters();
+  }
+
+  void setCustomerFilter(String? value) {
+    _selectedCustomer = value ?? 'الكل';
+    _tempSelectedCustomer = _selectedCustomer;
+    resetForNewSearch(); // ✅ إعادة تعيين للبحث الجديد
+    _fetchSalesWithFilters();
+  }
+
+  void setDateFilter(DateTime? date) {
+    _selectedDate = date;
+    _tempSelectedDate = date;
+    _dateFilterType = 'day';
+    _tempDateFilterType = 'day';
+    resetForNewSearch(); // ✅ إعادة تعيين للبحث الجديد
+    _fetchSalesWithFilters();
+  }
+
+  void setTaxFilter(String? value) {
+    _selectedTaxFilter = value ?? 'الكل';
+    _tempSelectedTaxFilter = _selectedTaxFilter;
+    resetForNewSearch(); // ✅ إعادة تعيين للبحث الجديد
+    _fetchSalesWithFilters();
+  }
+
+  void setDateFilterType(String type) {
+    _dateFilterType = type;
+    _tempDateFilterType = type;
+    resetForNewSearch(); // ✅ إعادة تعيين للبحث الجديد
+    _fetchSalesWithFilters();
+  }
+
+  void setMonthFilter(int month) {
+    _selectedMonth = month;
+    _tempSelectedMonth = month;
+    _dateFilterType = 'month';
+    _tempDateFilterType = 'month';
+    resetForNewSearch(); // ✅ إعادة تعيين للبحث الجديد
+    _fetchSalesWithFilters();
+  }
+
+  void setYearFilter(int year) {
+    _selectedYear = year;
+    _tempSelectedYear = year;
+    _dateFilterType = 'year';
+    _tempDateFilterType = 'year';
+    resetForNewSearch(); // ✅ إعادة تعيين للبحث الجديد
+    _fetchSalesWithFilters();
+  }
+
+  void clearDateFilter() {
+    _selectedDate = null;
+    _selectedMonth = null;
+    _selectedYear = null;
+    _dateFilterType = 'day';
+
+    _tempSelectedDate = null;
+    _tempSelectedMonth = null;
+    _tempSelectedYear = null;
+    _tempDateFilterType = 'day';
+
+    _resetAndFetch();
+  }
+
+  void clearFilters() {
+    _selectedPaymentType = 'الكل';
+    _selectedCustomer = 'الكل';
+    _selectedTaxFilter = 'الكل';
+
+    _tempSelectedPaymentType = 'الكل';
+    _tempSelectedCustomer = 'الكل';
+    _tempSelectedTaxFilter = 'الكل';
+
+    // ✅ استخدام resetForNewSearch بدلاً من مجرد تعيين _displayedSales
+    resetForNewSearch();
+    _fetchSalesWithFilters(forceRefresh: true);
+  }
+
+  void clearAllFilters() {
+    _selectedPaymentType = 'الكل';
+    _selectedCustomer = 'الكل';
+    _selectedTaxFilter = 'الكل';
+    _selectedDate = null;
+    _selectedMonth = null;
+    _selectedYear = null;
+    _dateFilterType = 'day';
+
+    _tempSelectedPaymentType = 'الكل';
+    _tempSelectedCustomer = 'الكل';
+    _tempSelectedTaxFilter = 'الكل';
+    _tempSelectedDate = null;
+    _tempDateFilterType = 'day';
+    _tempSelectedMonth = null;
+    _tempSelectedYear = null;
+
+    // ✅ استخدام resetForNewSearch
+    resetForNewSearch();
+    _fetchSalesWithFilters(forceRefresh: true);
+  }
+
+  void reset() {
+    _allSales.clear();
+    _displayedSales.clear();
+    _isLoading = false;
+    _hasMore = true;
+    _page = 0;
+
+    _selectedPaymentType = 'الكل';
+    _selectedCustomer = 'الكل';
+    _selectedDate = null;
+    _selectedTaxFilter = 'الكل';
+    _selectedMonth = null;
+    _selectedYear = null;
+    _dateFilterType = 'day';
+
+    _tempSelectedPaymentType = 'الكل';
+    _tempSelectedCustomer = 'الكل';
+    _tempSelectedTaxFilter = 'الكل';
+    _tempSelectedDate = null;
+    _tempDateFilterType = 'day';
+    _tempSelectedMonth = null;
+    _tempSelectedYear = null;
+
+    _currentCacheKey = null;
+    _lastCurrentYearCacheUpdate = null;
+    notifyListeners();
+  }
+
+  // █████████████████████████████████████████████████████████████████████████
+  // ████████████████████████████████ نظام الـ Cache ███████████████████████████████████████████
+  // █████████████████████████████████████████████████████████████████████████
+
   String _generateCacheKey() {
     final keyParts = [
       'payment=$_selectedPaymentType',
@@ -203,157 +481,19 @@ class SalesProvider extends ChangeNotifier {
     return keyParts.join('|');
   }
 
-  // ✅ دالة لتحديث الـ cache
   void _updateCache() {
     if (_currentCacheKey != null && _allSales.isNotEmpty) {
       _salesCache[_currentCacheKey!] = List.from(_allSales);
-      print('✅ تم تحديث الـ cache للمفتاح: $_currentCacheKey');
-
-      // ✅ تحديث وقت آخر تحديث إذا كان للسنة الحالية
-      if (_selectedYear == DateTime.now().year) {
-        _lastCurrentYearCacheUpdate = DateTime.now();
-      }
     }
   }
 
-  // ✅ دالة لتنظيف الـ cache القديم
   void _cleanupOldCache({int keepLast = 10}) {
     if (_salesCache.length > keepLast) {
       final keys = _salesCache.keys.toList();
-      // احتفظ بـ keepLast الأحدث
       for (int i = 0; i < keys.length - keepLast; i++) {
         _salesCache.remove(keys[i]);
       }
-      print('🧹 تم تنظيف الـ cache، بقي ${_salesCache.length} عنصر');
     }
-  }
-
-  // ✅ دالة للتحقق مما إذا كان يمكن التصفية محلياً
-  bool _canFilterLocally() {
-    // يمكن التصفية محلياً إذا:
-    // 1. لدينا بيانات محملة
-    // 2. لا نغير فلتر السنة (لأنه قد يحتاج بيانات جديدة)
-    // 3. الفلاتر الأخرى يمكن تطبيقها على البيانات الحالية
-    return _allSales.isNotEmpty &&
-        !(_dateFilterType == 'year' &&
-            _selectedYear != null &&
-            !_salesCache.containsKey(_generateCacheKey()));
-  }
-
-  // ✅ دالة لتطبيق الفلاتر محلياً
-  void _applyLocalFilters() {
-    List<Sale> filtered = List.from(_allSales);
-
-    // فلترة نوع الدفع
-    if (_selectedPaymentType != 'الكل') {
-      final paymentValue = _selectedPaymentType.toLowerCase();
-      filtered =
-          filtered.where((sale) => sale.paymentType == paymentValue).toList();
-    }
-
-    // فلترة العميل
-    if (_selectedCustomer != 'الكل') {
-      if (_selectedCustomer == 'بدون عميل') {
-        filtered =
-            filtered
-                .where(
-                  (sale) =>
-                      sale.customerName == null || sale.customerName!.isEmpty,
-                )
-                .toList();
-      } else {
-        filtered =
-            filtered
-                .where((sale) => sale.customerName == _selectedCustomer)
-                .toList();
-      }
-    }
-
-    // فلترة الضريبة
-    if (_selectedTaxFilter != 'الكل') {
-      final taxValue = _selectedTaxFilter == 'مضمنه بالضرائب' ? 1 : 0;
-      filtered = filtered.where((sale) => sale.showForTax == taxValue).toList();
-    }
-
-    // فلترة التاريخ (إذا كان محلياً)
-    if (_dateFilterType == 'day' && _selectedDate != null) {
-      final dateStr = _selectedDate!.toIso8601String().split('T')[0];
-      filtered =
-          filtered.where((sale) => sale.date.startsWith(dateStr)).toList();
-    }
-
-    _displayedSales = filtered;
-    print(
-      '✅ تم التصفية محلياً: ${_displayedSales.length} فاتورة من أصل ${_allSales.length}',
-    );
-  }
-
-  // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ الفلاتر المتقدمة ███████████████████████████████████████
-  // █████████████████████████████████████████████████████████████████████████
-
-  void setDateFilterType(String type) {
-    _dateFilterType = type;
-    _resetAndFetch();
-    notifyListeners();
-  }
-
-  void setMonthFilter(int month) {
-    _selectedMonth = month;
-    _dateFilterType = 'month';
-    _resetAndFetch();
-    notifyListeners();
-  }
-
-  void setYearFilter(int year) {
-    _selectedYear = year;
-    _dateFilterType = 'year';
-
-    // ✅ تحقق من الـ cache أولاً
-    final cacheKey = _generateCacheKey();
-
-    // ✅ إذا كانت السنة الحالية، استخدم forceRefresh دائمًا
-    final bool isCurrentYear = year == DateTime.now().year;
-
-    if (_salesCache.containsKey(cacheKey) && !isCurrentYear) {
-      print('✅ استخدام الـ cache الموجود للسنة: $year');
-      _allSales = List.from(_salesCache[cacheKey]!);
-      _displayedSales = List.from(_allSales);
-      _currentCacheKey = cacheKey;
-      _hasMore = false;
-      notifyListeners();
-      return;
-    }
-
-    // ✅ للسنة الحالية، استخدم forceRefresh دائمًا
-    if (isCurrentYear) {
-      print('🔄 السنة الحالية: إجبار إعادة تحميل البيانات');
-      _resetAndFetch(forceRefresh: true);
-    } else {
-      _resetAndFetch();
-    }
-
-    notifyListeners();
-  }
-
-  // ✅ دالة للتحقق مما إذا كان يجب استخدام cache السنة الحالية
-  bool _shouldUseCurrentYearCache() {
-    if (_lastCurrentYearCacheUpdate == null) return false;
-
-    final now = DateTime.now();
-    final diff = now.difference(_lastCurrentYearCacheUpdate!);
-
-    // ✅ استخدم cache فقط إذا كان التحديث منذ أقل من 2 دقيقة
-    return diff.inMinutes < 2;
-  }
-
-  void clearDateFilter() {
-    _selectedDate = null;
-    _selectedMonth = null;
-    _selectedYear = null;
-    _dateFilterType = 'day';
-    _resetAndFetch();
-    notifyListeners();
   }
 
   // █████████████████████████████████████████████████████████████████████████
@@ -384,284 +524,13 @@ class SalesProvider extends ChangeNotifier {
   }
 
   // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ تحديث الـ Cache للفاتورة الجديدة ███████████████████████████████████████
+  // ████████████████████████████████ التحميل والتصفية ███████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
 
-  // ✅ تحديث الـ Cache للفاتورة الجديدة
-  Future<void> updateCacheWithNewSale(Sale newSale) async {
-    try {
-      print('🔄 بدء تحديث الـ cache بفاتورة جديدة #${newSale.id}');
-
-      // 1. تحديث cache للسنة الحالية
-      final currentYear = DateTime.now().year;
-      final yearCacheKey =
-          'payment=الكل|customer=الكل|tax=الكل|dateType=year|month=null|year=$currentYear|date=null';
-
-      if (_salesCache.containsKey(yearCacheKey)) {
-        // تحقق أولاً إذا كانت الفاتورة موجودة بالفعل (لتجنب التكرار)
-        final existingIndex = _salesCache[yearCacheKey]!.indexWhere(
-          (s) => s.id == newSale.id,
-        );
-        if (existingIndex == -1) {
-          // أضف الفاتورة الجديدة إلى بداية الـ Cache
-          _salesCache[yearCacheKey]!.insert(0, newSale);
-          print(
-            '✅ تم تحديث cache السنة $currentYear بفاتورة جديدة #${newSale.id}',
-          );
-
-          // تحديث وقت آخر تحديث
-          _lastCurrentYearCacheUpdate = DateTime.now();
-        } else {
-          print(
-            'ℹ️ الفاتورة #${newSale.id} موجودة بالفعل في cache السنة $currentYear',
-          );
-        }
-      } else {
-        // إذا لم يكن هناك cache للسنة الحالية، قم بإنشائه
-        print(
-          '⚠️ لا يوجد cache للسنة $currentYear، سيتم إنشاؤه عند التحميل التالي',
-        );
-      }
-
-      // 2. تحديث cache حسب التاريخ (اليوم)
-      try {
-        final saleDate = DateTime.parse(newSale.date);
-        final dayCacheKey =
-            'payment=الكل|customer=الكل|tax=الكل|dateType=day|month=null|year=null|date=${saleDate.toIso8601String().substring(0, 10)}';
-
-        if (_salesCache.containsKey(dayCacheKey)) {
-          final existingIndex = _salesCache[dayCacheKey]!.indexWhere(
-            (s) => s.id == newSale.id,
-          );
-          if (existingIndex == -1) {
-            _salesCache[dayCacheKey]!.insert(0, newSale);
-            print('✅ تم تحديث cache اليوم بفاتورة جديدة #${newSale.id}');
-          }
-        }
-      } catch (e) {
-        print('❌ خطأ في معالجة تاريخ الفاتورة: $e');
-      }
-
-      // 3. إذا كنا نعرض البيانات الحالية، قم بتحديثها مباشرة
-      final currentCacheKey = _currentCacheKey;
-      if (currentCacheKey != null &&
-          currentCacheKey.contains('dateType=year') &&
-          currentCacheKey.contains('year=$currentYear')) {
-        // تحقق من عدم وجود الفاتورة بالفعل
-        final existingIndex = _allSales.indexWhere((s) => s.id == newSale.id);
-        if (existingIndex == -1) {
-          _allSales.insert(0, newSale);
-          _displayedSales.insert(0, newSale);
-          print(
-            '✅ تم إضافة الفاتورة الجديدة #${newSale.id} إلى العرض الحالي (السنة الحالية)',
-          );
-          notifyListeners();
-        }
-      }
-
-      // 4. إذا كنا نعرض اليوم، قم بتحديث العرض
-      if (_dateFilterType == 'day' && _selectedDate != null) {
-        try {
-          final saleDate = DateTime.parse(newSale.date);
-          final selectedDateStr =
-              _selectedDate!.toIso8601String().split('T')[0];
-          final saleDateStr = saleDate.toIso8601String().split('T')[0];
-
-          if (selectedDateStr == saleDateStr) {
-            final existingIndex = _allSales.indexWhere(
-              (s) => s.id == newSale.id,
-            );
-            if (existingIndex == -1) {
-              _allSales.insert(0, newSale);
-              _displayedSales.insert(0, newSale);
-              print('✅ تم إضافة الفاتورة الجديدة #${newSale.id} إلى عرض اليوم');
-              notifyListeners();
-            }
-          }
-        } catch (e) {
-          print('❌ خطأ في مقارنة التواريخ: $e');
-        }
-      }
-
-      // 5. تحديث cache للمفتاح الحالي إذا كان موجوداً
-      if (_currentCacheKey != null &&
-          _salesCache.containsKey(_currentCacheKey)) {
-        final existingIndex = _salesCache[_currentCacheKey]!.indexWhere(
-          (s) => s.id == newSale.id,
-        );
-        if (existingIndex == -1) {
-          _salesCache[_currentCacheKey]!.insert(0, newSale);
-          print('✅ تم تحديث cache المفتاح الحالي بفاتورة جديدة #${newSale.id}');
-        }
-      }
-
-      print('✅ تم الانتهاء من تحديث الـ cache للفاتورة الجديدة #${newSale.id}');
-    } catch (e) {
-      print('❌ خطأ في تحديث الـ cache: $e');
-      print('❌ تفاصيل الخطأ: ${e.toString()}');
-    }
-  }
-
-  // ✅ إعادة تحميل الـ Cache للسنة الحالية
-  Future<void> reloadCurrentYearCache() async {
-    final currentYear = DateTime.now().year;
-    final cacheKey =
-        'payment=الكل|customer=الكل|tax=الكل|dateType=year|month=null|year=$currentYear|date=null';
-
-    try {
-      print('🔄 بدء إعادة تحميل cache السنة $currentYear');
-
-      final db = await _dbHelper.db;
-      final result = await db.rawQuery('''
-        SELECT 
-          s.id,
-          s.date,
-          s.total_amount,
-          s.total_profit,
-          s.customer_id,
-          c.name AS customer_name,
-          s.payment_type,
-          s.show_for_tax
-        FROM sales s
-        LEFT JOIN customers c ON s.customer_id = c.id
-        WHERE s.date LIKE '$currentYear-%'
-        ORDER BY s.date DESC
-      ''');
-
-      final sales = result.map((e) => Sale.fromMap(e)).toList();
-      _salesCache[cacheKey] = sales;
-
-      // تحديث وقت آخر تحديث
-      _lastCurrentYearCacheUpdate = DateTime.now();
-
-      print(
-        '✅ تم إعادة تحميل cache السنة $currentYear بـ ${sales.length} فاتورة',
-      );
-
-      // إذا كنا نعرض السنة الحالية، قم بتحديث البيانات مباشرة
-      if (_selectedYear == currentYear && _dateFilterType == 'year') {
-        _allSales = List.from(sales);
-        _displayedSales = List.from(sales);
-        print('✅ تم تحديث العرض الحالي بـ ${sales.length} فاتورة');
-        notifyListeners();
-      }
-    } catch (e) {
-      print('❌ خطأ في إعادة تحميل cache السنة الحالية: $e');
-      print('❌ تفاصيل الخطأ: ${e.toString()}');
-    }
-  }
-
-  // ✅ إلغاء الـ Cache للسنة الحالية (لإجبار إعادة التحميل)
-  void invalidateCurrentYearCache() {
-    final currentYear = DateTime.now().year;
-    final cacheKey =
-        'payment=الكل|customer=الكل|tax=الكل|dateType=year|month=null|year=$currentYear|date=null';
-
-    _salesCache.remove(cacheKey);
-    _lastCurrentYearCacheUpdate = null;
-    print('🗑️ تم إلغاء cache السنة $currentYear لإجبار إعادة التحميل');
-  }
-
-  // ✅ تحديث الـ Cache لجميع المفاتيح المتعلقة بسنة معينة
-  void invalidateYearCache(int year) {
-    final keysToRemove = <String>[];
-
-    for (final key in _salesCache.keys) {
-      if (key.contains('year=$year')) {
-        keysToRemove.add(key);
-      }
-    }
-
-    for (final key in keysToRemove) {
-      _salesCache.remove(key);
-    }
-
-    if (year == DateTime.now().year) {
-      _lastCurrentYearCacheUpdate = null;
-    }
-
-    print('🗑️ تم إلغاء ${keysToRemove.length} cache لسنة $year');
-  }
-
-  // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ التحميل التدريجي مع الفلاتر ███████████████████████████████████████
-  // █████████████████████████████████████████████████████████████████████████
-
-  int todaySalesCount = 0;
-
-  Future<void> loadTodaySalesCount() async {
-    final db = await _dbHelper.db;
-    final result = await db.rawQuery("""
-      SELECT COUNT(*) as count 
-      FROM sales
-      WHERE SUBSTR(date, 1, 10) = DATE('now')
-    """);
-    todaySalesCount = result.first['count'] as int;
-    notifyListeners();
-  }
-
-  // ✅ دالة لإعادة التعيين والجلب
-  // ✅ دالة لإعادة التعيين والجلب
   void _resetAndFetch({bool forceRefresh = false}) {
-    _page = 0;
-    _allSales.clear();
-    _displayedSales.clear();
-    _hasMore = true;
+    resetForNewSearch(); // ✅ استخدام الدالة الجديدة
     Future.microtask(() => _fetchSalesWithFilters(forceRefresh: forceRefresh));
   }
-
-  // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ نظام الاستماع للتحديثات ███████████████████████████████████████
-  // █████████████████████████████████████████████████████████████████████████
-
-  // ✅ StreamController لتلقي تحديثات الفواتير الجديدة
-  final StreamController<int> _newSaleController =
-      StreamController<int>.broadcast();
-  Stream<int> get newSaleStream => _newSaleController.stream;
-
-  // ✅ إعلام بإضافة فاتورة جديدة
-  void notifyNewSaleAdded(int saleId) {
-    print('📢 إشعار بإضافة فاتورة جديدة #$saleId');
-    _newSaleController.add(saleId);
-
-    // ✅ تحديث الـ Cache للسنة الحالية مباشرة
-    invalidateCurrentYearCache();
-
-    // ✅ إذا كنا نعرض السنة الحالية، قم بإعادة التحميل
-    if (_selectedYear == DateTime.now().year && _dateFilterType == 'year') {
-      print('🔄 إعادة تحميل عرض السنة الحالية تلقائيًا');
-      Future.delayed(const Duration(milliseconds: 500), () {
-        fetchSales(forceRefresh: true);
-      });
-    }
-  }
-
-  // ✅ دالة لفحص وجود فاتورة في السنة الحالية
-  Future<bool> isSaleInCurrentYear(int saleId) async {
-    try {
-      final db = await _dbHelper.db;
-      final currentYear = DateTime.now().year;
-
-      final result = await db.rawQuery(
-        '''
-      SELECT COUNT(*) as count 
-      FROM sales 
-      WHERE id = ? AND date LIKE '$currentYear-%'
-      ''',
-        [saleId],
-      );
-
-      return (result.first['count'] as int) > 0;
-    } catch (e) {
-      print('❌ خطأ في فحص سنة الفاتورة: $e');
-      return false;
-    }
-  }
-
-  // ✅ التحميل التدريجي للفواتير مع الـ cache
-  // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ التحميل التدريجي مع الفلاتر ███████████████████████████████████████
-  // █████████████████████████████████████████████████████████████████████████
 
   Future<void> _fetchSalesWithFilters({
     bool loadMore = false,
@@ -669,36 +538,19 @@ class SalesProvider extends ChangeNotifier {
   }) async {
     if (_isLoading || (!_hasMore && loadMore)) return;
 
-    // ✅ تحقق مما إذا كنا في السنة الحالية
-    bool isCurrentYear =
-        _selectedYear == DateTime.now().year; // تم تغيير final إلى bool عادي
-
-    // ✅ إذا كان forceRefresh، ألغِ cache المفتاح الحالي
-    if (forceRefresh) {
-      final cacheKey = _generateCacheKey();
-      _salesCache.remove(cacheKey);
-      print('🔄 forceRefresh: تم إلغاء cache للمفتاح: $cacheKey');
-
-      if (isCurrentYear) {
-        _lastCurrentYearCacheUpdate = null;
-      }
-    }
-
-    // ✅ تحقق من الـ cache أولاً (فقط للتحميل الأولي)
     final cacheKey = _generateCacheKey();
 
-    // ✅ لا تستخدم cache للسنة الحالية إذا مر أكثر من دقيقتين على آخر تحديث
-    final bool shouldUseCache =
-        _salesCache.containsKey(cacheKey) &&
-        (!loadMore) &&
-        (!isCurrentYear || _shouldUseCurrentYearCache());
-
-    if (shouldUseCache) {
-      print('✅ استخدام الـ cache الموجود للمفتاح: $cacheKey');
+    // ✅ عند استخدام الـ Cache، نتحقق من عدد النتائج لتحديد إذا كان هناك المزيد
+    if (_salesCache.containsKey(cacheKey) && !loadMore && !forceRefresh) {
       _allSales = List.from(_salesCache[cacheKey]!);
       _displayedSales = List.from(_allSales);
       _currentCacheKey = cacheKey;
-      _hasMore = false;
+
+      // ✅ تحديد إذا كان هناك المزيد بناءً على عدد النتائج في الـ Cache
+      // إذا كان العدد يساوي أو أكبر من الـ Limit، قد يكون هناك المزيد
+      _hasMore = _allSales.length >= _limit;
+      _page = 1; // ✅ لأننا حصلنا على الصفحة 0 من الـ Cache
+
       notifyListeners();
       return;
     }
@@ -711,13 +563,12 @@ class SalesProvider extends ChangeNotifier {
     if (!loadMore) {
       _page = 0;
       _allSales.clear();
-      _hasMore = true;
+      _hasMore = true; // ✅ دائماً نبدأ بـ true عند بحث جديد
     }
 
     final db = await _dbHelper.db;
 
     try {
-      // ✅ تحديد الجدول بناءً على الفلتر الزمني
       final bool shouldUseArchive;
       final int? selectedYear = _selectedYear;
       final int currentYear = DateTime.now().year;
@@ -729,32 +580,26 @@ class SalesProvider extends ChangeNotifier {
       } else if (_dateFilterType == 'day' && _selectedDate != null) {
         shouldUseArchive = _selectedDate!.year < currentYear;
       } else {
-        // بدون فلتر تاريخ → نعرض السنة الحالية فقط
         shouldUseArchive = false;
-
-        // إذا لم يكن هناك فلتر تاريخ، نضبط فلتر السنة على السنة الحالية تلقائياً
         if (_selectedYear == null && !loadMore) {
           _selectedYear = currentYear;
           _dateFilterType = 'year';
-          isCurrentYear = true; // تحديث القيمة هنا
+          _tempSelectedYear = _selectedYear;
+          _tempDateFilterType = _dateFilterType;
         }
       }
 
       String table = shouldUseArchive ? "sales_archive s" : "sales s";
 
-      // ✅ بناء استعلام التاريخ
       String dateCondition = _buildDateWhereClause();
 
-      // ✅ بناء جميع شروط الفلتر
       final List<String> conditions = [dateCondition];
 
-      // فلترة نوع الدفع
       if (_selectedPaymentType != 'الكل') {
         final paymentValue = _selectedPaymentType.toLowerCase();
         conditions.add("s.payment_type = '$paymentValue'");
       }
 
-      // فلترة العميل
       if (_selectedCustomer != 'الكل') {
         if (_selectedCustomer == 'بدون عميل') {
           conditions.add("s.customer_id IS NULL");
@@ -763,7 +608,6 @@ class SalesProvider extends ChangeNotifier {
         }
       }
 
-      // فلترة الضريبة
       if (_selectedTaxFilter != 'الكل') {
         final taxValue = _selectedTaxFilter == 'مضمنه بالضرائب' ? 1 : 0;
         conditions.add("s.show_for_tax = $taxValue");
@@ -771,7 +615,6 @@ class SalesProvider extends ChangeNotifier {
 
       String whereClause = conditions.join(' AND ');
 
-      // ✅ الاستعلام النهائي
       final result = await db.rawQuery('''
       SELECT 
         s.id,
@@ -791,178 +634,47 @@ class SalesProvider extends ChangeNotifier {
 
       final newSales = result.map((e) => Sale.fromMap(e)).toList();
 
+      // ✅ تحديد إذا كان هناك المزيد من البيانات
       if (newSales.length < _limit) {
         _hasMore = false;
+      } else {
+        _hasMore = true; // ✅ إذا حصلنا على عدد كامل، فهناك احتمال للمزيد
       }
 
       if (loadMore) {
         _allSales.addAll(newSales);
-        _updateCache(); // تحديث الـ cache
+        _updateCache();
       } else {
         _allSales = newSales;
         _currentCacheKey = cacheKey;
-        _salesCache[cacheKey] = List.from(_allSales); // حفظ في الـ cache
-
-        // ✅ تحديث وقت آخر تحديث للسنة الحالية
-        if (isCurrentYear) {
-          _lastCurrentYearCacheUpdate = DateTime.now();
-        }
+        _salesCache[cacheKey] = List.from(_allSales);
       }
 
       _page++;
-
-      // ✅ تعيين البيانات المعروضة
       _displayedSales = List.from(_allSales);
-
-      // ✅ طباعة معلومات التصحيح
     } catch (e) {
-      print('❌ تفاصيل الخطأ: ${e.toString()}');
+      print('❌ خطأ في جلب الفواتير: $e');
+      _hasMore = false; // ✅ في حالة الخطأ، لا نسمح بتحميل المزيد
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ دوال الفلترة المحسنة ███████████████████████████████████████
-  // █████████████████████████████████████████████████████████████████████████
-
-  void setPaymentTypeFilter(String? value) {
-    final oldValue = _selectedPaymentType;
-    _selectedPaymentType = value ?? 'الكل';
-
-    // ✅ إذا كان نفس القيمة، لا تفعل شيئاً
-    if (oldValue == _selectedPaymentType) return;
-
-    // ✅ إذا كان يمكن التصفية محلياً، استخدمها
-    if (_canFilterLocally()) {
-      _applyLocalFilters();
-      notifyListeners();
-    } else {
-      _resetAndFetch();
-    }
-  }
-
-  void setCustomerFilter(String? value) {
-    final oldValue = _selectedCustomer;
-    _selectedCustomer = value ?? 'الكل';
-
-    if (oldValue == _selectedCustomer) return;
-
-    if (_canFilterLocally()) {
-      _applyLocalFilters();
-      notifyListeners();
-    } else {
-      _resetAndFetch();
-    }
-  }
-
-  void setDateFilter(DateTime? date) {
-    _selectedDate = date;
-    _dateFilterType = 'day';
-
-    // ✅ تحقق من الـ cache أولاً
-    final cacheKey = _generateCacheKey();
-    if (_salesCache.containsKey(cacheKey)) {
-      print('✅ استخدام الـ cache الموجود للتاريخ');
-      _allSales = List.from(_salesCache[cacheKey]!);
-      _displayedSales = List.from(_allSales);
-      _currentCacheKey = cacheKey;
-      _hasMore = false;
-      notifyListeners();
-      return;
-    }
-
-    _resetAndFetch();
-  }
-
-  void setTaxFilter(String? value) {
-    final oldValue = _selectedTaxFilter;
-    _selectedTaxFilter = value ?? 'الكل';
-
-    if (oldValue == _selectedTaxFilter) return;
-
-    if (_canFilterLocally()) {
-      _applyLocalFilters();
-      notifyListeners();
-    } else {
-      _resetAndFetch();
-    }
-  }
-
-  void clearFilters() {
-    _selectedPaymentType = 'الكل';
-    _selectedCustomer = 'الكل';
-    _selectedTaxFilter = 'الكل';
-
-    if (_canFilterLocally()) {
-      _displayedSales = List.from(_allSales);
-      notifyListeners();
-    } else {
-      _resetAndFetch();
-    }
-  }
-
-  void clearAllFilters() {
-    _selectedPaymentType = 'الكل';
-    _selectedCustomer = 'الكل';
-    _selectedTaxFilter = 'الكل';
-    _selectedDate = null;
-    _selectedMonth = null;
-    _selectedYear = null;
-    _dateFilterType = 'day';
-
-    // ✅ استخدام الـ cache الافتراضي (السنة الحالية)
-    final currentYear = DateTime.now().year;
-    final defaultCacheKey =
-        'payment=الكل|customer=الكل|tax=الكل|dateType=year|month=null|year=$currentYear|date=null';
-
-    if (_salesCache.containsKey(defaultCacheKey) &&
-        _shouldUseCurrentYearCache()) {
-      print('✅ استخدام الـ cache الافتراضي');
-      _allSales = List.from(_salesCache[defaultCacheKey]!);
-      _displayedSales = List.from(_allSales);
-      _currentCacheKey = defaultCacheKey;
-      _hasMore = false;
-      notifyListeners();
-    } else {
-      // تعيين السنة الحالية وجلب البيانات
-      _selectedYear = currentYear;
-      _dateFilterType = 'year';
-      _resetAndFetch();
-    }
-  }
-
-  void reset() {
-    _allSales.clear();
-    _displayedSales.clear();
-    _isLoading = false;
-    _hasMore = true;
-    _page = 0;
-    _selectedPaymentType = 'الكل';
-    _selectedCustomer = 'الكل';
-    _selectedDate = null;
-    _selectedTaxFilter = 'الكل';
-    _selectedMonth = null;
-    _selectedYear = null;
-    _dateFilterType = 'day';
-    _currentCacheKey = null;
-    _lastCurrentYearCacheUpdate = null;
-    notifyListeners();
-  }
-
-  // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ الدوال العامة للاستخدام ███████████████████████████████████████
-  // █████████████████████████████████████████████████████████████████████████
-
   Future<void> fetchSales({
     bool loadMore = false,
     bool forceRefresh = false,
+    bool resetPagination = false, // ✅ معلمة جديدة
   }) async {
-    // إذا كان هذا أول تحميل ولم يكن هناك فلتر سنة، نضبط السنة الحالية
+    if (resetPagination) {
+      resetForNewSearch(); // ✅ إعادة تعيين إذا طلبنا ذلك
+    }
+
     if (!loadMore && _selectedYear == null) {
       _selectedYear = DateTime.now().year;
       _dateFilterType = 'year';
+      _tempSelectedYear = _selectedYear;
+      _tempDateFilterType = _dateFilterType;
     }
 
     await _fetchSalesWithFilters(
@@ -977,100 +689,9 @@ class SalesProvider extends ChangeNotifier {
     }
   }
 
-  void applyDefaultFilter() {
-    if (_selectedYear == null) {
-      _selectedYear = DateTime.now().year;
-      _dateFilterType = 'year';
-      _resetAndFetch();
-    }
-  }
-
   // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ Prefetching للبيانات ███████████████████████████████████████
+  // ████████████████████████████████ دوال التحديث ███████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
-
-  // ✅ تحميل بيانات السنة الحالية مسبقاً
-  Future<void> prefetchCurrentYear() async {
-    final currentYear = DateTime.now().year;
-    final cacheKey =
-        'payment=الكل|customer=الكل|tax=الكل|dateType=year|month=null|year=$currentYear|date=null';
-
-    if (_salesCache.containsKey(cacheKey)) {
-      return; // البيانات موجودة بالفعل
-    }
-
-    try {
-      print('🔄 بدء تحميل بيانات السنة $currentYear مسبقاً');
-
-      final db = await _dbHelper.db;
-      final result = await db.rawQuery('''
-        SELECT 
-          s.id,
-          s.date,
-          s.total_amount,
-          s.total_profit,
-          s.customer_id,
-          c.name AS customer_name,
-          s.payment_type,
-          s.show_for_tax
-        FROM sales s
-        LEFT JOIN customers c ON s.customer_id = c.id
-        WHERE s.date LIKE '$currentYear-%'
-        ORDER BY s.date DESC
-        LIMIT 100
-      ''');
-
-      final sales = result.map((e) => Sale.fromMap(e)).toList();
-      _salesCache[cacheKey] = sales;
-      _lastCurrentYearCacheUpdate = DateTime.now();
-
-      print('✅ تم تحميل ${sales.length} فاتورة للسنة $currentYear مسبقاً');
-    } catch (e) {
-      print('❌ خطأ في تحميل البيانات المسبق: $e');
-    }
-  }
-
-  // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ دوال التحديث المعدلة (بدون copyWith) ███████████████████████████████████████
-  // █████████████████████████████████████████████████████████████████████████
-
-  List<int> selectedSaleIds = [];
-  bool isBatchEditing = false;
-
-  // دالة لتحديد/إلغاء تحديد فاتورة
-  void toggleSaleSelection(int saleId) {
-    if (selectedSaleIds.contains(saleId)) {
-      selectedSaleIds.remove(saleId);
-    } else {
-      selectedSaleIds.add(saleId);
-    }
-    notifyListeners();
-  }
-
-  // دالة لتحديد كل الفواتير المعروضة
-  void selectAllShownSales(List<Sale> shownSales) {
-    selectedSaleIds = shownSales.map((sale) => sale.id!).toList();
-    notifyListeners();
-  }
-
-  // دالة لإلغاء تحديد الكل
-  void clearSelection() {
-    selectedSaleIds.clear();
-    notifyListeners();
-  }
-
-  // دالة لتغيير طريقة الدفع للفواتير المحددة
-  Future<void> updateMultiplePaymentTypes(String paymentType) async {
-    if (selectedSaleIds.isEmpty) return;
-
-    for (int saleId in selectedSaleIds) {
-      await updatePaymentType(saleId, paymentType);
-    }
-
-    // مسح التحديد بعد التعديل
-    selectedSaleIds.clear();
-    notifyListeners();
-  }
 
   Future<void> updatePaymentType(
     int saleId,
@@ -1079,20 +700,16 @@ class SalesProvider extends ChangeNotifier {
   }) async {
     final db = await _dbHelper.db;
 
-    // تأكد إن القيمة فقط 'cash' أو 'credit'
     if (paymentType != 'cash' && paymentType != 'credit') {
       throw Exception('نوع الدفع غير صالح. يجب أن يكون "cash" أو "credit".');
     }
 
-    // إعداد البيانات للتحديث
     Map<String, dynamic> updateData = {'payment_type': paymentType};
 
-    // إذا كان credit وتم تمرير customerId، أضفه للبيانات
     if (paymentType == 'credit') {
       updateData['customer_id'] = customerId;
     }
 
-    // تنفيذ التحديث في قاعدة البيانات
     int count = await db.update(
       'sales',
       updateData,
@@ -1100,15 +717,12 @@ class SalesProvider extends ChangeNotifier {
       whereArgs: [saleId],
     );
 
-    // تحقق إذا لم يتم التحديث لأي سجل
     if (count == 0) {
       throw Exception('فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.');
     }
 
-    // ✅ تحديث البيانات المحلية
     final index = _allSales.indexWhere((sale) => sale.id == saleId);
     if (index != -1) {
-      // إنشاء Sale جديد مع البيانات المحدثة
       final oldSale = _allSales[index];
       final updatedSale = Sale(
         id: oldSale.id,
@@ -1130,10 +744,8 @@ class SalesProvider extends ChangeNotifier {
   Future<void> updateShowForTax(int saleId, bool showForTax) async {
     final db = await _dbHelper.db;
 
-    // إعداد البيانات للتحديث
     Map<String, dynamic> updateData = {'show_for_tax': showForTax ? 1 : 0};
 
-    // تنفيذ التحديث في قاعدة البيانات
     int count = await db.update(
       'sales',
       updateData,
@@ -1141,15 +753,12 @@ class SalesProvider extends ChangeNotifier {
       whereArgs: [saleId],
     );
 
-    // تحقق إذا لم يتم التحديث لأي سجل
     if (count == 0) {
       throw Exception('فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.');
     }
 
-    // ✅ تحديث البيانات المحلية
     final index = _allSales.indexWhere((sale) => sale.id == saleId);
     if (index != -1) {
-      // إنشاء Sale جديد مع البيانات المحدثة
       final oldSale = _allSales[index];
       final updatedSale = Sale(
         id: oldSale.id,
@@ -1168,93 +777,10 @@ class SalesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // دالة مساعدة لإنشاء Sale جديد (بديل عن copyWith)
-  Sale _createUpdatedSale({
-    required Sale oldSale,
-    String? paymentType,
-    int? showForTax,
-    int? customerId,
-  }) {
-    return Sale(
-      id: oldSale.id,
-      date: oldSale.date,
-      totalAmount: oldSale.totalAmount,
-      totalProfit: oldSale.totalProfit,
-      customerId: customerId ?? oldSale.customerId,
-      customerName: oldSale.customerName,
-      paymentType: paymentType ?? oldSale.paymentType,
-      showForTax:
-          showForTax != null ? showForTax == 1 : (oldSale.showForTax == 1),
-    );
-  }
-
-  Future<Map<String, dynamic>> getSaleDetails(int saleId) async {
-    final db = await _dbHelper.db;
-
-    // ✅ تحديد الجدول بناءً على سنة الفاتورة
-    bool useArchive = false;
-
-    // أولاً نحاول البحث في sales
-    var saleResult = await db.rawQuery(
-      '''
-      SELECT s.*, c.name as customer_name, c.phone as customer_phone
-      FROM sales s 
-      LEFT JOIN customers c ON s.customer_id = c.id 
-      WHERE s.id = ?
-      ''',
-      [saleId],
-    );
-
-    // إذا لم نجد في sales، نبحث في الأرشيف
-    if (saleResult.isEmpty) {
-      saleResult = await db.rawQuery(
-        '''
-        SELECT s.*, c.name as customer_name, c.phone as customer_phone
-        FROM sales_archive s 
-        LEFT JOIN customers c ON s.customer_id = c.id 
-        WHERE s.id = ?
-        ''',
-        [saleId],
-      );
-      useArchive = true;
-    }
-
-    if (saleResult.isEmpty) {
-      throw Exception('الفاتورة غير موجودة');
-    }
-
-    // ✅ تحديد جدول العناصر بناءً على مصدر الفاتورة
-    String itemsTable = useArchive ? 'sale_items_archive' : 'sale_items';
-
-    // عناصر الفاتورة مع معلومات الوحدات
-    final itemsResult = await db.rawQuery(
-      '''
-      SELECT 
-        si.*, 
-        p.name as product_name,
-        p.base_unit as product_base_unit,
-        pu.unit_name as custom_unit_name,
-        pu.contain_qty as unit_contain_qty
-      FROM $itemsTable si 
-      JOIN products p ON si.product_id = p.id 
-      LEFT JOIN product_units pu ON si.unit_id = pu.id
-      WHERE si.sale_id = ?
-      ''',
-      [saleId],
-    );
-
-    return {
-      'sale': Sale.fromMap(saleResult.first),
-      'items': itemsResult,
-      'isFromArchive': useArchive,
-    };
-  }
-
   Future<void> deleteSale(int saleId) async {
     final db = await _dbHelper.db;
 
     await db.transaction((txn) async {
-      // 0️⃣ جلب بيانات الفاتورة (للدين)
       final saleResult = await txn.query(
         'sales',
         where: 'id = ?',
@@ -1275,14 +801,12 @@ class SalesProvider extends ChangeNotifier {
       final String paymentType = sale['payment_type'] as String;
       final int? customerId = sale['customer_id'] as int?;
 
-      // 1️⃣ جلب عناصر الفاتورة
       final saleItems = await txn.query(
         'sale_items',
         where: 'sale_id = ?',
         whereArgs: [saleId],
       );
 
-      // 2️⃣ إرجاع الكميات إلى المخزون
       for (var item in saleItems) {
         final int productId = item['product_id'] as int;
         final double quantity =
@@ -1319,7 +843,6 @@ class SalesProvider extends ChangeNotifier {
         );
       }
 
-      // 3️⃣ إلغاء الدين إذا كانت الفاتورة آجل
       if (paymentType == 'credit' && customerId != null) {
         await txn.rawUpdate(
           '''
@@ -1331,14 +854,10 @@ class SalesProvider extends ChangeNotifier {
         );
       }
 
-      // 4️⃣ حذف عناصر الفاتورة
       await txn.delete('sale_items', where: 'sale_id = ?', whereArgs: [saleId]);
-
-      // 5️⃣ حذف الفاتورة
       await txn.delete('sales', where: 'id = ?', whereArgs: [saleId]);
     });
 
-    // 6️⃣ تحديث القوائم المحلية
     _allSales.removeWhere((sale) => sale.id == saleId);
     _displayedSales.removeWhere((sale) => sale.id == saleId);
 
@@ -1346,54 +865,166 @@ class SalesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<Map<String, dynamic>> getSaleDetails(int saleId) async {
+    final db = await _dbHelper.db;
+
+    bool useArchive = false;
+
+    var saleResult = await db.rawQuery(
+      '''
+      SELECT s.*, c.name as customer_name, c.phone as customer_phone
+      FROM sales s 
+      LEFT JOIN customers c ON s.customer_id = c.id 
+      WHERE s.id = ?
+      ''',
+      [saleId],
+    );
+
+    if (saleResult.isEmpty) {
+      saleResult = await db.rawQuery(
+        '''
+        SELECT s.*, c.name as customer_name, c.phone as customer_phone
+        FROM sales_archive s 
+        LEFT JOIN customers c ON s.customer_id = c.id 
+        WHERE s.id = ?
+        ''',
+        [saleId],
+      );
+      useArchive = true;
+    }
+
+    if (saleResult.isEmpty) {
+      throw Exception('الفاتورة غير موجودة');
+    }
+
+    String itemsTable = useArchive ? 'sale_items_archive' : 'sale_items';
+
+    final itemsResult = await db.rawQuery(
+      '''
+      SELECT 
+        si.*, 
+        p.name as product_name,
+        p.base_unit as product_base_unit,
+        pu.unit_name as custom_unit_name,
+        pu.contain_qty as unit_contain_qty
+      FROM $itemsTable si 
+      JOIN products p ON si.product_id = p.id 
+      LEFT JOIN product_units pu ON si.unit_id = pu.id
+      WHERE si.sale_id = ?
+      ''',
+      [saleId],
+    );
+
+    return {
+      'sale': Sale.fromMap(saleResult.first),
+      'items': itemsResult,
+      'isFromArchive': useArchive,
+    };
+  }
+
   // █████████████████████████████████████████████████████████████████████████
-  // ████████████████████████████████ دوال مساعدة للتحديث الفوري ███████████████████████████████████████
+  // ████████████████████████████████ دوال مساعدة أخرى ███████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
 
-  // ✅ إضافة فاتورة جديدة مباشرة إلى البيانات المعروضة
+  void toggleSaleSelection(int saleId) {
+    if (selectedSaleIds.contains(saleId)) {
+      selectedSaleIds.remove(saleId);
+    } else {
+      selectedSaleIds.add(saleId);
+    }
+    notifyListeners();
+  }
+
+  void selectAllShownSales(List<Sale> shownSales) {
+    selectedSaleIds = shownSales.map((sale) => sale.id!).toList();
+    notifyListeners();
+  }
+
+  void clearSelection() {
+    selectedSaleIds.clear();
+    notifyListeners();
+  }
+
+  Future<void> updateMultiplePaymentTypes(String paymentType) async {
+    if (selectedSaleIds.isEmpty) return;
+
+    for (int saleId in selectedSaleIds) {
+      await updatePaymentType(saleId, paymentType);
+    }
+
+    selectedSaleIds.clear();
+    notifyListeners();
+  }
+
   Future<void> addNewSaleDirectly(Sale newSale) async {
     try {
-      print('➕ إضافة فاتورة جديدة مباشرة إلى البروفايدر #${newSale.id}');
-
-      // 1. أضف الفاتورة إلى بداية القوائم
       _allSales.insert(0, newSale);
       _displayedSales.insert(0, newSale);
-
-      // 2. تحديث الـ Cache
-      await updateCacheWithNewSale(newSale);
-
-      // 3. إشعار المستمعين بالتغيير
+      _updateCache();
       notifyListeners();
-
-      print('✅ تم إضافة الفاتورة #${newSale.id} بنجاح إلى البروفايدر');
     } catch (e) {
       print('❌ خطأ في إضافة الفاتورة مباشرة: $e');
     }
   }
 
-  // ✅ تحديث فاتورة موجودة
   Future<void> updateSaleDirectly(Sale updatedSale) async {
     try {
-      print('✏️ تحديث فاتورة مباشرة في البروفايدر #${updatedSale.id}');
-
-      // 1. تحديث الفاتورة في القائمة
       final index = _allSales.indexWhere((sale) => sale.id == updatedSale.id);
       if (index != -1) {
         _allSales[index] = updatedSale;
         _displayedSales[index] = updatedSale;
-
-        // 2. تحديث الـ Cache
         _updateCache();
-
-        // 3. إشعار المستمعين بالتغيير
         notifyListeners();
-
-        print('✅ تم تحديث الفاتورة #${updatedSale.id} بنجاح');
-      } else {
-        print('⚠️ الفاتورة #${updatedSale.id} غير موجودة في القائمة');
       }
     } catch (e) {
       print('❌ خطأ في تحديث الفاتورة مباشرة: $e');
+    }
+  }
+
+  Future<void> loadTodaySalesCount() async {
+    final db = await _dbHelper.db;
+    final result = await db.rawQuery("""
+      SELECT COUNT(*) as count 
+      FROM sales
+      WHERE SUBSTR(date, 1, 10) = DATE('now')
+    """);
+    todaySalesCount = result.first['count'] as int;
+    notifyListeners();
+  }
+
+  Future<void> prefetchCurrentYear() async {
+    final currentYear = DateTime.now().year;
+    final cacheKey =
+        'payment=الكل|customer=الكل|tax=الكل|dateType=year|month=null|year=$currentYear|date=null';
+
+    if (_salesCache.containsKey(cacheKey)) {
+      return;
+    }
+
+    try {
+      final db = await _dbHelper.db;
+      final result = await db.rawQuery('''
+        SELECT 
+          s.id,
+          s.date,
+          s.total_amount,
+          s.total_profit,
+          s.customer_id,
+          c.name AS customer_name,
+          s.payment_type,
+          s.show_for_tax
+        FROM sales s
+        LEFT JOIN customers c ON s.customer_id = c.id
+        WHERE s.date LIKE '$currentYear-%'
+        ORDER BY s.date DESC
+        LIMIT 100
+      ''');
+
+      final sales = result.map((e) => Sale.fromMap(e)).toList();
+      _salesCache[cacheKey] = sales;
+      _lastCurrentYearCacheUpdate = DateTime.now();
+    } catch (e) {
+      print('❌ خطأ في تحميل البيانات المسبق: $e');
     }
   }
 }

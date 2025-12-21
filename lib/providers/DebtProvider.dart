@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
 import '../models/customer_balance.dart';
-import '../models/transaction.dart'; // تم تغييرها من payments.dart
+import '../models/transaction.dart';
 
 class DebtProvider extends ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
@@ -11,13 +11,13 @@ class DebtProvider extends ChangeNotifier {
   // بيانات محملة
   // ==============================
   CustomerBalance? _balance;
-  List<Transaction> _transactions = []; // تم تغييرها من List<Payment>
+  List<Transaction> _transactions = [];
 
   CustomerBalance? get balance => _balance;
   List<Transaction> get transactions => _transactions;
 
   // ==============================
-  // 1️⃣ تحميل رصيد الزبون
+  // 1️⃣ تحميل رصيد الزبون من جدول customer_balance
   // ==============================
   Future<void> loadCustomerBalance(int customerId) async {
     final db = await _dbHelper.db;
@@ -43,14 +43,16 @@ class DebtProvider extends ChangeNotifier {
   }
 
   // ==============================
-  // 2️⃣ إضافة دين (فاتورة آجلة)
+  // 2️⃣ إضافة فاتورة آجلة (من جدول sales)
   // ==============================
-  Future<void> addDebt({
+  Future<void> addCreditSale({
     required int customerId,
     required double amount,
+    String? note,
   }) async {
     final db = await _dbHelper.db;
 
+    // تحديث الرصيد (يزيد الدين)
     await db.rawInsert(
       '''
       INSERT INTO customer_balance (customer_id, balance, last_updated)
@@ -59,15 +61,20 @@ class DebtProvider extends ChangeNotifier {
       DO UPDATE SET
         balance = balance + ?,
         last_updated = CURRENT_TIMESTAMP
-    ''',
+      ''',
       [customerId, amount, amount],
     );
 
     await loadCustomerBalance(customerId);
+    notifyListeners();
   }
 
   // ==============================
-  // 3️⃣ إضافة معاملة (الآن تدعم نوعين)
+  // 3️⃣ إضافة معاملة (دفعة أو صرف رصيد)
+  // ==============================
+
+  // ==============================
+  // 3️⃣ إضافة معاملة (دفعة أو صرف رصيد) - المنطق الجديد
   // ==============================
   Future<void> addTransaction({
     required int customerId,
@@ -80,7 +87,7 @@ class DebtProvider extends ChangeNotifier {
     // 1️⃣ أضف المعاملة في جدول transactions
     await db.insert('transactions', {
       'customer_id': customerId,
-      'amount': amount,
+      'amount': amount, // سيتم التحويل تلقائياً إلى REAL في SQLite
       'type': type.name,
       'date': DateTime.now().toIso8601String(),
       'note': note,
@@ -91,26 +98,26 @@ class DebtProvider extends ChangeNotifier {
       // تسديد دفعة: يخصم من الرصيد (يقلل الدين)
       await db.rawUpdate(
         '''
-        UPDATE customer_balance
-        SET balance = balance - ?, last_updated = CURRENT_TIMESTAMP
-        WHERE customer_id = ?
-        ''',
+      UPDATE customer_balance
+      SET balance = balance - ?, last_updated = CURRENT_TIMESTAMP
+      WHERE customer_id = ?
+      ''',
         [amount, customerId],
       );
-    } else {
-      // صرف رصيد: يضيف للرصيد (يزيد الرصيد المتاح أو يقلل الدين)
+    } else if (type == TransactionType.withdrawal) {
+      // صرف رصيد: يزيد الرصيد (إذا كان سالباً) أو يقلل الدين (إذا كان موجباً)
       await db.rawUpdate(
         '''
-        UPDATE customer_balance
-        SET balance = balance + ?, last_updated = CURRENT_TIMESTAMP
-        WHERE customer_id = ?
-        ''',
+      UPDATE customer_balance
+      SET balance = balance - ?, last_updated = CURRENT_TIMESTAMP
+      WHERE customer_id = ?
+      ''',
         [amount, customerId],
       );
     }
 
     await loadCustomerBalance(customerId);
-    await loadTransactionsPage(customerId); // تم تغيير اسم الدالة
+    await loadTransactionsPage(customerId);
     notifyListeners();
   }
 
@@ -128,7 +135,7 @@ class DebtProvider extends ChangeNotifier {
     );
   }
 
-  // دالة جديدة لصرف الرصيد
+  // دالة لصرف الرصيد
   Future<void> addWithdrawal({
     required int customerId,
     required double amount,
@@ -143,7 +150,7 @@ class DebtProvider extends ChangeNotifier {
   }
 
   // ==============================
-  // 4️⃣ تحميل المعاملات لزبون (دفعات + صرف رصيد)
+  // 4️⃣ تحميل المعاملات لزبون
   // ==============================
   Future<List<Transaction>> loadTransactionsPage(
     int customerId, {
@@ -154,7 +161,7 @@ class DebtProvider extends ChangeNotifier {
 
     final offset = page * limit;
     final List<Map<String, dynamic>> maps = await db.query(
-      'transactions', // تم تغيير اسم الجدول من payments
+      'transactions',
       where: 'customer_id = ?',
       whereArgs: [customerId],
       orderBy: 'date DESC, id DESC',
@@ -172,48 +179,31 @@ class DebtProvider extends ChangeNotifier {
   }
 
   // ==============================
-  // 5️⃣ إجمالي الدين (سريع جدًا) من الجدول المحدث
+  // 5️⃣ الحصول على إجمالي الدين من خلال customerId
   // ==============================
-  double get totalDebt {
-    return _balance?.balance ?? 0;
-  }
-
-  // دالة للحصول على إجمالي الدين من خلال customerId
   Future<double> getTotalDebtByCustomerId(int customerId) async {
-    final db = await _dbHelper.db;
-
     try {
-      // 1. مجموع المبيعات الآجلة (credit)
-      final salesResult = await db.rawQuery(
-        '''
-        SELECT COALESCE(SUM(total_amount), 0) as total_credit
-        FROM sales 
-        WHERE customer_id = ? AND payment_type = 'credit'
-        ''',
-        [customerId],
+      final db = await _dbHelper.db;
+
+      // 1. تحقق من وجود رصيد في customer_balance أولاً
+      final balanceRes = await db.query(
+        'customer_balance',
+        where: 'customer_id = ?',
+        whereArgs: [customerId],
+        limit: 1,
       );
 
-      final totalCredit = salesResult.first['total_credit'] as double? ?? 0.0;
+      if (balanceRes.isNotEmpty) {
+        final balanceValue = balanceRes.first['balance'];
+        final balance = _safeToDouble(balanceValue);
+        print(
+          'Balance from customer_balance for customer $customerId: $balance',
+        );
+        return balance;
+      }
 
-      // 2. مجموع المعاملات: الدفعات تخصم، وصرف الرصيد يضيف
-      final transactionsResult = await db.rawQuery(
-        '''
-        SELECT 
-          COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as total_payments,
-          COALESCE(SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END), 0) as total_withdrawals
-        FROM transactions 
-        WHERE customer_id = ?
-        ''',
-        [customerId],
-      );
-
-      final totalPayments =
-          transactionsResult.first['total_payments'] as double? ?? 0.0;
-      final totalWithdrawals =
-          transactionsResult.first['total_withdrawals'] as double? ?? 0.0;
-
-      // 3. الدين الإجمالي = مجموع المشتريات الآجلة - مجموع الدفعات + مجموع صرف الرصيد
-      return totalCredit - totalPayments + totalWithdrawals;
+      // 2. إذا لم يكن هناك رصيد، احسب من الصفر
+      return await calculateTotalDebtFromScratch(customerId);
     } catch (e) {
       print('Error calculating debt for customer $customerId: $e');
       return 0.0;
@@ -221,47 +211,103 @@ class DebtProvider extends ChangeNotifier {
   }
 
   // ==============================
-  // 6️⃣ حساب إجمالي الدين من الصفر (مجموع الفواتير الآجلة ناقص الدفعات + صرف الرصيد)
+  // 6️⃣ حساب إجمالي الدين من الصفر (من جدول sales و transactions)
   // ==============================
   Future<double> calculateTotalDebtFromScratch(int customerId) async {
     final db = await _dbHelper.db;
 
     try {
-      // 1. مجموع الفواتير الآجلة (المشتريات على الحساب)
-      final salesResult = await db.rawQuery(
-        '''
+      print('Calculating debt from scratch for customer $customerId');
+
+      // 1. مجموع الفواتير الآجلة من جدول sales
+      double totalCreditSales = 0.0;
+      try {
+        final salesResult = await db.rawQuery(
+          '''
         SELECT COALESCE(SUM(total_amount), 0) as total_credit
         FROM sales 
         WHERE customer_id = ? AND payment_type = 'credit'
         ''',
-        [customerId],
-      );
+          [customerId],
+        );
 
-      final totalCredit = salesResult.first['total_credit'] as double? ?? 0.0;
+        // التحويل الآمن للقيمة
+        final totalCreditValue = salesResult.first['total_credit'];
+        totalCreditSales = _safeToDouble(totalCreditValue);
 
-      // 2. مجموع المعاملات
-      final transactionsResult = await db.rawQuery(
-        '''
+        print('Total credit sales from sales table: $totalCreditSales');
+      } catch (e) {
+        print('Error reading sales table: $e');
+      }
+
+      // 2. مجموع المعاملات من جدول transactions
+      double totalPayments = 0.0;
+      double totalWithdrawals = 0.0;
+
+      try {
+        // استخدم هذا الاستعلام بدلاً من السابق
+        final transactionsResult = await db.rawQuery(
+          '''
         SELECT 
-          COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as total_payments,
-          COALESCE(SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END), 0) as total_withdrawals
+          type,
+          SUM(amount) as type_total
         FROM transactions 
         WHERE customer_id = ?
+        GROUP BY type
         ''',
-        [customerId],
-      );
+          [customerId],
+        );
 
-      final totalPayments =
-          transactionsResult.first['total_payments'] as double? ?? 0.0;
-      final totalWithdrawals =
-          transactionsResult.first['total_withdrawals'] as double? ?? 0.0;
+        for (var row in transactionsResult) {
+          final type = row['type'] as String;
+          final amountValue = row['type_total'];
+          final amount = _safeToDouble(amountValue);
 
-      // 3. الدين الإجمالي = مجموع المشتريات الآجلة - مجموع الدفعات + مجموع صرف الرصيد
-      return totalCredit - totalPayments + totalWithdrawals;
+          if (type == 'payment') {
+            totalPayments += amount;
+          } else if (type == 'withdrawal') {
+            totalWithdrawals += amount;
+          }
+        }
+
+        print('Total payments: $totalPayments');
+        print('Total withdrawals: $totalWithdrawals');
+      } catch (e) {
+        print('Error reading transactions table: $e');
+      }
+
+      // 3. الحساب النهائي
+      // الدين = فواتير آجلة - دفعات - مسحوبات رصيد
+      final totalDebt = totalCreditSales - totalPayments - totalWithdrawals;
+      print('Calculated total debt: $totalDebt');
+
+      return totalDebt;
     } catch (e) {
       print('Error calculating total debt from scratch: $e');
       return 0.0;
     }
+  }
+
+  // دالة مساعدة للتحويل الآمن إلى double
+  double _safeToDouble(dynamic value) {
+    if (value == null) return 0.0;
+
+    if (value is double) {
+      return value;
+    } else if (value is int) {
+      return value.toDouble();
+    } else if (value is String) {
+      // إزالة أي فاصلة عشرية وإحلالها بنقطة
+      final cleanedValue = value.replaceAll(',', '.');
+      return double.tryParse(cleanedValue) ?? 0.0;
+    } else if (value is num) {
+      return value.toDouble();
+    }
+
+    print(
+      'Warning: Cannot convert value $value of type ${value.runtimeType} to double',
+    );
+    return 0.0;
   }
 
   // ==============================
@@ -283,77 +329,66 @@ class DebtProvider extends ChangeNotifier {
 
       await loadCustomerBalance(customerId);
       notifyListeners();
+
+      print('Recalculated balance for customer $customerId: $totalDebt');
     } catch (e) {
       print('Error recalculating balance: $e');
     }
   }
 
   // ==============================
-  // 8️⃣ الحصول على إحصائيات مفصلة للدين
+  // 8️⃣ الحصول على إحصائيات مفصلة
   // ==============================
   Future<Map<String, dynamic>> getDebtStatistics(int customerId) async {
     final db = await _dbHelper.db;
+    final Map<String, dynamic> stats = {};
 
-    // 1. إجمالي المشتريات الآجلة
-    final creditSalesResult = await db.rawQuery(
-      '''
-      SELECT 
-        COALESCE(SUM(total_amount), 0) as total_credit,
-        COUNT(*) as credit_count
-      FROM sales 
-      WHERE customer_id = ? AND payment_type = 'credit'
-      ''',
-      [customerId],
-    );
+    try {
+      // 1. إجمالي الفواتير الآجلة
+      final creditSalesResult = await db.rawQuery(
+        '''
+        SELECT 
+          COALESCE(SUM(total_amount), 0) as total_credit,
+          COUNT(*) as credit_count
+        FROM sales 
+        WHERE customer_id = ? AND payment_type = 'credit'
+        ''',
+        [customerId],
+      );
 
-    final totalCredit =
-        creditSalesResult.first['total_credit'] as double? ?? 0.0;
-    final creditCount = creditSalesResult.first['credit_count'] as int? ?? 0;
+      stats['total_credit'] =
+          creditSalesResult.first['total_credit'] as double? ?? 0.0;
+      stats['credit_count'] =
+          creditSalesResult.first['credit_count'] as int? ?? 0;
 
-    // 2. إجمالي المعاملات
-    final transactionsResult = await db.rawQuery(
-      '''
-      SELECT 
-        COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as total_payments,
-        COALESCE(SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END), 0) as total_withdrawals,
-        COUNT(*) as transactions_count,
-        MIN(date) as first_transaction,
-        MAX(date) as last_transaction
-      FROM transactions 
-      WHERE customer_id = ?
-      ''',
-      [customerId],
-    );
+      // 2. إجمالي المعاملات
+      final transactionsResult = await db.rawQuery(
+        '''
+        SELECT 
+          COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as total_payments,
+          COALESCE(SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END), 0) as total_withdrawals,
+          COUNT(*) as transactions_count
+        FROM transactions 
+        WHERE customer_id = ?
+        ''',
+        [customerId],
+      );
 
-    final totalPayments =
-        transactionsResult.first['total_payments'] as double? ?? 0.0;
-    final totalWithdrawals =
-        transactionsResult.first['total_withdrawals'] as double? ?? 0.0;
-    final transactionsCount =
-        transactionsResult.first['transactions_count'] as int? ?? 0;
-    final firstTransaction =
-        transactionsResult.first['first_transaction'] as String?;
-    final lastTransaction =
-        transactionsResult.first['last_transaction'] as String?;
+      stats['total_payments'] =
+          transactionsResult.first['total_payments'] as double? ?? 0.0;
+      stats['total_withdrawals'] =
+          transactionsResult.first['total_withdrawals'] as double? ?? 0.0;
+      stats['transactions_count'] =
+          transactionsResult.first['transactions_count'] as int? ?? 0;
 
-    // 3. الدين الحالي
-    final currentDebt = totalCredit - totalPayments + totalWithdrawals;
+      // 3. الرصيد الحالي
+      final currentBalance = await getTotalDebtByCustomerId(customerId);
+      stats['current_balance'] = currentBalance;
+    } catch (e) {
+      print('Error getting debt statistics: $e');
+    }
 
-    return {
-      'total_credit': totalCredit,
-      'credit_count': creditCount,
-      'total_payments': totalPayments,
-      'total_withdrawals': totalWithdrawals,
-      'transactions_count': transactionsCount,
-      'current_debt': currentDebt,
-      'first_transaction': firstTransaction,
-      'last_transaction': lastTransaction,
-      'average_credit': creditCount > 0 ? totalCredit / creditCount : 0.0,
-      'average_transaction':
-          transactionsCount > 0
-              ? (totalPayments + totalWithdrawals) / transactionsCount
-              : 0.0,
-    };
+    return stats;
   }
 
   // ==============================
@@ -372,11 +407,94 @@ class DebtProvider extends ChangeNotifier {
   }
 
   // ==============================
-  // 🔟 تفريغ البيانات عند تغيير الزبون
+  // 🔟 دالة للفحص والتسجيل
+  // ==============================
+  Future<void> debugCustomerData(int customerId) async {
+    final db = await _dbHelper.db;
+
+    print('=== بدء فحص بيانات العميل $customerId ===');
+
+    try {
+      // 1. الفواتير الآجلة من جدول sales
+      final sales = await db.rawQuery(
+        'SELECT id, total_amount, created_at FROM sales WHERE customer_id = ? AND payment_type = "credit"',
+        [customerId],
+      );
+      print('1. عدد الفواتير الآجلة: ${sales.length}');
+      for (var sale in sales) {
+        print(
+          '   فاتورة ${sale['id']}: ${sale['total_amount']} (${sale['created_at']})',
+        );
+      }
+
+      // 2. المعاملات من جدول transactions
+      final transactions = await db.rawQuery(
+        'SELECT id, amount, type, date, note FROM transactions WHERE customer_id = ? ORDER BY date DESC',
+        [customerId],
+      );
+      print('2. عدد المعاملات: ${transactions.length}');
+      for (var t in transactions) {
+        print(
+          '   معاملة ${t['id']}: ${t['amount']} (${t['type']}) في ${t['date']} - ${t['note']}',
+        );
+      }
+
+      // 3. الرصيد من جدول customer_balance
+      final balance = await db.query(
+        'customer_balance',
+        where: 'customer_id = ?',
+        whereArgs: [customerId],
+      );
+      print('3. سجلات customer_balance: ${balance.length}');
+      if (balance.isNotEmpty) {
+        print('   الرصيد: ${balance.first['balance']}');
+        print('   آخر تحديث: ${balance.first['last_updated']}');
+      }
+
+      // 4. الحساب من الصفر
+      final calculated = await calculateTotalDebtFromScratch(customerId);
+      print('4. الرصيد المحسوب من الصفر: $calculated');
+    } catch (e) {
+      print('خطأ في الفحص: $e');
+    }
+
+    print('=== انتهاء الفحص ===');
+  }
+
+  // ==============================
+  // 1️⃣1️⃣ تصحيح بيانات العميل
+  // ==============================
+  Future<void> fixCustomerData(int customerId) async {
+    print('بدأ تصحيح بيانات العميل $customerId');
+
+    // 1. أعد حساب الرصيد من الصفر
+    await recalculateAndUpdateBalance(customerId);
+
+    // 2. أعد تحميل البيانات
+    await loadCustomerBalance(customerId);
+    await loadTransactionsPage(customerId);
+
+    print('تم تصحيح بيانات العميل $customerId');
+  }
+
+  // ==============================
+  // 1️⃣2️⃣ تفريغ البيانات عند تغيير الزبون
   // ==============================
   void clear() {
     _balance = null;
     _transactions.clear();
     notifyListeners();
+  }
+
+  // ==============================
+  // 1️⃣3️⃣ الحصول على الرصيد الحالي مباشرة
+  // ==============================
+  Future<double> getCurrentBalance(int customerId) async {
+    try {
+      return await getTotalDebtByCustomerId(customerId);
+    } catch (e) {
+      print('Error getting current balance: $e');
+      return 0.0;
+    }
   }
 }

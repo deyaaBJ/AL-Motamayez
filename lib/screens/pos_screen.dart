@@ -566,7 +566,7 @@ class _PosScreenState extends State<PosScreen>
   }
 
   void _addProductFromSearch(Product product) {
-    if (product.quantity < 1) {
+    if (product.quantity == 1) {
       _showOutOfStockDialog(product.name);
       return;
     }
@@ -575,7 +575,7 @@ class _PosScreenState extends State<PosScreen>
   }
 
   void _addUnitFromSearch(ProductUnit unit, Product product) {
-    if (product.quantity < 1) {
+    if (product.quantity == 1) {
       _showOutOfStockDialog('${product.name} - ${unit.unitName}');
       return;
     }
@@ -1275,10 +1275,10 @@ class _PosScreenState extends State<PosScreen>
         userRole: auth.role ?? 'user',
       );
 
-      // 2️⃣ تحديث الدين
-      await debtProvider.addDebt(
+      await debtProvider.addCreditSale(
         customerId: customer.id!,
         amount: _totalAmount,
+        note: 'فاتورة #',
       );
 
       if (mounted) {

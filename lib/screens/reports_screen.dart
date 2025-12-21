@@ -120,7 +120,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       _selectedYear = null;
                     }
                   });
-                  _applyFilter(provider);
+                  // تطبيق الفلتر فقط للفترات التي لا تحتاج إدخالات إضافية
+                  if (_selectedPeriod != 'شهر محدد' &&
+                      _selectedPeriod != 'سنة محددة') {
+                    _applyFilter(provider);
+                  }
                 },
               ),
             ],
@@ -151,7 +155,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       setState(() {
                         _selectedMonth = value;
                       });
-                      _applyFilter(provider);
+                      // لا تطبق الفلتر هنا، فقط احفظ القيمة
                     },
                   ),
                 ),
@@ -174,11 +178,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       setState(() {
                         _selectedYear = value;
                       });
-                      _applyFilter(provider);
+                      // لا تطبق الفلتر هنا، فقط احفظ القيمة
                     },
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            // زر تطبيق الفلتر
+            ElevatedButton(
+              onPressed: () {
+                if (_selectedMonth != null && _selectedYear != null) {
+                  _applyFilter(provider);
+                } else {
+                  // عرض رسالة تنبيه
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'يرجى اختيار الشهر والسنة',
+                        textAlign: TextAlign.center,
+                      ),
+                      backgroundColor: Colors.orange,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              child: const Text('تطبيق الفلتر'),
             ),
           ],
 
@@ -202,8 +228,29 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 setState(() {
                   _selectedYear = value;
                 });
-                _applyFilter(provider);
+                // لا تطبق الفلتر هنا
               },
+            ),
+            const SizedBox(height: 10),
+            // زر تطبيق الفلتر
+            ElevatedButton(
+              onPressed: () {
+                if (_selectedYear != null) {
+                  _applyFilter(provider);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'يرجى اختيار السنة',
+                        textAlign: TextAlign.center,
+                      ),
+                      backgroundColor: Colors.orange,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              child: const Text('تطبيق الفلتر'),
             ),
           ],
         ],

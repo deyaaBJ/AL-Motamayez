@@ -1,4 +1,3 @@
-// widgets/quick_payment_dialog.dart - النسخة المحسنة
 import 'package:flutter/material.dart';
 import 'package:shopmate/models/customer.dart';
 
@@ -106,15 +105,16 @@ class QuickPaymentDialog {
 
               // التحقق من الشروط بناءً على نوع العملية
               if (mode == PaymentMode.payment) {
-                // في حالة تسديد دفعة: يجب ألا يتجاوز المبلغ الدين الحالي
+                // في حالة تسديد دفعة: يجب أن يكون هناك دين للعميل
                 if (currentBalance <= 0) {
                   setState(() {
-                    errorMessage = 'لا يوجد دين للعميل';
+                    errorMessage = 'لا يوجد دين على العميل لتسديده';
                     showError = true;
                   });
                   return;
                 }
 
+                // يجب ألا يتجاوز المبلغ الدين الحالي
                 if (amount > currentBalance) {
                   setState(() {
                     errorMessage =
@@ -126,8 +126,27 @@ class QuickPaymentDialog {
                   return;
                 }
               } else if (mode == PaymentMode.withdrawal) {
-                // في حالة صرف رصيد: يمكن سحب أي مبلغ (لا توجد حدود)
-                // يمكنك إضافة شروط هنا إذا لزم الأمر
+                // في حالة صرف رصيد: يجب أن يكون هناك رصيد للعميل (الرصيد سالب)
+                if (currentBalance >= 0) {
+                  setState(() {
+                    errorMessage = 'لا يوجد رصيد للعميل لصرفه';
+                    showError = true;
+                  });
+                  return;
+                }
+
+                // يجب ألا يتجاوز المبلغ الرصيد المتاح
+                final availableBalance = currentBalance.abs();
+                if (amount > availableBalance) {
+                  setState(() {
+                    errorMessage =
+                        '⚠️ المبلغ (${amount.toStringAsFixed(2)}) أكبر من الرصيد المتاح!\n'
+                        'الرصيد المتاح: ${availableBalance.toStringAsFixed(2)} دينار\n'
+                        'الفرق: ${(amount - availableBalance).toStringAsFixed(2)} دينار';
+                    showError = true;
+                  });
+                  return;
+                }
               }
 
               setState(() {
@@ -274,14 +293,16 @@ class QuickPaymentDialog {
                           Text(
                             mode == PaymentMode.payment
                                 ? 'الدين الحالي:'
-                                : 'الرصيد الحالي:',
+                                : 'الرصيد المتاح:',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[700],
                             ),
                           ),
                           Text(
-                            '${currentBalance.toStringAsFixed(2)} دينار',
+                            mode == PaymentMode.payment
+                                ? '${currentBalance.toStringAsFixed(2)} دينار'
+                                : '${currentBalance.abs().toStringAsFixed(2)} دينار',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -353,6 +374,12 @@ class QuickPaymentDialog {
                             if (mode == PaymentMode.payment &&
                                 (currentBalance <= 0 ||
                                     amount > currentBalance)) {
+                              return;
+                            }
+
+                            if (mode == PaymentMode.withdrawal &&
+                                (currentBalance >= 0 ||
+                                    amount > currentBalance.abs())) {
                               return;
                             }
 
