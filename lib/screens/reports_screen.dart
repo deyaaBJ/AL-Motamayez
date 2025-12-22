@@ -738,7 +738,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'مرتبة حسب الإيرادات مع مراعاة أنواع الوحدات المختلفة',
+              'مرتبة حسب عدد المبيعات مع مراعاة أنواع الوحدات المختلفة',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.grey[600],

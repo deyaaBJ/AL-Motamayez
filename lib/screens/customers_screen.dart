@@ -8,6 +8,7 @@ import 'package:shopmate/helpers/helpers.dart';
 import 'package:shopmate/models/customer.dart';
 import 'package:shopmate/providers/DebtProvider.dart';
 import 'package:shopmate/providers/customer_provider.dart';
+import 'package:shopmate/providers/settings_provider.dart';
 import 'package:shopmate/screens/CustomerDetailsScreen.dart';
 import 'package:shopmate/widgets/customer_form_dialog.dart';
 import 'package:shopmate/widgets/quick_payment_dialog.dart';
@@ -749,6 +750,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Widget _buildTableRow(Customer customer, int index) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
     final debt = _customerDebts[customer.id!] ?? 0.0;
     final hasDebt = debt > 0;
     final hasCredit = debt < 0;
@@ -921,7 +924,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '${debt.abs().toStringAsFixed(2)} دينار',
+                              '${debt.abs().toStringAsFixed(2)} $currencyName',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
@@ -1176,6 +1179,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   // دالة حذف العميل
   Future<void> _deleteCustomer(Customer customer) async {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
     if (_isProcessingAction) return;
     _isProcessingAction = true;
 
@@ -1194,7 +1199,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         if (mounted) {
           showAppToast(
             context,
-            '❌ لا يمكن حذف العميل ${customer.name}\nلأنه لديه $balanceType بقيمة $balanceText دينار',
+            '❌ لا يمكن حذف العميل ${customer.name}\nلأنه لديه $balanceType بقيمة $balanceText $currencyName',
             ToastType.error,
           );
         }

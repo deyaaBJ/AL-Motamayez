@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shopmate/models/customer.dart';
+import 'package:shopmate/providers/settings_provider.dart';
 
 enum PaymentMode {
   payment, // تسديد دفعة (العميل يدفع للمتجر)
@@ -64,6 +66,8 @@ class QuickPaymentDialog {
   }) {
     final TextEditingController amountController = TextEditingController();
     final TextEditingController noteController = TextEditingController();
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
 
     showDialog(
       context: context,
@@ -119,8 +123,8 @@ class QuickPaymentDialog {
                   setState(() {
                     errorMessage =
                         '⚠️ المبلغ (${amount.toStringAsFixed(2)}) أكبر من الدين الحالي!\n'
-                        'الدين الحالي: ${currentBalance.toStringAsFixed(2)} دينار\n'
-                        'الفرق: ${(amount - currentBalance).toStringAsFixed(2)} دينار';
+                        'الدين الحالي: ${currentBalance.toStringAsFixed(2)} $currencyName\n'
+                        'الفرق: ${(amount - currentBalance).toStringAsFixed(2)} $currencyName';
                     showError = true;
                   });
                   return;
@@ -141,8 +145,8 @@ class QuickPaymentDialog {
                   setState(() {
                     errorMessage =
                         '⚠️ المبلغ (${amount.toStringAsFixed(2)}) أكبر من الرصيد المتاح!\n'
-                        'الرصيد المتاح: ${availableBalance.toStringAsFixed(2)} دينار\n'
-                        'الفرق: ${(amount - availableBalance).toStringAsFixed(2)} دينار';
+                        'الرصيد المتاح: ${availableBalance.toStringAsFixed(2)} $currencyName\n'
+                        'الفرق: ${(amount - availableBalance).toStringAsFixed(2)} $currencyName';
                     showError = true;
                   });
                   return;
@@ -169,8 +173,8 @@ class QuickPaymentDialog {
                     : 'أدخل مبلغ الصرف';
             final labelText =
                 mode == PaymentMode.payment
-                    ? 'مبلغ التسديد (دينار)'
-                    : 'مبلغ الصرف (دينار)';
+                    ? 'مبلغ التسديد ($currencyName)'
+                    : 'مبلغ الصرف ($currencyName)';
 
             return AlertDialog(
               shape: RoundedRectangleBorder(
@@ -301,8 +305,8 @@ class QuickPaymentDialog {
                           ),
                           Text(
                             mode == PaymentMode.payment
-                                ? '${currentBalance.toStringAsFixed(2)} دينار'
-                                : '${currentBalance.abs().toStringAsFixed(2)} دينار',
+                                ? '${currentBalance.toStringAsFixed(2)} $currencyName'
+                                : '${currentBalance.abs().toStringAsFixed(2)} $currencyName',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -402,8 +406,8 @@ class QuickPaymentDialog {
                                 SnackBar(
                                   content: Text(
                                     mode == PaymentMode.payment
-                                        ? 'تم تسديد ${amount.toStringAsFixed(2)} دينار بنجاح'
-                                        : 'تم صرف ${amount.toStringAsFixed(2)} دينار بنجاح',
+                                        ? 'تم تسديد ${amount.toStringAsFixed(2)} $currencyName بنجاح'
+                                        : 'تم صرف ${amount.toStringAsFixed(2)} $currencyName بنجاح',
                                   ),
                                   backgroundColor: buttonColor,
                                   duration: const Duration(seconds: 2),

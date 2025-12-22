@@ -5,6 +5,7 @@ import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/models/customer.dart';
 import 'package:shopmate/models/transaction.dart';
 import 'package:shopmate/providers/DebtProvider.dart';
+import 'package:shopmate/providers/settings_provider.dart';
 import 'package:shopmate/utils/date_formatter.dart';
 import 'package:shopmate/widgets/quick_payment_dialog.dart';
 
@@ -179,11 +180,29 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
 
   Future<void> _refreshData() async {
     setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+
+      // إعادة تعيين المتغيرات
       _transactionPage = 0;
       _hasMoreTransactions = true;
       _groupedTransactions.clear();
-    });
-    await _loadTransactionsPage(0);
+
+      // تحميل المعاملات الجديدة
+      await _loadTransactionsPage(0);
+
+      // إعادة تحميل رصيد العميل
+      await debtProvider.recalculateAndUpdateBalance(widget.customer.id!);
+    } catch (e) {
+      print('Error refreshing data: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   void _showPaymentDialog(Customer customer, double currentDebt) {
@@ -198,6 +217,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           amount: amount,
           note: note,
         );
+
+        // تحديث البيانات بعد الإضافة
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _refreshData();
+
+          // إعادة تحميل رصيد العميل
+          setState(() {});
+        });
       },
     );
   }
@@ -214,11 +241,21 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           amount: amount,
           note: note,
         );
+
+        // تحديث البيانات بعد الإضافة
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _refreshData();
+
+          // إعادة تحميل رصيد العميل
+          setState(() {});
+        });
       },
     );
   }
 
   Widget _buildCompactHeader(Customer customer) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
     return Consumer<DebtProvider>(
       builder: (context, debtProvider, child) {
         return FutureBuilder<double>(
@@ -404,8 +441,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                               ),
                             ),
                             const SizedBox(width: 4),
-                            const Text(
-                              'دينار',
+                            Text(
+                              currencyName,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.black87,
@@ -468,6 +505,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   Widget _buildTransactionItem(Transaction transaction, int sequentialNumber) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
     final dateTime = DateFormatter.formatDateTime(transaction.date.toString());
     final isPayment = transaction.type == TransactionType.payment;
 
@@ -523,7 +562,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   ),
                 ),
                 Text(
-                  '${transaction.amount.toStringAsFixed(2)} دينار',
+                  '${transaction.amount.toStringAsFixed(2)} $currencyName',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
