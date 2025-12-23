@@ -5,10 +5,14 @@ import 'package:shopmate/db/db_helper.dart';
 import 'package:shopmate/providers/DebtProvider.dart';
 import 'package:shopmate/providers/customer_provider.dart';
 import 'package:shopmate/providers/product_provider.dart';
+import 'package:shopmate/providers/purchase_invoice_provider.dart';
+import 'package:shopmate/providers/purchase_item_provider.dart';
 import 'package:shopmate/providers/settings_provider.dart';
 import 'package:shopmate/providers/reports_provider.dart';
 import 'package:shopmate/providers/sales_provider.dart';
 import 'package:shopmate/providers/sidebar_provider.dart';
+import 'package:shopmate/providers/supplier_provider.dart';
+import 'package:shopmate/screens/PurchaseInvoicesListPage.dart';
 import 'package:shopmate/screens/SalesHistoryScreen.dart';
 import 'package:shopmate/screens/auth/login.dart';
 import 'package:shopmate/providers/auth_provider.dart';
@@ -16,6 +20,7 @@ import 'package:shopmate/screens/customers_screen.dart';
 import 'package:shopmate/screens/home.dart';
 import 'package:shopmate/screens/pos_screen.dart';
 import 'package:shopmate/screens/products.dart';
+import 'package:shopmate/screens/purchase_invoice_page.dart';
 import 'package:shopmate/screens/reports_screen.dart';
 import 'package:shopmate/screens/settings_screen.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -44,6 +49,9 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ProductProvider()),
         ChangeNotifierProvider(create: (_) => SideBarProvider()),
         ChangeNotifierProvider(create: (_) => DebtProvider()),
+        ChangeNotifierProvider(create: (_) => PurchaseInvoiceProvider()),
+        ChangeNotifierProvider(create: (_) => PurchaseItemProvider()),
+        ChangeNotifierProvider(create: (_) => SupplierProvider()),
       ],
       child: const ShopMateApp(),
     ),
@@ -69,6 +77,8 @@ class ShopMateApp extends StatelessWidget {
         '/salesHistory': (context) => const SalesHistoryScreen(),
         '/report': (context) => const ReportsScreen(),
         '/settings': (context) => const SettingsScreen(),
+        '/purchaseInvoice': (context) => const PurchaseInvoicePage(),
+        '/purchaseInvoicesList': (context) => const PurchaseInvoicesListPage(),
       },
     );
   }

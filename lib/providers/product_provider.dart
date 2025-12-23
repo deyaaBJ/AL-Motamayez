@@ -463,7 +463,13 @@ class ProductProvider with ChangeNotifier {
         where: 'id = ?',
         whereArgs: [id],
       );
-      return result.isNotEmpty ? Product.fromMap(result.first) : null;
+
+      if (result.isEmpty) {
+        return null;
+      }
+
+      final product = Product.fromMap(result.first);
+      return product;
     } catch (e) {
       print('Error getting product by ID: $e');
       return null;

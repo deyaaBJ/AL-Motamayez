@@ -321,7 +321,47 @@ class DBHelper {
       );
     ''');
 
+    // جدول الموردين
+    await db.execute('''
+    CREATE TABLE suppliers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+   phone TEXT
+);
+
+    ''');
+
+    // جدول فواتير الشراء
+    await db.execute('''
+     CREATE TABLE purchase_invoices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  supplier_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  total_cost REAL NOT NULL,
+  payment_type TEXT NOT NULL DEFAULT 'cash', -- cash / credit
+  note TEXT,
+  FOREIGN KEY (supplier_id) REFERENCES suppliers (id)
+);
+
+    ''');
+
+    // جدول عناصر فاتورة
+
+    await db.execute('''
+      CREATE TABLE purchase_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  purchase_id INTEGER NOT NULL,
+  product_id INTEGER NOT NULL,
+  quantity REAL NOT NULL,
+  cost_price REAL NOT NULL,
+  subtotal REAL NOT NULL,
+  FOREIGN KEY (purchase_id) REFERENCES purchase_invoices (id),
+  FOREIGN KEY (product_id) REFERENCES products (id)
+);
+
+    ''');
     // جدول الإعدادات
+
     await db.execute('''
       CREATE TABLE settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
