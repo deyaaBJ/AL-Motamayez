@@ -1,5 +1,3 @@
-// screens/purchase_invoices_list_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/components/base_layout.dart';
@@ -17,38 +15,95 @@ class PurchaseInvoicesListPage extends StatefulWidget {
 }
 
 class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
-  // ألوان متناسقة
-  static const Color _primaryColor = Color(0xFF2563EB);
-  static const Color _secondaryColor = Color(0xFF64748B);
-  static const Color _successColor = Color(0xFF10B981);
-  static const Color _warningColor = Color(0xFFF59E0B);
-  static const Color _cardColor = Color(0xFFF8FAFC);
-  static const Color _textPrimary = Color(0xFF1E293B);
-  static const Color _textSecondary = Color(0xFF64748B);
-
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
   bool _isLoading = false;
+  bool _isLoadingMore = false;
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _loadInvoices();
+    _scrollController.addListener(_scrollListener);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _scrollListener() {
+    final provider = context.read<PurchaseInvoiceProvider>();
+
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 100 &&
+        !_isLoadingMore &&
+        provider.hasMore) {
+      _loadMoreInvoices();
+    }
   }
 
   Future<void> _loadInvoices() async {
     if (_isLoading) return;
+
     setState(() => _isLoading = true);
 
     try {
-      await context.read<PurchaseInvoiceProvider>().loadPurchaseInvoices();
+      await context.read<PurchaseInvoiceProvider>().refreshInvoices();
     } catch (e) {
       _showSnackBar('خطأ في تحميل الفواتير: $e', Colors.red);
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  Future<void> _searchInvoices() async {
+    if (_isLoading) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      await context.read<PurchaseInvoiceProvider>().searchInvoices(
+        _searchQuery,
+      );
+    } catch (e) {
+      _showSnackBar('خطأ في البحث: $e', Colors.red);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadMoreInvoices() async {
+    final provider = context.read<PurchaseInvoiceProvider>();
+
+    // تحقق إذا كان هناك المزيد للتحميل
+    if (_isLoadingMore || !provider.hasMore) return;
+
+    setState(() => _isLoadingMore = true);
+
+    try {
+      await provider.loadMoreInvoices();
+    } catch (e) {
+      _showSnackBar('خطأ في تحميل المزيد: $e', Colors.red);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingMore = false);
+      }
+    }
+  }
+
+  Future<void> _refreshInvoices() async {
+    await _loadInvoices();
   }
 
   void _showSnackBar(String message, Color color) {
@@ -56,16 +111,122 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
       SnackBar(
         content: Text(message),
         backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  Future<void> _editInvoice(Map<String, dynamic> invoice) async {
+    final TextEditingController noteController = TextEditingController(
+      text: invoice['note']?.toString() ?? '',
+    );
+    String paymentType = invoice['payment_type'] ?? 'cash';
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('تعديل طريقة الدفع'),
+            content: SizedBox(
+              width: 300,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // نقدي
+                      ChoiceChip(
+                        label: const Text('نقدي'),
+                        selected: paymentType == 'cash',
+                        onSelected: (selected) {
+                          setState(() {
+                            paymentType = 'cash';
+                          });
+                        },
+                        selectedColor: Colors.green,
+                        backgroundColor: Colors.grey.shade200,
+                      ),
+                      const SizedBox(width: 20),
+                      // آجل
+                      ChoiceChip(
+                        label: const Text('آجل (دين)'),
+                        selected: paymentType == 'credit',
+                        onSelected: (selected) {
+                          setState(() {
+                            paymentType = 'credit';
+                          });
+                        },
+                        selectedColor: Colors.orange,
+                        backgroundColor: Colors.grey.shade200,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: noteController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      hintText: 'ملاحظات',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  try {
+                    await context
+                        .read<PurchaseInvoiceProvider>()
+                        .updatePurchaseInvoice(
+                          invoiceId: invoice['id'],
+                          paymentType: paymentType,
+                          note: noteController.text,
+                        );
+                    _showSnackBar('تم تحديث الفاتورة', Colors.green);
+                    Navigator.pop(context, true);
+                  } catch (e) {
+                    _showSnackBar('خطأ: $e', Colors.red);
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                child: const Text('حفظ'),
+              ),
+            ],
+          ),
+    );
+
+    if (result == true) {
+      await _refreshInvoices();
+    }
   }
 
   Future<void> _deleteInvoice(Map<String, dynamic> invoice) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => _buildDeleteDialog(invoice),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('تأكيد الحذف'),
+            content: Text('هل تريد حذف الفاتورة #${invoice['id']}؟'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('لا'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('نعم'),
+              ),
+            ],
+          ),
     );
 
     if (confirm != true) return;
@@ -74,137 +235,131 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
       await context.read<PurchaseInvoiceProvider>().deletePurchaseInvoice(
         invoice['id'],
       );
-      _showSnackBar('تم حذف الفاتورة #${invoice['id']}', _successColor);
+      _showSnackBar('تم حذف الفاتورة', Colors.green);
+      await _refreshInvoices();
     } catch (e) {
       _showSnackBar('خطأ في الحذف: $e', Colors.red);
     }
   }
 
-  AlertDialog _buildDeleteDialog(Map<String, dynamic> invoice) {
-    return AlertDialog(
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
+  Widget _buildHeader() {
+    final provider = context.watch<PurchaseInvoiceProvider>();
+    final invoices = provider.invoices;
+    final totalAmount = invoices.fold<double>(
+      0,
+      (sum, invoice) => sum + (invoice['total_cost'] ?? 0.0),
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.white,
+      child: Column(
         children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: const Icon(
-              Icons.delete_outline,
-              color: Colors.red,
-              size: 30,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'حذف الفاتورة',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: _textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'هل أنت متأكد من حذف الفاتورة #${invoice['id']}؟',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: _textSecondary),
-          ),
-          const SizedBox(height: 24),
           Row(
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    side: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  child: Text(
-                    'إلغاء',
+              const Icon(Icons.receipt_long, color: Colors.blue, size: 32),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'فواتير الشراء',
                     style: TextStyle(
-                      color: _textSecondary,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
                     ),
                   ),
-                ),
+                  Text(
+                    '${invoices.length} فاتورة - ${Formatters.formatCurrency(totalAmount)}',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'حذف',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _refreshInvoices,
+                tooltip: 'تحديث',
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          // شريط البحث
+          TextField(
+            controller: _searchController,
+            focusNode: _searchFocusNode,
+            decoration: InputDecoration(
+              hintText: 'ابحث برقم الفاتورة أو اسم المورد...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              suffixIcon:
+                  _searchQuery.isNotEmpty
+                      ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                          _searchInvoices();
+                        },
+                      )
+                      : null,
+            ),
+            onChanged: (value) {
+              // تحديث قيمة البحث عند كل تغيير
+              setState(() => _searchQuery = value);
+            },
+            onSubmitted: (value) {
+              // عند الضغط على زر البحث
+              _searchInvoices();
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActionButton({
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: color, size: 18),
+  Widget _buildHeaderCell(String text) {
+    return Text(
+      text,
+      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+      textAlign: TextAlign.center,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  Widget _buildTableHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: const Border(bottom: BorderSide(color: Colors.grey)),
+      ),
+      child: Row(
+        children: [
+          Expanded(flex: 1, child: _buildHeaderCell('رقم الفاتورة')),
+          Expanded(flex: 2, child: _buildHeaderCell('التاريخ')),
+          Expanded(flex: 2, child: _buildHeaderCell('المورد')),
+          Expanded(flex: 2, child: _buildHeaderCell('المبلغ')),
+          Expanded(flex: 2, child: _buildHeaderCell('طريقة الدفع')),
+          Expanded(flex: 3, child: _buildHeaderCell('الإجراءات')),
+        ],
       ),
     );
   }
 
-  Widget _buildInvoiceCard(Map<String, dynamic> invoice) {
+  Widget _buildTableRow(Map<String, dynamic> invoice, int index) {
     final dateInfo = DateFormatter.formatDateTime(invoice['date']);
     final isCash = invoice['payment_type'] == 'cash';
     final totalAmount = invoice['total_cost'] ?? 0.0;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: _primaryColor.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: Colors.grey.shade100, width: 1),
-      ),
+      color: index.isEven ? Colors.white : Colors.grey.shade50,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
           onTap: () {
             Navigator.push(
               context,
@@ -214,157 +369,141 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
               ),
             );
           },
-          splashColor: _primaryColor.withOpacity(0.1),
-          highlightColor: _primaryColor.withOpacity(0.05),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // العلامة الجانبية
-                Container(
-                  width: 4,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: isCash ? _successColor : _warningColor,
-                    borderRadius: BorderRadius.circular(2),
+                // رقم الفاتورة
+                Expanded(
+                  flex: 1,
+                  child: Text(
+                    '#${invoice['id']}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: 16),
-
-                // محتوى البطاقة
+                // التاريخ
                 Expanded(
+                  flex: 2,
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // الصف العلوي: رقم الفاتورة والمبلغ
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.receipt_long,
-                                    color: _primaryColor,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '#${invoice['id']}',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: _primaryColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                invoice['supplier_name'] ?? 'غير معروف',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: _textSecondary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                Formatters.formatCurrency(totalAmount),
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: _successColor,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color:
-                                      isCash
-                                          ? _successColor.withOpacity(0.1)
-                                          : _warningColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  isCash ? 'نقدي' : 'آجل',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color:
-                                        isCash ? _successColor : _warningColor,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                      Text(
+                        dateInfo['short_date'] ?? '',
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
                       ),
-
-                      const SizedBox(height: 16),
-
-                      // الصف السفلي: التاريخ والإجراءات
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.calendar_today,
-                                size: 14,
-                                color: _textSecondary,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                dateInfo['short_date'] ?? '',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _textSecondary,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Icon(
-                                Icons.access_time,
-                                size: 14,
-                                color: _textSecondary,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                dateInfo['time_12'] ?? '',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _textSecondary,
-                                ),
-                              ),
-                            ],
+                      Text(
+                        dateInfo['time_12'] ?? '',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                // المورد
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    invoice['supplier_name'] ?? '-',
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // المبلغ
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    Formatters.formatCurrency(totalAmount),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // طريقة الدفع
+                Expanded(
+                  flex: 2,
+                  child: InkWell(
+                    onTap: () => _editInvoice(invoice),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      constraints: const BoxConstraints(maxWidth: 120),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              isCash
+                                  ? Colors.green.shade50
+                                  : Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: isCash ? Colors.green : Colors.orange,
+                            width: 1,
                           ),
-                          Row(
-                            children: [
-                              _buildActionButton(
-                                icon: Icons.remove_red_eye,
-                                color: _primaryColor,
-                                onTap: () => _showInvoiceDialog(invoice),
-                              ),
-                              const SizedBox(width: 8),
-                              _buildActionButton(
-                                icon: Icons.delete_outline,
-                                color: Colors.red,
-                                onTap: () => _deleteInvoice(invoice),
-                              ),
-                            ],
+                        ),
+                        child: Text(
+                          isCash ? 'نقدي' : 'آجل',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isCash ? Colors.green : Colors.orange,
+                            fontWeight: FontWeight.bold,
                           ),
-                        ],
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // الإجراءات
+                Expanded(
+                  flex: 3,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.visibility, size: 18),
+                        color: Colors.blue,
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => PurchaseInvoiceDetailsPage(
+                                    invoice: invoice,
+                                  ),
+                            ),
+                          );
+                        },
+                        tooltip: 'عرض التفاصيل',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit, size: 18),
+                        color: Colors.orange,
+                        onPressed: () => _editInvoice(invoice),
+                        tooltip: 'تعديل',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, size: 18),
+                        color: Colors.red,
+                        onPressed: () => _deleteInvoice(invoice),
+                        tooltip: 'حذف',
                       ),
                     ],
                   ),
@@ -377,467 +516,58 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
     );
   }
 
-  void _showInvoiceDialog(Map<String, dynamic> invoice) {
-    final dateInfo = DateFormatter.formatDateTime(invoice['date']);
+  Widget _buildLoadingMore() {
+    final provider = context.watch<PurchaseInvoiceProvider>();
 
-    showDialog(
-      context: context,
-      builder:
-          (context) => Dialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            insetPadding: const EdgeInsets.all(20),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 500),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [_primaryColor, _primaryColor.withOpacity(0.9)],
-                      ),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(24),
-                        topRight: Radius.circular(24),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Icon(
-                            Icons.receipt_long,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'فاتورة #${invoice['id']}',
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                dateInfo['full_datetime'] ?? '',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white.withOpacity(0.8),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+    if (!_isLoadingMore && !provider.hasMore) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        child: const Center(child: Text('تم عرض جميع الفواتير')),
+      );
+    }
 
-                  // Details
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        _buildDetailItem(
-                          'المورد',
-                          invoice['supplier_name'] ?? '-',
-                        ),
-                        _buildDetailItem(
-                          'طريقة الدفع',
-                          invoice['payment_type'] == 'cash' ? 'نقدي' : 'آجل',
-                          isCash: invoice['payment_type'] == 'cash',
-                        ),
-                        _buildDetailItem(
-                          'المبلغ الإجمالي',
-                          Formatters.formatCurrency(
-                            invoice['total_cost'] ?? 0.0,
-                          ),
-                          isAmount: true,
-                        ),
-                        if (invoice['note']?.toString().trim().isNotEmpty ??
-                            false)
-                          _buildDetailItem(
-                            'الملاحظات',
-                            invoice['note'].toString(),
-                            isNote: true,
-                          ),
-                      ],
-                    ),
-                  ),
-
-                  // Actions
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => Navigator.pop(context),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              side: BorderSide(color: Colors.grey.shade300),
-                            ),
-                            icon: const Icon(Icons.close, size: 18),
-                            label: const Text('إغلاق'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => PurchaseInvoiceDetailsPage(
-                                        invoice: invoice,
-                                      ),
-                                ),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _primaryColor,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 0,
-                            ),
-                            icon: const Icon(Icons.visibility, size: 18),
-                            label: const Text('تفاصيل كاملة'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
-
-  Widget _buildDetailItem(
-    String label,
-    String value, {
-    bool isCash = false,
-    bool isAmount = false,
-    bool isNote = false,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: _textSecondary,
-              ),
-            ),
-          ),
-          Expanded(
-            child:
-                isNote
-                    ? Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: _textPrimary,
-                        fontStyle: FontStyle.italic,
-                      ),
-                      textAlign: TextAlign.right,
-                    )
-                    : isAmount
-                    ? Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: _successColor,
-                      ),
-                      textAlign: TextAlign.right,
-                    )
-                    : Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color:
-                            isCash
-                                ? _successColor.withOpacity(0.1)
-                                : _warningColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        value,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isCash ? _successColor : _warningColor,
-                        ),
-                      ),
-                    ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    final isDesktop = MediaQuery.of(context).size.width > 768;
-    final invoices = context.watch<PurchaseInvoiceProvider>().invoices;
+    if (!_isLoadingMore) return const SizedBox.shrink();
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: _primaryColor.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [_primaryColor, _primaryColor.withOpacity(0.8)],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.receipt_long,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'فواتير الشراء',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: _textPrimary,
-                      ),
-                    ),
-                    Text(
-                      'إدارة وتتبع جميع فواتير الشراء',
-                      style: TextStyle(fontSize: 14, color: _textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-              if (isDesktop) _buildStatsRow(invoices),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Container(
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200, width: 1.5),
-            ),
-            child: Row(
-              children: [
-                const SizedBox(width: 16),
-                Icon(Icons.search, color: _textSecondary, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    focusNode: _searchFocusNode,
-                    onChanged: (value) {
-                      setState(() => _searchQuery = value);
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'ابحث برقم الفاتورة أو اسم المورد...',
-                      hintStyle: TextStyle(color: _textSecondary),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    style: TextStyle(fontSize: 14, color: _textPrimary),
-                  ),
-                ),
-                if (_searchQuery.isNotEmpty)
-                  IconButton(
-                    icon: Icon(Icons.clear, color: _textSecondary, size: 18),
-                    onPressed: () {
-                      setState(() => _searchQuery = '');
-                      _searchFocusNode.unfocus();
-                    },
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.all(20),
+      child: const Center(child: CircularProgressIndicator()),
     );
   }
 
-  Widget _buildStatsRow(List<Map<String, dynamic>> invoices) {
-    final totalAmount = invoices.fold<double>(
-      0,
-      (sum, invoice) => sum + (invoice['total_cost'] ?? 0.0),
-    );
+  Widget _buildContent() {
+    final provider = context.watch<PurchaseInvoiceProvider>();
+    final invoices = provider.invoices;
 
-    return Row(
-      children: [
-        _buildStatItem('${invoices.length}', 'فواتير', _primaryColor),
-        const SizedBox(width: 20),
-        _buildStatItem(
-          Formatters.formatCurrency(totalAmount),
-          'إجمالي',
-          _successColor,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatItem(String value, String label, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
-        ),
-        Text(label, style: TextStyle(fontSize: 12, color: _textSecondary)),
-      ],
-    );
-  }
-
-  Widget _buildContent(List<Map<String, dynamic>> invoices) {
     if (_isLoading && invoices.isEmpty) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            SizedBox(
-              width: 60,
-              height: 60,
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                color: _primaryColor,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'جاري تحميل الفواتير...',
-              style: TextStyle(color: _textSecondary),
-            ),
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('جاري تحميل الفواتير...'),
           ],
         ),
       );
     }
 
-    if (invoices.isEmpty) {
+    if (invoices.isEmpty && !_isLoading) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_outlined, size: 80, color: Colors.grey.shade300),
+            Icon(Icons.receipt_long, size: 80, color: Colors.grey.shade300),
             const SizedBox(height: 20),
             Text(
-              'لا توجد فواتير',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: _textSecondary,
-              ),
+              _searchQuery.isEmpty ? 'لا توجد فواتير' : 'لا توجد نتائج',
+              style: const TextStyle(fontSize: 18, color: Colors.grey),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Text(
-              'ابدأ بإنشاء أول فاتورة شراء',
-              style: TextStyle(color: _textSecondary),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // تصفية النتائج حسب البحث
-    final filteredInvoices =
-        _searchQuery.isEmpty
-            ? invoices
-            : invoices.where((invoice) {
-              final invoiceId = invoice['id'].toString();
-              final supplierName =
-                  invoice['supplier_name']?.toString().toLowerCase() ?? '';
-              final searchLower = _searchQuery.toLowerCase();
-              return invoiceId.contains(searchLower) ||
-                  supplierName.contains(searchLower);
-            }).toList();
-
-    if (filteredInvoices.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search_off, size: 80, color: Colors.grey.shade300),
-            const SizedBox(height: 20),
-            Text(
-              'لا توجد نتائج',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: _textSecondary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'جرب كلمات بحث مختلفة',
-              style: TextStyle(color: _textSecondary),
+              _searchQuery.isEmpty
+                  ? 'إبدأ بإنشاء أول فاتورة شراء'
+                  : 'جرب كلمات بحث أخرى',
+              style: const TextStyle(color: Colors.grey),
             ),
           ],
         ),
@@ -845,16 +575,159 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadInvoices,
-      color: _primaryColor,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: ListView.builder(
-          controller: _scrollController,
-          itemCount: filteredInvoices.length,
-          itemBuilder: (context, index) {
-            return _buildInvoiceCard(filteredInvoices[index]);
-          },
+      onRefresh: _refreshInvoices,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final bool isSmallScreen = constraints.maxWidth < 768;
+
+          if (isSmallScreen) {
+            // عرض مبسط للشاشات الصغيرة
+            return ListView.builder(
+              controller: _scrollController,
+              itemCount: invoices.length + 1,
+              itemBuilder: (context, index) {
+                if (index == invoices.length) {
+                  return _buildLoadingMore();
+                }
+                return _buildMobileInvoiceCard(invoices[index], index);
+              },
+            );
+          } else {
+            // عرض الجدول للشاشات الكبيرة
+            return ListView.builder(
+              controller: _scrollController,
+              itemCount: invoices.length + 1,
+              itemBuilder: (context, index) {
+                if (index == invoices.length) {
+                  return _buildLoadingMore();
+                }
+                return _buildTableRow(invoices[index], index);
+              },
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildMobileInvoiceCard(Map<String, dynamic> invoice, int index) {
+    final dateInfo = DateFormatter.formatDateTime(invoice['date']);
+    final isCash = invoice['payment_type'] == 'cash';
+    final totalAmount = invoice['total_cost'] ?? 0.0;
+
+    return Card(
+      margin: const EdgeInsets.all(8),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => PurchaseInvoiceDetailsPage(invoice: invoice),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // الصف الأول: رقم الفاتورة والتاريخ
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '#${invoice['id']}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    dateInfo['short_date'] ?? '',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // الصف الثاني: المورد
+              Text(
+                'المورد: ${invoice['supplier_name'] ?? '-'}',
+                style: const TextStyle(fontSize: 14),
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              // الصف الثالث: المبلغ وطريقة الدفع
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    Formatters.formatCurrency(totalAmount),
+                    style: const TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          isCash ? Colors.green.shade50 : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isCash ? Colors.green : Colors.orange,
+                      ),
+                    ),
+                    child: Text(
+                      isCash ? 'نقدي' : 'آجل',
+                      style: TextStyle(
+                        color: isCash ? Colors.green : Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // الصف الرابع: الإجراءات
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.visibility, size: 20),
+                    color: Colors.blue,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) =>
+                                  PurchaseInvoiceDetailsPage(invoice: invoice),
+                        ),
+                      );
+                    },
+                    tooltip: 'عرض التفاصيل',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 20),
+                    color: Colors.orange,
+                    onPressed: () => _editInvoice(invoice),
+                    tooltip: 'تعديل',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, size: 20),
+                    color: Colors.red,
+                    onPressed: () => _deleteInvoice(invoice),
+                    tooltip: 'حذف',
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -862,32 +735,33 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final invoices = context.watch<PurchaseInvoiceProvider>().invoices;
-
     return Directionality(
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'فواتير الشراء',
         showAppBar: false,
         child: Scaffold(
-          backgroundColor: _cardColor,
           body: Column(
             children: [
               _buildHeader(),
-              Expanded(child: _buildContent(invoices)),
+              // رأس الجدول يظهر فقط في الشاشات الكبيرة
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 768) {
+                    return const SizedBox.shrink();
+                  }
+                  return _buildTableHeader();
+                },
+              ),
+              Expanded(child: _buildContent()),
             ],
           ),
           floatingActionButton: FloatingActionButton(
             onPressed: () {
               Navigator.pushNamed(context, '/purchase-invoice');
             },
-            backgroundColor: _primaryColor,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            elevation: 4,
-            child: const Icon(Icons.add, size: 24),
+            backgroundColor: Colors.blue,
+            child: const Icon(Icons.add, color: Colors.white),
           ),
         ),
       ),

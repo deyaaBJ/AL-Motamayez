@@ -333,17 +333,18 @@ class DBHelper {
 
     // جدول فواتير الشراء
     await db.execute('''
-     CREATE TABLE purchase_invoices (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  supplier_id INTEGER NOT NULL,
-  date TEXT NOT NULL,
-  total_cost REAL NOT NULL,
-  payment_type TEXT NOT NULL DEFAULT 'cash', -- cash / credit
-  note TEXT,
-  FOREIGN KEY (supplier_id) REFERENCES suppliers (id)
-);
-
-    ''');
+  CREATE TABLE purchase_invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_id INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    total_cost REAL NOT NULL,
+    payment_type TEXT NOT NULL DEFAULT 'cash',
+    note TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers (id)
+  );
+''');
 
     // جدول عناصر فاتورة
 

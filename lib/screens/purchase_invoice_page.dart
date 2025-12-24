@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/models/product.dart';
+import 'package:shopmate/screens/add_product_screen.dart';
 import 'package:shopmate/screens/add_supplier_page.dart';
 import '../providers/supplier_provider.dart';
 import '../providers/purchase_invoice_provider.dart';
@@ -10,52 +11,6 @@ import '../providers/product_provider.dart';
 import '../utils/formatters.dart';
 
 // صفحة إضافة منتج جديد
-class AddProductPage extends StatelessWidget {
-  const AddProductPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('إضافة منتج جديد'),
-        backgroundColor: Colors.blue,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    TextField(
-                      decoration: InputDecoration(
-                        labelText: 'اسم المنتج',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        prefixIcon: const Icon(Icons.shopping_bag),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
-                      child: const Text('حفظ المنتج'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class PurchaseInvoicePage extends StatefulWidget {
   const PurchaseInvoicePage({super.key});
@@ -68,7 +23,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   // التحكم في الحقول
   final TextEditingController _qtyController = TextEditingController();
   final TextEditingController _costController = TextEditingController();
-  final TextEditingController _searchProductController = TextEditingController();
+  final TextEditingController _searchProductController =
+      TextEditingController();
   final TextEditingController _noteController = TextEditingController();
 
   // المتغيرات
@@ -79,7 +35,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   int? _invoiceId;
   List<Map<String, dynamic>> _invoiceItems = [];
   double _invoiceTotal = 0.0;
-  
+
   // حالات التحميل
   bool _isLoading = false;
   bool _isCreatingInvoice = false;
@@ -93,7 +49,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
     });
-    
+
     // إضافة Listener للبحث
     _searchProductController.addListener(_performSearch);
   }
@@ -102,8 +58,14 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     try {
       setState(() => _isInitialLoading = true);
 
-      await Provider.of<SupplierProvider>(context, listen: false).loadSuppliers();
-      await Provider.of<ProductProvider>(context, listen: false).loadProducts(reset: true);
+      await Provider.of<SupplierProvider>(
+        context,
+        listen: false,
+      ).loadSuppliers();
+      await Provider.of<ProductProvider>(
+        context,
+        listen: false,
+      ).loadProducts(reset: true);
 
       _showSuccess('تم تحميل البيانات بنجاح');
     } catch (e) {
@@ -117,7 +79,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
   void _performSearch() {
     final query = _searchProductController.text.trim().toLowerCase();
-    
+
     if (query.isEmpty) {
       setState(() {
         _searchResults = [];
@@ -131,12 +93,13 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     // البحث في المنتجات المحملة
     final productProvider = context.read<ProductProvider>();
     final products = productProvider.products;
-    
-    final results = products.where((p) {
-      return p.name.toLowerCase().contains(query) ||
-             (p.barcode ?? '').toLowerCase().contains(query);
-    }).toList();
-    
+
+    final results =
+        products.where((p) {
+          return p.name.toLowerCase().contains(query) ||
+              (p.barcode ?? '').toLowerCase().contains(query);
+        }).toList();
+
     setState(() {
       _searchResults = results;
       _isSearching = false;
@@ -184,7 +147,10 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: isWideScreen ? _buildDesktopLayout(suppliers) : _buildMobileLayout(suppliers),
+      child:
+          isWideScreen
+              ? _buildDesktopLayout(suppliers)
+              : _buildMobileLayout(suppliers),
     );
   }
 
@@ -205,9 +171,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
             ],
           ),
         ),
-        
+
         const SizedBox(width: 20),
-        
+
         // الجانب الأيمن: عرض الفاتورة
         Expanded(
           flex: 3,
@@ -242,9 +208,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   Widget _buildInvoiceHeader() {
     return Card(
       elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Row(
@@ -264,18 +228,11 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 const SizedBox(height: 4),
                 Text(
                   _invoiceId == null ? 'مسودة' : 'فاتورة #${_invoiceId}',
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(color: Colors.grey, fontSize: 14),
                 ),
               ],
             ),
-            Icon(
-              Icons.receipt_long,
-              size: 48,
-              color: Colors.blue.shade400,
-            ),
+            Icon(Icons.receipt_long, size: 48, color: Colors.blue.shade400),
           ],
         ),
       ),
@@ -285,9 +242,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   Widget _buildSupplierSection(List<Map<String, dynamic>> suppliers) {
     return Card(
       elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -298,10 +253,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
               children: [
                 const Text(
                   'المورد',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 IconButton(
                   icon: const Icon(Icons.add),
@@ -312,14 +264,17 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                         builder: (context) => const AddSupplierPage(),
                       ),
                     ).then((_) {
-                      Provider.of<SupplierProvider>(context, listen: false).loadSuppliers();
+                      Provider.of<SupplierProvider>(
+                        context,
+                        listen: false,
+                      ).loadSuppliers();
                     });
                   },
                   tooltip: 'إضافة مورد جديد',
                 ),
               ],
             ),
-            
+
             if (suppliers.isEmpty)
               Container(
                 padding: const EdgeInsets.all(16),
@@ -344,7 +299,10 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                             builder: (context) => const AddSupplierPage(),
                           ),
                         ).then((_) {
-                          Provider.of<SupplierProvider>(context, listen: false).loadSuppliers();
+                          Provider.of<SupplierProvider>(
+                            context,
+                            listen: false,
+                          ).loadSuppliers();
                         });
                       },
                       child: const Text('إضافة مورد'),
@@ -364,21 +322,22 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                       prefixIcon: const Icon(Icons.person),
                     ),
                     value: _selectedSupplierId,
-                    items: suppliers.map((supplier) {
-                      return DropdownMenuItem<int>(
-                        value: supplier['id'],
-                        child: Text(supplier['name']),
-                      );
-                    }).toList(),
+                    items:
+                        suppliers.map((supplier) {
+                          return DropdownMenuItem<int>(
+                            value: supplier['id'],
+                            child: Text(supplier['name']),
+                          );
+                        }).toList(),
                     onChanged: (value) {
                       setState(() {
                         _selectedSupplierId = value;
                       });
                     },
                   ),
-                  
+
                   const SizedBox(height: 16),
-                  
+
                   DropdownButtonFormField<String>(
                     decoration: InputDecoration(
                       labelText: 'طريقة الدفع',
@@ -389,14 +348,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     ),
                     value: _selectedPaymentType,
                     items: const [
-                      DropdownMenuItem(
-                        value: 'cash',
-                        child: Text('نقدي'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'credit',
-                        child: Text('آجل'),
-                      ),
+                      DropdownMenuItem(value: 'cash', child: Text('نقدي')),
+                      DropdownMenuItem(value: 'credit', child: Text('آجل')),
                     ],
                     onChanged: (value) {
                       setState(() {
@@ -406,9 +359,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                   ),
                 ],
               ),
-            
+
             const SizedBox(height: 16),
-            
+
             TextField(
               controller: _noteController,
               decoration: InputDecoration(
@@ -430,9 +383,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   Widget _buildAddProductsSection() {
     return Card(
       elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -443,10 +394,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
               children: [
                 const Text(
                   'إضافة منتجات',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 IconButton(
                   icon: const Icon(Icons.add),
@@ -454,19 +402,17 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const AddProductPage(),
+                        builder: (context) => const AddProductScreen(),
                       ),
-                    ).then((_) {
-                      Provider.of<ProductProvider>(context, listen: false).loadProducts(reset: true);
-                    });
+                    );
                   },
                   tooltip: 'إضافة منتج جديد',
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             TextField(
               controller: _searchProductController,
               decoration: InputDecoration(
@@ -475,17 +421,18 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 prefixIcon: const Icon(Icons.search),
-                suffixIcon: _isSearching
-                    ? const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : null,
+                suffixIcon:
+                    _isSearching
+                        ? const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : null,
               ),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             Container(
               height: 200,
               decoration: BoxDecoration(
@@ -494,9 +441,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
               ),
               child: _buildProductSearchResults(),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             Row(
               children: [
                 Expanded(
@@ -528,9 +475,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 20),
-            
+
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -541,16 +488,17 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.add_shopping_cart),
-                          SizedBox(width: 8),
-                          Text('إضافة المنتج'),
-                        ],
-                      ),
+                child:
+                    _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.add_shopping_cart),
+                            SizedBox(width: 8),
+                            Text('إضافة المنتج'),
+                          ],
+                        ),
               ),
             ),
           ],
@@ -561,13 +509,11 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
   Widget _buildProductSearchResults() {
     final query = _searchProductController.text.trim();
-    
+
     if (_isSearching) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
-    
+
     if (query.isEmpty) {
       return const Center(
         child: Column(
@@ -580,7 +526,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         ),
       );
     }
-    
+
     if (_searchResults.isEmpty) {
       return Center(
         child: Column(
@@ -595,7 +541,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const AddProductPage(),
+                    builder: (context) => const AddProductScreen(),
                   ),
                 );
               },
@@ -605,13 +551,13 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         ),
       );
     }
-    
+
     return ListView.builder(
       itemCount: _searchResults.length,
       itemBuilder: (context, index) {
         final product = _searchResults[index];
         final isSelected = _selectedProductId == product.id;
-        
+
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           color: isSelected ? Colors.blue.shade50 : null,
@@ -632,7 +578,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
             onTap: () {
               setState(() {
                 _selectedProductId = product.id;
-                _costController.text = product.costPrice?.toStringAsFixed(2) ?? '0.00';
+                _costController.text =
+                    product.costPrice?.toStringAsFixed(2) ?? '0.00';
                 _qtyController.text = '1';
               });
             },
@@ -644,12 +591,10 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
   Widget _buildInvoicePreview() {
     final products = context.read<ProductProvider>().products;
-    
+
     return Card(
       elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -660,10 +605,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
               children: [
                 const Text(
                   'معاينة الفاتورة',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 Chip(
                   label: Text('${_invoiceItems.length} منتج'),
@@ -671,9 +613,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             if (_invoiceItems.isEmpty)
               Container(
                 padding: const EdgeInsets.all(40),
@@ -685,7 +627,11 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 child: const Center(
                   child: Column(
                     children: [
-                      Icon(Icons.shopping_cart_outlined, size: 48, color: Colors.grey),
+                      Icon(
+                        Icons.shopping_cart_outlined,
+                        size: 48,
+                        color: Colors.grey,
+                      ),
                       SizedBox(height: 16),
                       Text(
                         'لا توجد منتجات في الفاتورة',
@@ -750,26 +696,26 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 8),
-                  
+
                   // المنتجات
                   ..._invoiceItems.asMap().entries.map((entry) {
                     final index = entry.key;
                     final item = entry.value;
                     final productId = item['product_id'] as int;
-                    
+
                     Product? product;
                     try {
                       product = products.firstWhere((p) => p.id == productId);
                     } catch (e) {
                       product = null;
                     }
-                    
+
                     final quantity = (item['quantity'] as num).toDouble();
                     final costPrice = (item['cost_price'] as num).toDouble();
                     final subtotal = quantity * costPrice;
-                    
+
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
@@ -809,15 +755,16 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                           const SizedBox(width: 16),
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: _isLoading ? null : () => _removeItem(index),
+                            onPressed:
+                                _isLoading ? null : () => _removeItem(index),
                           ),
                         ],
                       ),
                     );
                   }).toList(),
-                  
+
                   const SizedBox(height: 20),
-                  
+
                   // الملخص
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -840,7 +787,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('طريقة الدفع:'),
-                            Text(_selectedPaymentType == 'cash' ? 'نقدي' : 'آجل'),
+                            Text(
+                              _selectedPaymentType == 'cash' ? 'نقدي' : 'آجل',
+                            ),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -880,9 +829,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   Widget _buildInvoiceActions() {
     return Card(
       elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Row(
@@ -948,7 +895,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       final purchaseInvoiceProvider = context.read<PurchaseInvoiceProvider>();
       _invoiceId = await purchaseInvoiceProvider.addPurchaseInvoice(
         supplierId: _selectedSupplierId!,
-        totalCost: 0,
+        totalCost: _invoiceTotal, // الآن سيكون صفراً أو القيمة الفعلية
         paymentType: _selectedPaymentType ?? 'cash',
         note: _noteController.text,
       );
@@ -967,8 +914,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       if (_invoiceId == null) return;
     }
 
-    if (_selectedProductId == null || 
-        _qtyController.text.isEmpty || 
+    if (_selectedProductId == null ||
+        _qtyController.text.isEmpty ||
         _costController.text.isEmpty) {
       _showError('يرجى ملء جميع الحقول');
       return;
@@ -994,34 +941,27 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         costPrice: cost,
       );
 
-      await _loadInvoiceItems();
+      await _loadInvoiceItems(); // هذه ستُحدث _invoiceItems وتُحسب المجموع
+
+      // تحديث التكلفة في الفاتورة في قاعدة البيانات
+      if (_invoiceId != null) {
+        final purchaseInvoiceProvider = context.read<PurchaseInvoiceProvider>();
+        await purchaseInvoiceProvider.updateInvoiceTotal(
+          invoiceId: _invoiceId!,
+          totalCost: _invoiceTotal,
+        );
+      }
 
       _qtyController.clear();
       _costController.clear();
       _selectedProductId = null;
+      _searchProductController.clear();
 
       _showSuccess('تم إضافة المنتج بنجاح');
     } catch (e) {
       _showError('حدث خطأ: $e');
     } finally {
       setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _loadInvoiceItems() async {
-    try {
-      final purchaseItemProvider = context.read<PurchaseItemProvider>();
-      _invoiceItems = await purchaseItemProvider.getPurchaseItems(_invoiceId!);
-
-      _invoiceTotal = _invoiceItems.fold(0.0, (sum, item) {
-        final quantity = (item['quantity'] as num).toDouble();
-        final costPrice = (item['cost_price'] as num).toDouble();
-        return sum + (quantity * costPrice);
-      });
-
-      setState(() {});
-    } catch (e) {
-      _showError('خطأ في تحميل العناصر: $e');
     }
   }
 
@@ -1035,7 +975,18 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
         await purchaseItemProvider.deletePurchaseItem(itemId);
 
-        await _loadInvoiceItems();
+        await _loadInvoiceItems(); // إعادة حساب المجموع بعد الحذف
+
+        // تحديث التكلفة في قاعدة البيانات
+        if (_invoiceId != null) {
+          final purchaseInvoiceProvider =
+              context.read<PurchaseInvoiceProvider>();
+          await purchaseInvoiceProvider.updateInvoiceTotal(
+            invoiceId: _invoiceId!,
+            totalCost: _invoiceTotal,
+          );
+        }
+
         _showSuccess('تم حذف المنتج بنجاح');
       } catch (e) {
         _showError('حدث خطأ أثناء الحذف: $e');
@@ -1053,12 +1004,55 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
     setState(() => _isLoading = true);
 
+    // عرض رسالة النجاح أولاً
     _showSuccess('تم حفظ الفاتورة بنجاح رقم #$_invoiceId');
 
-    await Future.delayed(const Duration(seconds: 1));
-    _clearInvoice();
+    // انتظر قليلاً
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    try {
+      // تحديث التكلفة في الخلفية (لا تنتظر النتيجة)
+      if (_invoiceId != null) {
+        final purchaseInvoiceProvider = context.read<PurchaseInvoiceProvider>();
+        purchaseInvoiceProvider
+            .updateInvoiceTotal(
+              invoiceId: _invoiceId!,
+              totalCost: _invoiceTotal,
+            )
+            .catchError((e) {
+              print('⚠️ تحديث التكلفة فشل في الخلفية: $e');
+            });
+      }
+    } catch (e) {
+      print('⚠️ خطأ غير متوقع: $e');
+    }
+
+    // مسح الواجهة دون انتظار
+    _softClearInvoice();
 
     setState(() => _isLoading = false);
+  }
+
+  void _softClearInvoice() {
+    // مسح المتحكمات
+    _noteController.clear();
+    _qtyController.clear();
+    _costController.clear();
+    _searchProductController.clear();
+
+    // إعادة تعيين المتغيرات دون إثارة أخطاء
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _invoiceId = null;
+          _invoiceItems = [];
+          _invoiceTotal = 0.0;
+          _selectedProductId = null;
+          _selectedSupplierId = null;
+          _searchResults = [];
+        });
+      }
+    });
   }
 
   void _clearInvoice() {
@@ -1096,5 +1090,27 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  void _calculateTotal() {
+    double total = 0.0;
+    for (var item in _invoiceItems) {
+      final quantity = (item['quantity'] as num).toDouble();
+      final costPrice = (item['cost_price'] as num).toDouble();
+      total += quantity * costPrice;
+    }
+    setState(() {
+      _invoiceTotal = total;
+    });
+  }
+
+  Future<void> _loadInvoiceItems() async {
+    try {
+      final purchaseItemProvider = context.read<PurchaseItemProvider>();
+      _invoiceItems = await purchaseItemProvider.getPurchaseItems(_invoiceId!);
+      _calculateTotal(); // حساب التكلفة بعد تحميل العناصر
+    } catch (e) {
+      _showError('خطأ في تحميل العناصر: $e');
+    }
   }
 }
