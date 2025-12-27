@@ -1,10 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shopmate/components/base_layout.dart';
 import 'package:shopmate/providers/purchase_invoice_provider.dart';
 import 'package:shopmate/screens/purchase_invoice_details_page.dart';
-import 'package:shopmate/utils/formatters.dart';
-import 'package:shopmate/utils/date_formatter.dart';
 
 class PurchaseInvoicesListPage extends StatefulWidget {
   const PurchaseInvoicesListPage({super.key});
@@ -19,19 +19,62 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
-  bool _isLoading = false;
-  bool _isLoadingMore = false;
   String _searchQuery = '';
+  Timer? _searchTimer;
+  String _lastSearchQuery = '';
+
+  // دالة لتنسيق العملة
+  String _formatCurrency(double amount) {
+    return '${amount.toStringAsFixed(2)} د.إ';
+  }
+
+  // دالة لتنسيق التاريخ
+  Map<String, String> _formatDateTime(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      final year = date.year;
+      final month = date.month.toString().padLeft(2, '0');
+      final day = date.day.toString().padLeft(2, '0');
+      final hour = date.hour.toString().padLeft(2, '0');
+      final minute = date.minute.toString().padLeft(2, '0');
+
+      return {'short_date': '$year/$month/$day', 'time_12': '$hour:$minute'};
+    } catch (e) {
+      return {'short_date': dateString, 'time_12': ''};
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadInvoices();
+
+    // إعداد listener للتمرير
     _scrollController.addListener(_scrollListener);
+
+    // إعداد listener لحقل البحث
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // الحصول على Provider من context
+    final provider = Provider.of<PurchaseInvoiceProvider>(
+      context,
+      listen: false,
+    );
+
+    // تحميل الفواتير أول مرة فقط إذا لم تكن محملة
+    if (provider.invoices.isEmpty && !provider.isLoading) {
+      _loadInvoices(provider);
+    }
   }
 
   @override
   void dispose() {
+    _searchTimer?.cancel();
+    _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -39,71 +82,110 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
   }
 
   void _scrollListener() {
-    final provider = context.read<PurchaseInvoiceProvider>();
+    if (!mounted) return;
 
+    final provider = Provider.of<PurchaseInvoiceProvider>(
+      context,
+      listen: false,
+    );
+
+    if (!provider.hasMore || provider.isLoading) return;
+
+    // تحميل المزيد عندما نصل لنهاية الصفحة
     if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 100 &&
-        !_isLoadingMore &&
-        provider.hasMore) {
-      _loadMoreInvoices();
+        _scrollController.position.maxScrollExtent - 100) {
+      _loadMoreInvoices(provider);
     }
   }
 
-  Future<void> _loadInvoices() async {
-    if (_isLoading) return;
+  void _onSearchChanged() {
+    // إلغاء أي عملية بحث سابقة
+    _searchTimer?.cancel();
 
-    setState(() => _isLoading = true);
+    final query = _searchController.text.trim();
 
-    try {
-      await context.read<PurchaseInvoiceProvider>().refreshInvoices();
-    } catch (e) {
-      _showSnackBar('خطأ في تحميل الفواتير: $e', Colors.red);
-    } finally {
+    // تحديث query المحلية
+    setState(() {
+      _searchQuery = query;
+    });
+
+    // إذا كان البحث فارغاً، إعادة تحميل الكل فوراً
+    if (query.isEmpty) {
+      _searchInvoices();
+      return;
+    }
+
+    // إجراء البحث بعد تأخير 500 مللي ثانية
+    _searchTimer = Timer(const Duration(milliseconds: 500), () {
       if (mounted) {
-        setState(() => _isLoading = false);
+        _searchInvoices();
+      }
+    });
+  }
+
+  Future<void> _loadInvoices(PurchaseInvoiceProvider provider) async {
+    try {
+      await provider.refreshInvoices();
+    } catch (e) {
+      if (mounted) {
+        print('خطأ في تحميل الفواتير: $e');
+        _showSnackBar('خطأ في تحميل الفواتير: ${e.toString()}', Colors.red);
       }
     }
   }
 
   Future<void> _searchInvoices() async {
-    if (_isLoading) return;
+    final query = _searchController.text.trim();
 
-    setState(() => _isLoading = true);
+    // إذا كان نفس البحث السابق، تخطي
+    if (query == _lastSearchQuery) {
+      print('⏭️ نفس البحث السابق، تخطي');
+      return;
+    }
+
+    _lastSearchQuery = query;
+
+    final provider = Provider.of<PurchaseInvoiceProvider>(
+      context,
+      listen: false,
+    );
+
+    print('🚀 تنفيذ البحث: "$query"');
 
     try {
-      await context.read<PurchaseInvoiceProvider>().searchInvoices(
-        _searchQuery,
-      );
+      await provider.searchInvoices(query);
     } catch (e) {
-      _showSnackBar('خطأ في البحث: $e', Colors.red);
-    } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        print('❌ خطأ في البحث: $e');
+        _showSnackBar('خطأ في البحث: ${e.toString()}', Colors.red);
       }
     }
   }
 
-  Future<void> _loadMoreInvoices() async {
-    final provider = context.read<PurchaseInvoiceProvider>();
-
-    // تحقق إذا كان هناك المزيد للتحميل
-    if (_isLoadingMore || !provider.hasMore) return;
-
-    setState(() => _isLoadingMore = true);
-
+  Future<void> _loadMoreInvoices(PurchaseInvoiceProvider provider) async {
     try {
       await provider.loadMoreInvoices();
     } catch (e) {
-      _showSnackBar('خطأ في تحميل المزيد: $e', Colors.red);
-    } finally {
       if (mounted) {
-        setState(() => _isLoadingMore = false);
+        print('خطأ في تحميل المزيد: $e');
+        _showSnackBar('خطأ في تحميل المزيد: ${e.toString()}', Colors.red);
       }
     }
   }
 
-  Future<void> _refreshInvoices() async {
-    await _loadInvoices();
+  // دالة لإعادة تعيين البحث وعرض جميع الفواتير
+  Future<void> _resetSearch() async {
+    _searchController.clear();
+    _lastSearchQuery = '';
+    setState(() => _searchQuery = '');
+
+    final provider = Provider.of<PurchaseInvoiceProvider>(
+      context,
+      listen: false,
+    );
+
+    // إعادة تعيين البحث
+    await provider.resetSearch();
   }
 
   void _showSnackBar(String message, Color color) {
@@ -112,11 +194,15 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
         content: Text(message),
         backgroundColor: color,
         duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  Future<void> _editInvoice(Map<String, dynamic> invoice) async {
+  Future<void> _editInvoice(
+    PurchaseInvoiceProvider provider,
+    Map<String, dynamic> invoice,
+  ) async {
     final TextEditingController noteController = TextEditingController(
       text: invoice['note']?.toString() ?? '',
     );
@@ -124,95 +210,103 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('تعديل طريقة الدفع'),
-            content: SizedBox(
-              width: 300,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // نقدي
-                      ChoiceChip(
-                        label: const Text('نقدي'),
-                        selected: paymentType == 'cash',
-                        onSelected: (selected) {
-                          setState(() {
-                            paymentType = 'cash';
-                          });
-                        },
-                        selectedColor: Colors.green,
-                        backgroundColor: Colors.grey.shade200,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return AlertDialog(
+              title: const Text('تعديل طريقة الدفع'),
+              content: SizedBox(
+                width: 300,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('نقدي'),
+                          selected: paymentType == 'cash',
+                          onSelected: (selected) {
+                            setState(() {
+                              paymentType = 'cash';
+                            });
+                          },
+                          selectedColor: Colors.green,
+                          backgroundColor: Colors.grey.shade200,
+                        ),
+                        const SizedBox(width: 20),
+                        ChoiceChip(
+                          label: const Text('آجل (دين)'),
+                          selected: paymentType == 'credit',
+                          onSelected: (selected) {
+                            setState(() {
+                              paymentType = 'credit';
+                            });
+                          },
+                          selectedColor: Colors.orange,
+                          backgroundColor: Colors.grey.shade200,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: noteController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        hintText: 'ملاحظات',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.all(12),
                       ),
-                      const SizedBox(width: 20),
-                      // آجل
-                      ChoiceChip(
-                        label: const Text('آجل (دين)'),
-                        selected: paymentType == 'credit',
-                        onSelected: (selected) {
-                          setState(() {
-                            paymentType = 'credit';
-                          });
-                        },
-                        selectedColor: Colors.orange,
-                        backgroundColor: Colors.grey.shade200,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: noteController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      hintText: 'ملاحظات',
-                      border: OutlineInputBorder(),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('إلغاء'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
                     ),
                   ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('إلغاء'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  try {
-                    await context
-                        .read<PurchaseInvoiceProvider>()
-                        .updatePurchaseInvoice(
-                          invoiceId: invoice['id'],
-                          paymentType: paymentType,
-                          note: noteController.text,
-                        );
-                    _showSnackBar('تم تحديث الفاتورة', Colors.green);
-                    Navigator.pop(context, true);
-                  } catch (e) {
-                    _showSnackBar('خطأ: $e', Colors.red);
-                  }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                child: const Text('حفظ'),
-              ),
-            ],
-          ),
+                  child: const Text('حفظ'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
-    if (result == true) {
-      await _refreshInvoices();
+    if (result == true && mounted) {
+      try {
+        await provider.updatePurchaseInvoice(
+          invoiceId: invoice['id'],
+          paymentType: paymentType,
+          note: noteController.text,
+        );
+        _showSnackBar('تم تحديث الفاتورة بنجاح', Colors.green);
+      } catch (e) {
+        _showSnackBar('خطأ في التحديث: ${e.toString()}', Colors.red);
+      }
     }
   }
 
-  Future<void> _deleteInvoice(Map<String, dynamic> invoice) async {
+  Future<void> _deleteInvoice(
+    PurchaseInvoiceProvider provider,
+    Map<String, dynamic> invoice,
+  ) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder:
-          (context) => AlertDialog(
+          (BuildContext context) => AlertDialog(
             title: const Text('تأكيد الحذف'),
             content: Text('هل تريد حذف الفاتورة #${invoice['id']}؟'),
             actions: [
@@ -229,21 +323,17 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
           ),
     );
 
-    if (confirm != true) return;
+    if (confirm != true || !mounted) return;
 
     try {
-      await context.read<PurchaseInvoiceProvider>().deletePurchaseInvoice(
-        invoice['id'],
-      );
-      _showSnackBar('تم حذف الفاتورة', Colors.green);
-      await _refreshInvoices();
+      await provider.deletePurchaseInvoice(invoice['id']);
+      _showSnackBar('تم حذف الفاتورة بنجاح', Colors.green);
     } catch (e) {
-      _showSnackBar('خطأ في الحذف: $e', Colors.red);
+      _showSnackBar('خطأ في الحذف: ${e.toString()}', Colors.red);
     }
   }
 
-  Widget _buildHeader() {
-    final provider = context.watch<PurchaseInvoiceProvider>();
+  Widget _buildHeader(PurchaseInvoiceProvider provider) {
     final invoices = provider.invoices;
     final totalAmount = invoices.fold<double>(
       0,
@@ -252,79 +342,160 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      color: Colors.white,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
         children: [
           Row(
             children: [
-              const Icon(Icons.receipt_long, color: Colors.blue, size: 32),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'فواتير الشراء',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
-                  ),
-                  Text(
-                    '${invoices.length} فاتورة - ${Formatters.formatCurrency(totalAmount)}',
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ],
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.receipt_long,
+                  color: Colors.blue,
+                  size: 32,
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'فواتير الشراء',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${invoices.length} فاتورة - ${_formatCurrency(totalAmount)}',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               IconButton(
                 icon: const Icon(Icons.refresh),
-                onPressed: _refreshInvoices,
+                onPressed: () => _loadInvoices(provider),
                 tooltip: 'تحديث',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.grey.shade100,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.bug_report),
+                onPressed: _debugData,
+                tooltip: 'فحص البيانات',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.orange.shade100,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
           // شريط البحث
           TextField(
             controller: _searchController,
             focusNode: _searchFocusNode,
             decoration: InputDecoration(
               hintText: 'ابحث برقم الفاتورة أو اسم المورد...',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+              prefixIcon: const Icon(Icons.search, color: Colors.grey),
               suffixIcon:
                   _searchQuery.isNotEmpty
                       ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                          _searchInvoices();
-                        },
+                        icon: const Icon(Icons.clear, size: 20),
+                        onPressed: _resetSearch,
                       )
                       : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Colors.blue, width: 1.5),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              filled: true,
+              fillColor: Colors.grey.shade50,
             ),
-            onChanged: (value) {
-              // تحديث قيمة البحث عند كل تغيير
-              setState(() => _searchQuery = value);
-            },
             onSubmitted: (value) {
-              // عند الضغط على زر البحث
               _searchInvoices();
+              _searchFocusNode.unfocus();
             },
           ),
+          const SizedBox(height: 10),
+          if (_searchQuery.isNotEmpty)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _resetSearch,
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('عرض الكل'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orange,
+                    side: BorderSide(color: Colors.orange.shade300),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
   }
 
+  // دالة لفحص البيانات
+  Future<void> _debugData() async {
+    final provider = Provider.of<PurchaseInvoiceProvider>(
+      context,
+      listen: false,
+    );
+
+    await provider.testSearch('1');
+    await Future.delayed(const Duration(seconds: 1));
+
+    print('\n2. البحث باسم "مورد":');
+    await provider.testSearch('مورد');
+    await Future.delayed(const Duration(seconds: 1));
+
+    print('\n3. إعادة تحميل الكل:');
+    await provider.refreshInvoices();
+  }
+
   Widget _buildHeaderCell(String text) {
     return Text(
       text,
-      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+      style: const TextStyle(
+        fontWeight: FontWeight.bold,
+        fontSize: 14,
+        color: Colors.black87,
+      ),
       textAlign: TextAlign.center,
       overflow: TextOverflow.ellipsis,
     );
@@ -332,10 +503,11 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
 
   Widget _buildTableHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
-        border: const Border(bottom: BorderSide(color: Colors.grey)),
+        border: const Border(bottom: BorderSide(color: Colors.grey, width: 1)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
       ),
       child: Row(
         children: [
@@ -350,13 +522,22 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
     );
   }
 
-  Widget _buildTableRow(Map<String, dynamic> invoice, int index) {
-    final dateInfo = DateFormatter.formatDateTime(invoice['date']);
+  Widget _buildTableRow(
+    PurchaseInvoiceProvider provider,
+    Map<String, dynamic> invoice,
+    int index,
+  ) {
+    final dateInfo = _formatDateTime(invoice['date']?.toString() ?? '');
     final isCash = invoice['payment_type'] == 'cash';
     final totalAmount = invoice['total_cost'] ?? 0.0;
 
     return Container(
-      color: index.isEven ? Colors.white : Colors.grey.shade50,
+      decoration: BoxDecoration(
+        color: index.isEven ? Colors.white : Colors.grey.shade50,
+        border: const Border(
+          bottom: BorderSide(color: Colors.grey, width: 0.5),
+        ),
+      ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -369,91 +550,110 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
               ),
             );
           },
+          hoverColor: Colors.blue.shade50,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 // رقم الفاتورة
                 Expanded(
                   flex: 1,
-                  child: Text(
-                    '#${invoice['id']}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      '#${invoice['id']}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
                 // التاريخ
                 Expanded(
                   flex: 2,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        dateInfo['short_date'] ?? '',
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        dateInfo['time_12'] ?? '',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          dateInfo['short_date'] ?? '',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        Text(
+                          dateInfo['time_12'] ?? '',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 // المورد
                 Expanded(
                   flex: 2,
-                  child: Text(
-                    invoice['supplier_name'] ?? '-',
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      invoice['supplier_name']?.toString() ?? 'غير محدد',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
                 // المبلغ
                 Expanded(
                   flex: 2,
-                  child: Text(
-                    Formatters.formatCurrency(totalAmount),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.bold,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      _formatCurrency(totalAmount),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 // طريقة الدفع
                 Expanded(
                   flex: 2,
-                  child: InkWell(
-                    onTap: () => _editInvoice(invoice),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 6,
-                      ),
-                      constraints: const BoxConstraints(maxWidth: 120),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: InkWell(
+                      onTap: () => _editInvoice(provider, invoice),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
+                          horizontal: 10,
+                          vertical: 6,
                         ),
                         decoration: BoxDecoration(
                           color:
                               isCash
                                   ? Colors.green.shade50
                                   : Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: isCash ? Colors.green : Colors.orange,
+                            color:
+                                isCash
+                                    ? Colors.green.shade300
+                                    : Colors.orange.shade300,
                             width: 1,
                           ),
                         ),
@@ -462,7 +662,10 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 12,
-                            color: isCash ? Colors.green : Colors.orange,
+                            color:
+                                isCash
+                                    ? Colors.green.shade800
+                                    : Colors.orange.shade800,
                             fontWeight: FontWeight.bold,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -474,38 +677,43 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
                 // الإجراءات
                 Expanded(
                   flex: 3,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.visibility, size: 18),
-                        color: Colors.blue,
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => PurchaseInvoiceDetailsPage(
-                                    invoice: invoice,
-                                  ),
-                            ),
-                          );
-                        },
-                        tooltip: 'عرض التفاصيل',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit, size: 18),
-                        color: Colors.orange,
-                        onPressed: () => _editInvoice(invoice),
-                        tooltip: 'تعديل',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, size: 18),
-                        color: Colors.red,
-                        onPressed: () => _deleteInvoice(invoice),
-                        tooltip: 'حذف',
-                      ),
-                    ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildActionButton(
+                          icon: Icons.visibility,
+                          color: Colors.blue,
+                          tooltip: 'عرض التفاصيل',
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => PurchaseInvoiceDetailsPage(
+                                      invoice: invoice,
+                                    ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                        _buildActionButton(
+                          icon: Icons.edit,
+                          color: Colors.orange,
+                          tooltip: 'تعديل',
+                          onPressed: () => _editInvoice(provider, invoice),
+                        ),
+                        const SizedBox(width: 4),
+                        _buildActionButton(
+                          icon: Icons.delete,
+                          color: Colors.red,
+                          tooltip: 'حذف',
+                          onPressed: () => _deleteInvoice(provider, invoice),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -516,42 +724,77 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
     );
   }
 
-  Widget _buildLoadingMore() {
-    final provider = context.watch<PurchaseInvoiceProvider>();
-
-    if (!_isLoadingMore && !provider.hasMore) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        child: const Center(child: Text('تم عرض جميع الفواتير')),
-      );
-    }
-
-    if (!_isLoadingMore) return const SizedBox.shrink();
-
+  Widget _buildActionButton({
+    required IconData icon,
+    required Color color,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      child: const Center(child: CircularProgressIndicator()),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: IconButton(
+        icon: Icon(icon, size: 18),
+        color: color,
+        onPressed: onPressed,
+        tooltip: tooltip,
+        padding: const EdgeInsets.all(6),
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      ),
     );
   }
 
-  Widget _buildContent() {
-    final provider = context.watch<PurchaseInvoiceProvider>();
+  Widget _buildLoadingMore(PurchaseInvoiceProvider provider) {
+    if (!provider.hasMore && provider.invoices.isNotEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: Text(
+            'تم عرض جميع الفواتير',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+          ),
+        ),
+      );
+    }
+
+    if (!provider.isLoading) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: const Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(PurchaseInvoiceProvider provider) {
     final invoices = provider.invoices;
 
-    if (_isLoading && invoices.isEmpty) {
+    if (provider.isLoading && invoices.isEmpty) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
+            CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+            ),
             SizedBox(height: 16),
-            Text('جاري تحميل الفواتير...'),
+            Text(
+              'جاري تحميل الفواتير...',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
           ],
         ),
       );
     }
 
-    if (invoices.isEmpty && !_isLoading) {
+    if (invoices.isEmpty && !provider.isLoading) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -560,7 +803,11 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
             const SizedBox(height: 20),
             Text(
               _searchQuery.isEmpty ? 'لا توجد فواتير' : 'لا توجد نتائج',
-              style: const TextStyle(fontSize: 18, color: Colors.grey),
+              style: const TextStyle(
+                fontSize: 18,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             const SizedBox(height: 10),
             Text(
@@ -569,54 +816,100 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
                   : 'جرب كلمات بحث أخرى',
               style: const TextStyle(color: Colors.grey),
             ),
+            const SizedBox(height: 20),
+            if (_searchQuery.isEmpty)
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/purchase-invoice');
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('إنشاء فاتورة جديدة'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            if (_searchQuery.isNotEmpty)
+              ElevatedButton.icon(
+                onPressed: _resetSearch,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('عرض جميع الفواتير'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                ),
+              ),
           ],
         ),
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _refreshInvoices,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final bool isSmallScreen = constraints.maxWidth < 768;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isSmallScreen = constraints.maxWidth < 768;
 
-          if (isSmallScreen) {
-            // عرض مبسط للشاشات الصغيرة
-            return ListView.builder(
-              controller: _scrollController,
-              itemCount: invoices.length + 1,
-              itemBuilder: (context, index) {
-                if (index == invoices.length) {
-                  return _buildLoadingMore();
-                }
-                return _buildMobileInvoiceCard(invoices[index], index);
-              },
-            );
-          } else {
-            // عرض الجدول للشاشات الكبيرة
-            return ListView.builder(
-              controller: _scrollController,
-              itemCount: invoices.length + 1,
-              itemBuilder: (context, index) {
-                if (index == invoices.length) {
-                  return _buildLoadingMore();
-                }
-                return _buildTableRow(invoices[index], index);
-              },
-            );
-          }
-        },
-      ),
+        if (isSmallScreen) {
+          return ListView.builder(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            itemCount: invoices.length + 1,
+            itemBuilder: (context, index) {
+              if (index == invoices.length) {
+                return _buildLoadingMore(provider);
+              }
+              return _buildMobileInvoiceCard(provider, invoices[index], index);
+            },
+          );
+        } else {
+          return Column(
+            children: [
+              // رأس الجدول
+              _buildTableHeader(),
+              // محتوى الجدول
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  itemCount: invoices.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == invoices.length) {
+                      return _buildLoadingMore(provider);
+                    }
+                    return _buildTableRow(provider, invoices[index], index);
+                  },
+                ),
+              ),
+            ],
+          );
+        }
+      },
     );
   }
 
-  Widget _buildMobileInvoiceCard(Map<String, dynamic> invoice, int index) {
-    final dateInfo = DateFormatter.formatDateTime(invoice['date']);
+  Widget _buildMobileInvoiceCard(
+    PurchaseInvoiceProvider provider,
+    Map<String, dynamic> invoice,
+    int index,
+  ) {
+    final dateInfo = _formatDateTime(invoice['date']?.toString() ?? '');
     final isCash = invoice['payment_type'] == 'cash';
     final totalAmount = invoice['total_cost'] ?? 0.0;
 
     return Card(
-      margin: const EdgeInsets.all(8),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.grey.shade200, width: 1),
+      ),
       child: InkWell(
         onTap: () {
           Navigator.push(
@@ -627,12 +920,12 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
             ),
           );
         },
+        borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // الصف الأول: رقم الفاتورة والتاريخ
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -641,34 +934,47 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
+                      color: Colors.blue,
                     ),
                   ),
                   Text(
                     dateInfo['short_date'] ?? '',
-                    style: const TextStyle(color: Colors.grey),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.person, size: 16, color: Colors.grey.shade500),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'المورد: ${invoice['supplier_name'] ?? 'غير محدد'}',
+                      style: const TextStyle(fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              // الصف الثاني: المورد
-              Text(
-                'المورد: ${invoice['supplier_name'] ?? '-'}',
-                style: const TextStyle(fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              // الصف الثالث: المبلغ وطريقة الدفع
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  Icon(
+                    Icons.attach_money,
+                    size: 16,
+                    color: Colors.green.shade500,
+                  ),
+                  const SizedBox(width: 8),
                   Text(
-                    Formatters.formatCurrency(totalAmount),
+                    _formatCurrency(totalAmount),
                     style: const TextStyle(
                       color: Colors.green,
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: 15,
                     ),
                   ),
+                  const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -677,28 +983,37 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
                     decoration: BoxDecoration(
                       color:
                           isCash ? Colors.green.shade50 : Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(15),
                       border: Border.all(
-                        color: isCash ? Colors.green : Colors.orange,
+                        color:
+                            isCash
+                                ? Colors.green.shade300
+                                : Colors.orange.shade300,
                       ),
                     ),
                     child: Text(
                       isCash ? 'نقدي' : 'آجل',
                       style: TextStyle(
-                        color: isCash ? Colors.green : Colors.orange,
+                        color:
+                            isCash
+                                ? Colors.green.shade800
+                                : Colors.orange.shade800,
                         fontWeight: FontWeight.bold,
+                        fontSize: 12,
                       ),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              Divider(height: 1, color: Colors.grey.shade200),
               const SizedBox(height: 8),
-              // الصف الرابع: الإجراءات
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.visibility, size: 20),
+                  _buildMobileActionButton(
+                    icon: Icons.visibility,
+                    label: 'عرض',
                     color: Colors.blue,
                     onPressed: () {
                       Navigator.push(
@@ -710,24 +1025,42 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
                         ),
                       );
                     },
-                    tooltip: 'عرض التفاصيل',
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 20),
+                  _buildMobileActionButton(
+                    icon: Icons.edit,
+                    label: 'تعديل',
                     color: Colors.orange,
-                    onPressed: () => _editInvoice(invoice),
-                    tooltip: 'تعديل',
+                    onPressed: () => _editInvoice(provider, invoice),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.delete, size: 20),
+                  _buildMobileActionButton(
+                    icon: Icons.delete,
+                    label: 'حذف',
                     color: Colors.red,
-                    onPressed: () => _deleteInvoice(invoice),
-                    tooltip: 'حذف',
+                    onPressed: () => _deleteInvoice(provider, invoice),
                   ),
                 ],
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Expanded(
+      child: TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18, color: color),
+        label: Text(label, style: TextStyle(color: color, fontSize: 12)),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
       ),
     );
@@ -741,27 +1074,27 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
         currentPage: 'فواتير الشراء',
         showAppBar: false,
         child: Scaffold(
-          body: Column(
-            children: [
-              _buildHeader(),
-              // رأس الجدول يظهر فقط في الشاشات الكبيرة
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  if (constraints.maxWidth < 768) {
-                    return const SizedBox.shrink();
-                  }
-                  return _buildTableHeader();
-                },
-              ),
-              Expanded(child: _buildContent()),
-            ],
+          body: Consumer<PurchaseInvoiceProvider>(
+            builder: (context, provider, child) {
+              return Column(
+                children: [
+                  _buildHeader(provider),
+                  Expanded(child: _buildContent(provider)),
+                ],
+              );
+            },
           ),
           floatingActionButton: FloatingActionButton(
             onPressed: () {
               Navigator.pushNamed(context, '/purchase-invoice');
             },
             backgroundColor: Colors.blue,
-            child: const Icon(Icons.add, color: Colors.white),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(50),
+            ),
+            elevation: 4,
+            child: const Icon(Icons.add, size: 28),
           ),
         ),
       ),

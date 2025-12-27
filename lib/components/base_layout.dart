@@ -59,6 +59,9 @@ class _BaseLayoutState extends State<BaseLayout> {
       case 'الفواتير':
         Navigator.pushNamed(context, '/purchaseInvoicesList');
         break;
+      case 'الموردين':
+        Navigator.pushNamed(context, '/suppliers');
+        break;
       case 'settings':
         Navigator.pushNamed(context, '/settings');
         break;

@@ -590,6 +590,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 return null;
               },
             ),
+
+            SizedBox(height: 12),
+            CustomTextField(
+              controller: controller.barcodeController,
+              label: 'باركود الوحدة (اختياري)',
+              prefixIcon: Icons.qr_code,
+            ),
           ],
         ),
       );

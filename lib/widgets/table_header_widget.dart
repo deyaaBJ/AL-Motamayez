@@ -14,9 +14,30 @@ class TableHeaderWidget extends StatelessWidget {
       child: const Row(
         children: [
           Expanded(
-            flex: 3,
+            flex: 1,
             child: Text(
               'المنتج',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              'الوحدة',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+
+          Expanded(
+            flex: 1,
+            child: Text(
+              'السعر',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -34,17 +55,7 @@ class TableHeaderWidget extends StatelessWidget {
             ),
           ),
           Expanded(
-            flex: 2,
-            child: Text(
-              'السعر',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
+            flex: 1,
             child: Text(
               'المجموع',
               style: TextStyle(

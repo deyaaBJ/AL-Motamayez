@@ -47,26 +47,11 @@ class _CartItemWidgetState extends State<CartItemWidget> {
         children: [
           // اسم المنتج
           Expanded(
-            flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.item.product.name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF333333),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.item.product.barcode,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ],
+            flex: 1,
+            child: Text(
+              widget.item.product.name,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
 
@@ -120,29 +105,45 @@ class _CartItemWidgetState extends State<CartItemWidget> {
   Widget _buildUnitDropdown() {
     final List<DropdownMenuItem<ProductUnit?>> items = [];
 
-    // إضافة الخيار الأساسي (الوحدة الأساسية)
+    // 🔥 أولاً: إضافة الخيار الأساسي (الوحدة الأساسية) - قيمة null
     items.add(
       DropdownMenuItem<ProductUnit?>(
-        value: null,
-        child: Text(
-          _getBaseUnitDisplayName(widget.item.product.baseUnit),
-          style: const TextStyle(fontSize: 12),
-          overflow: TextOverflow.ellipsis,
+        value: null, // 🔥 null يعني الوحدة الأساسية
+        child: Row(
+          children: [
+            Icon(Icons.barcode_reader, size: 16, color: Colors.grey),
+            SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                _getBaseUnitDisplayName(widget.item.product.baseUnit),
+                style: TextStyle(fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
       ),
     );
 
-    // إضافة الوحدات الإضافية
+    // 🔥 ثانياً: إضافة جميع الوحدات الإضافية
     final addedUnitIds = <int>{};
     for (final unit in widget.item.availableUnits) {
       if (unit.id != null && !addedUnitIds.contains(unit.id)) {
         items.add(
           DropdownMenuItem<ProductUnit?>(
             value: unit,
-            child: Text(
-              unit.unitName,
-              style: const TextStyle(fontSize: 12),
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              children: [
+                Icon(Icons.inventory_2, size: 16, color: Color(0xFF2196F3)),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '${unit.unitName} (${unit.containQty.toStringAsFixed(0)} ${_getBaseUnitDisplayName(widget.item.product.baseUnit)})',
+                    style: TextStyle(fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -150,37 +151,76 @@ class _CartItemWidgetState extends State<CartItemWidget> {
       }
     }
 
+    // إذا لم يكن هناك وحدات إضافية، فقط عرض الوحدة الأساسية
     if (items.length == 1) {
       return Container(
         decoration: BoxDecoration(
-          color: const Color(0xFFF8F5FF),
+          color: Color(0xFFF8F5FF),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFE1D4F7)),
+          border: Border.all(color: Color(0xFFE1D4F7)),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        child: Text(
-          _getBaseUnitDisplayName(widget.item.product.baseUnit),
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-          textAlign: TextAlign.center,
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.barcode_reader, size: 16, color: Colors.grey),
+            SizedBox(width: 6),
+            Text(
+              _getBaseUnitDisplayName(widget.item.product.baseUnit),
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
         ),
       );
     }
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F5FF),
+        color: Color(0xFFF8F5FF),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE1D4F7)),
+        border: Border.all(color: Color(0xFFE1D4F7)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: EdgeInsets.symmetric(horizontal: 8),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<ProductUnit?>(
           value: widget.item.selectedUnit,
           isExpanded: true,
-          icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF6A3093)),
+          icon: Icon(Icons.arrow_drop_down, color: Color(0xFF6A3093)),
           items: items,
           onChanged: (ProductUnit? newUnit) {
             widget.onUnitChange(widget.item, newUnit);
+          },
+          selectedItemBuilder: (context) {
+            // 🔥 هذا لتحسين عرض العنصر المختار
+            return items.map<Widget>((item) {
+              final isBaseUnit = item.value == null;
+              final unit = item.value;
+              return Container(
+                alignment: Alignment.centerRight,
+                child: Row(
+                  children: [
+                    Icon(
+                      isBaseUnit ? Icons.barcode_reader : Icons.inventory_2,
+                      size: 16,
+                      color: isBaseUnit ? Colors.grey : Color(0xFF2196F3),
+                    ),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        isBaseUnit
+                            ? _getBaseUnitDisplayName(
+                              widget.item.product.baseUnit,
+                            )
+                            // 🔥 هنا التغيير للعنصر المختار
+                            : '${unit!.unitName} (${unit.containQty.toStringAsFixed(0)} ${_getBaseUnitDisplayName(widget.item.product.baseUnit)})',
+                        style: TextStyle(fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList();
           },
         ),
       ),

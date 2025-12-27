@@ -16,6 +16,7 @@ import 'package:shopmate/screens/PurchaseInvoicesListPage.dart';
 import 'package:shopmate/screens/SalesHistoryScreen.dart';
 import 'package:shopmate/screens/auth/login.dart';
 import 'package:shopmate/providers/auth_provider.dart';
+import 'package:shopmate/screens/csuppliers_list_page.dart';
 import 'package:shopmate/screens/customers_screen.dart';
 import 'package:shopmate/screens/home.dart';
 import 'package:shopmate/screens/pos_screen.dart';
@@ -29,14 +30,20 @@ import 'package:window_size/window_size.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  sqfliteFfiInit();
-  databaseFactory = databaseFactoryFfi;
-  final DBHelper dbHelper = DBHelper();
-  await dbHelper.db;
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+
     setWindowTitle('ShopMate POS');
-    setWindowMinSize(const Size(1000, 700)); // الحد الأدنى
-    // setWindowMaxSize(const Size(1200, 1000)); // إذا بدك حد أقصى
+    setWindowMinSize(const Size(1000, 700));
+  }
+
+  try {
+    final dbHelper = DBHelper();
+    await dbHelper.db;
+  } catch (e, s) {
+    print('❌ DB ERROR: $e');
+    print(s);
   }
   runApp(
     MultiProvider(
@@ -44,7 +51,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => CustomerProvider()),
         ChangeNotifierProvider(create: (_) => SalesProvider()),
-        ChangeNotifierProvider(create: (_) => ReportsProvider()), // ✅ صح
+        ChangeNotifierProvider(create: (_) => ReportsProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => ProductProvider()),
         ChangeNotifierProvider(create: (_) => SideBarProvider()),
@@ -79,6 +86,7 @@ class ShopMateApp extends StatelessWidget {
         '/settings': (context) => const SettingsScreen(),
         '/purchaseInvoice': (context) => const PurchaseInvoicePage(),
         '/purchaseInvoicesList': (context) => const PurchaseInvoicesListPage(),
+        '/suppliers': (context) => const SuppliersListPage(),
       },
     );
   }

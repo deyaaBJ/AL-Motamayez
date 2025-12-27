@@ -78,6 +78,8 @@ class _PosScreenState extends State<PosScreen>
   }
 
   // دالة محسنة لتحميل الفاتورة الموجودة
+  // دالة محسنة لتحميل الفاتورة الموجودة
+  // دالة محسنة لتحميل الفاتورة الموجودة
   Future<void> _loadExistingSale(Sale sale) async {
     if (_isLoading || _isSaleLoaded) return;
 
@@ -99,40 +101,39 @@ class _PosScreenState extends State<PosScreen>
           // جلب بيانات المنتج
           final product = await _provider.getProductById(saleItem.productId);
           if (product != null) {
-            // جلب الوحدات المتاحة
+            // جلب جميع الوحدات المتاحة
             List<ProductUnit> units = [];
             if (product.id != null) {
               units = await _provider.getProductUnits(product.id!);
               units = _removeDuplicateUnits(units);
             }
 
-            // تحديد الوحدة المختارة من saleItem - الحل الآمن
+            // تحديد الوحدة المختارة من saleItem
             ProductUnit? selectedUnit;
 
             if (saleItem.unitId != null && units.isNotEmpty) {
-              // البحث عن الوحدة المطابقة
+              // البحث عن الوحدة المطابقة بالـ ID
               for (final unit in units) {
                 if (unit.id == saleItem.unitId) {
                   selectedUnit = unit;
                   break;
                 }
               }
-              // إذا لم نجد وحدة مطابقة، نستخدم الأولى
-              selectedUnit ??= units.first;
-            } else if (units.isNotEmpty) {
-              selectedUnit = units.first;
             }
+            // إذا كان unitId هو null، فهذا يعني الوحدة الأساسية
 
             // إنشاء CartItem من SaleItem
             final cartItem = CartItem(
               product: product,
               quantity: saleItem.quantity,
               availableUnits: units,
-              selectedUnit: selectedUnit,
+              selectedUnit: selectedUnit, // سيكون null للوحدة الأساسية
             );
 
             _cartItems.add(cartItem);
-            print('✅ تم إضافة ${product.name} بكمية ${cartItem.quantity}');
+            print(
+              '✅ تم إضافة ${product.name} بكمية ${cartItem.quantity} | الوحدة: ${selectedUnit?.unitName ?? "أساسية"}',
+            );
           } else {
             print('⚠️ المنتج غير موجود: ${saleItem.productId}');
           }
@@ -477,7 +478,7 @@ class _PosScreenState extends State<PosScreen>
 
   // الدوال المحسنة للبحث والإضافة
   Future<void> _performSearch(String query) async {
-    if (_isSearching) return;
+    if (_isSearching || query.isEmpty) return;
 
     setState(() {
       _isSearching = true;
@@ -485,29 +486,69 @@ class _PosScreenState extends State<PosScreen>
 
     try {
       final results = <dynamic>[];
+      final trimmedQuery = query.trim();
 
-      if (_searchType == 'product') {
-        final productsByName = await _provider.searchProductsByName(query);
-        results.addAll(productsByName);
+      // 🔥 أولاً: البحث في الوحدات عن طريق الباركود
+      final unitsByBarcode = await _provider.searchProductUnitsByBarcode(
+        trimmedQuery,
+      );
+      for (final unit in unitsByBarcode) {
+        final product = await _provider.getProductById(unit.productId);
+        if (product != null) {
+          results.add(unit);
+        }
+      }
 
-        final productsByBarcode = await _provider.searchProductsByBarcode(
-          query,
+      // 🔥 ثانياً: البحث في المنتجات عن طريق الباركود
+      final productsByBarcode = await _provider.searchProductsByBarcode(
+        trimmedQuery,
+      );
+      for (final product in productsByBarcode) {
+        // التحقق من عدم تكرار المنتج إذا كانت وحدته مضافة
+        final isUnitAlreadyAdded = results.any(
+          (item) => item is ProductUnit && item.productId == product.id,
         );
-        for (final product in productsByBarcode) {
-          if (!results.any(
-            (item) => item is Product && item.id == product.id,
-          )) {
-            results.add(product);
+
+        if (!isUnitAlreadyAdded) {
+          results.add(product);
+        }
+      }
+
+      // 🔥 ثالثاً: إذا كنا في وضع التعديل، نبحث عن المنتجات المضافة بالفعل
+      if (widget.isEditMode && _cartItems.isNotEmpty) {
+        for (final cartItem in _cartItems) {
+          if (cartItem.product.name.contains(trimmedQuery) ||
+              cartItem.product.barcode.contains(trimmedQuery)) {
+            // إضافة المنتج مع وحدته الحالية
+            if (!results.any(
+              (item) =>
+                  (item is Product && item.id == cartItem.product.id) ||
+                  (item is ProductUnit &&
+                      item.productId == cartItem.product.id),
+            )) {
+              // 🔥 نضيف الوحدة المختارة إذا كانت موجودة
+              if (cartItem.selectedUnit != null) {
+                results.add(cartItem.selectedUnit!);
+              } else {
+                results.add(cartItem.product);
+              }
+            }
           }
         }
-      } else if (_searchType == 'unit') {
-        final unitsByBarcode = await _provider.searchProductUnitsByBarcode(
-          query,
+      }
+
+      // 🔥 رابعاً: البحث في المنتجات عن طريق الاسم
+      if (results.isEmpty && _searchType == 'product') {
+        final productsByName = await _provider.searchProductsByName(
+          trimmedQuery,
         );
-        for (final unit in unitsByBarcode) {
-          final product = await _provider.getProductById(unit.productId);
-          if (product != null) {
-            results.add(unit);
+        for (final product in productsByName) {
+          if (!results.any(
+            (item) =>
+                (item is Product && item.id == product.id) ||
+                (item is ProductUnit && item.productId == product.id),
+          )) {
+            results.add(product);
           }
         }
       }
@@ -515,7 +556,7 @@ class _PosScreenState extends State<PosScreen>
       if (!mounted) return;
       setState(() {
         _searchResults = results;
-        _showSearchResults = true;
+        _showSearchResults = results.isNotEmpty;
         _isSearching = false;
       });
     } catch (e) {
@@ -527,31 +568,47 @@ class _PosScreenState extends State<PosScreen>
     }
   }
 
+  // دالة مساعدة للتحقق مما إذا كان النص رقميًا (باركود)
+  bool isNumeric(String s) {
+    if (s.isEmpty) return false;
+    return double.tryParse(s) != null;
+  }
+
   void _handleEnterPressed(String query) async {
     if (_isSearching) return;
 
+    await _performSearch(query);
+
     if (_searchResults.isNotEmpty) {
       final firstResult = _searchResults.first;
-      if (firstResult is Product) {
-        _addProductFromSearch(firstResult);
-      } else if (firstResult is ProductUnit) {
-        final product = await _provider.getProductById(firstResult.productId);
-        if (product != null && product.quantity > 0) {
-          _addUnitFromSearch(firstResult, product);
+
+      if (firstResult is ProductUnit) {
+        // إذا كان الباركود لوحدة
+        final unit = firstResult;
+        final product = await _provider.getProductById(unit.productId);
+        if (product != null) {
+          _addUnitFromSearch(unit, product);
+          _clearSearchAfterAction();
         }
-      }
-    } else {
-      await _performSearch(query);
-      if (_searchResults.isNotEmpty) {
-        final firstResult = _searchResults.first;
-        if (firstResult is Product) {
-          _addProductFromSearch(firstResult);
-        } else if (firstResult is ProductUnit) {
-          final product = await _provider.getProductById(firstResult.productId);
-          if (product != null && product.quantity > 0) {
-            _addUnitFromSearch(firstResult, product);
+      } else if (firstResult is Product) {
+        // إذا كان الباركود لمنتج
+
+        // 🔥 في وضع التعديل، نتحقق إذا كان المنتج موجودًا بالفعل في السلة
+        if (widget.isEditMode) {
+          final existingItemIndex = _cartItems.indexWhere(
+            (item) => item.product.id == firstResult.id,
+          );
+
+          if (existingItemIndex != -1) {
+            // إذا كان موجودًا، نزيد الكمية
+            _updateQuantity(_cartItems[existingItemIndex], 1);
+            _clearSearchAfterAction();
+            return;
           }
         }
+
+        _addProductFromSearch(firstResult);
+        _clearSearchAfterAction();
       }
     }
   }
@@ -574,13 +631,59 @@ class _PosScreenState extends State<PosScreen>
     _clearSearchAfterAction();
   }
 
-  void _addUnitFromSearch(ProductUnit unit, Product product) {
-    if (product.quantity == 1) {
+  Future<void> _addUnitFromSearch(ProductUnit unit, Product product) async {
+    if (product.quantity <= 0) {
       _showOutOfStockDialog('${product.name} - ${unit.unitName}');
       return;
     }
-    _addUnitToCartDirectly(unit, product);
-    _clearSearchAfterAction();
+
+    // 🔥 الحل: جلب جميع وحدات المنتج أولاً
+    List<ProductUnit> allUnits = [];
+    if (product.id != null) {
+      allUnits = await _provider.getProductUnits(product.id!);
+      allUnits = _removeDuplicateUnits(allUnits);
+    }
+
+    // البحث عن العنصر الموجود في السلة (بنفس المنتج ونفس الوحدة)
+    final existingItemIndex = _cartItems.indexWhere(
+      (item) =>
+          item.product.id == product.id && item.selectedUnit?.id == unit.id,
+    );
+
+    if (existingItemIndex != -1) {
+      // زيادة الكمية إذا كان موجودًا
+      _updateQuantity(_cartItems[existingItemIndex], 1);
+    } else {
+      // البحث عن الوحدة المطابقة في قائمة جميع الوحدات
+      ProductUnit? matchingUnit;
+      for (var u in allUnits) {
+        if (u.id == unit.id) {
+          matchingUnit = u;
+          break;
+        }
+      }
+
+      // إذا لم نجد الوحدة في القائمة، نستخدم الوحدة التي جاءت من البحث
+      matchingUnit ??= unit;
+
+      setState(() {
+        _cartItems.add(
+          CartItem(
+            product: product,
+            quantity: 1,
+            availableUnits: allUnits, // 🔥 هنا نضع جميع الوحدات
+            selectedUnit: matchingUnit, // 🔥 ونختار الوحدة المحددة
+          ),
+        );
+        _calculateTotal();
+      });
+    }
+
+    showAppToast(
+      context,
+      'تم إضافة ${product.name} (${unit.unitName}) إلى السلة',
+      ToastType.success,
+    );
   }
 
   void _clearSearchAfterAction() {
@@ -643,32 +746,84 @@ class _PosScreenState extends State<PosScreen>
 
   Future<void> _addProductToCartDirectly(Product product) async {
     try {
-      List<ProductUnit> units = [];
+      // جلب جميع الوحدات للمنتج
+      List<ProductUnit> allUnits = [];
       if (product.id != null) {
-        units = await _provider.getProductUnits(product.id!);
-        units = _removeDuplicateUnits(units);
+        allUnits = await _provider.getProductUnits(product.id!);
+        allUnits = _removeDuplicateUnits(allUnits);
       }
 
-      final existingItemIndex = _cartItems.indexWhere(
-        (item) => item.product.barcode == product.barcode,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        if (existingItemIndex != -1) {
-          _cartItems[existingItemIndex].quantity += 1;
-        } else {
-          _cartItems.add(
-            CartItem(
-              product: product,
-              quantity: 1,
-              availableUnits: units,
-              selectedUnit: units.isNotEmpty ? units.first : null,
-            ),
+      // 🔥 في وضع التعديل، نتحقق من طريقة الإضافة
+      if (widget.isEditMode && _originalSale != null) {
+        // نحاول البحث عن الوحدة المستخدمة في الفاتورة الأصلية
+        final saleItems = await _provider.getSaleItems(_originalSale!.id);
+        SaleItem? existingSaleItem;
+        try {
+          existingSaleItem = saleItems.firstWhere(
+            (item) => item.productId == product.id,
           );
+        } catch (e) {
+          existingSaleItem = null; // لم يتم العثور
         }
-        _calculateTotal();
-      });
+
+        ProductUnit? selectedUnit;
+
+        if (existingSaleItem != null && existingSaleItem.unitId != null) {
+          // البحث عن الوحدة الأصلية
+          for (final unit in allUnits) {
+            if (unit.id == existingSaleItem.unitId) {
+              selectedUnit = unit;
+              break;
+            }
+          }
+        }
+
+        // البحث عن العنصر الموجود
+        final existingItemIndex = _cartItems.indexWhere(
+          (item) =>
+              item.product.id == product.id &&
+              item.selectedUnit?.id == selectedUnit?.id,
+        );
+
+        if (!mounted) return;
+        setState(() {
+          if (existingItemIndex != -1) {
+            _cartItems[existingItemIndex].quantity += 1;
+          } else {
+            _cartItems.add(
+              CartItem(
+                product: product,
+                quantity: 1,
+                availableUnits: allUnits,
+                selectedUnit: selectedUnit, // 🔥 نستخدم الوحدة الأصلية إن وجدت
+              ),
+            );
+          }
+          _calculateTotal();
+        });
+      } else {
+        // 🔥 الوضع العادي
+        final existingItemIndex = _cartItems.indexWhere(
+          (item) => item.product.id == product.id && item.selectedUnit == null,
+        );
+
+        if (!mounted) return;
+        setState(() {
+          if (existingItemIndex != -1) {
+            _cartItems[existingItemIndex].quantity += 1;
+          } else {
+            _cartItems.add(
+              CartItem(
+                product: product,
+                quantity: 1,
+                availableUnits: allUnits,
+                selectedUnit: null, // الوحدة الأساسية
+              ),
+            );
+          }
+          _calculateTotal();
+        });
+      }
 
       if (!mounted) return;
       showAppToast(

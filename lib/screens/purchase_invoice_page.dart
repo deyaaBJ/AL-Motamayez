@@ -10,8 +10,6 @@ import '../providers/purchase_item_provider.dart';
 import '../providers/product_provider.dart';
 import '../utils/formatters.dart';
 
-// صفحة إضافة منتج جديد
-
 class PurchaseInvoicePage extends StatefulWidget {
   const PurchaseInvoicePage({super.key});
 
@@ -31,7 +29,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   int? _selectedSupplierId;
   int? _selectedProductId;
   String? _selectedPaymentType = 'cash';
-  String? _invoiceNote;
   int? _invoiceId;
   List<Map<String, dynamic>> _invoiceItems = [];
   double _invoiceTotal = 0.0;
@@ -50,7 +47,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       _loadInitialData();
     });
 
-    // إضافة Listener للبحث
     _searchProductController.addListener(_performSearch);
   }
 
@@ -90,7 +86,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
     setState(() => _isSearching = true);
 
-    // البحث في المنتجات المحملة
     final productProvider = context.read<ProductProvider>();
     final products = productProvider.products;
 
@@ -158,7 +153,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // الجانب الأيسر: إنشاء الفاتورة
         Expanded(
           flex: 2,
           child: Column(
@@ -171,10 +165,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
             ],
           ),
         ),
-
         const SizedBox(width: 20),
-
-        // الجانب الأيمن: عرض الفاتورة
         Expanded(
           flex: 3,
           child: Column(
@@ -372,7 +363,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 prefixIcon: const Icon(Icons.note),
               ),
               maxLines: 2,
-              onChanged: (value) => _invoiceNote = value,
             ),
           ],
         ),
@@ -590,8 +580,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   Widget _buildInvoicePreview() {
-    final products = context.read<ProductProvider>().products;
-
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -703,15 +691,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                   ..._invoiceItems.asMap().entries.map((entry) {
                     final index = entry.key;
                     final item = entry.value;
-                    final productId = item['product_id'] as int;
 
-                    Product? product;
-                    try {
-                      product = products.firstWhere((p) => p.id == productId);
-                    } catch (e) {
-                      product = null;
-                    }
-
+                    final productName = item['product_name'] ?? 'غير معروف';
                     final quantity = (item['quantity'] as num).toDouble();
                     final costPrice = (item['cost_price'] as num).toDouble();
                     final subtotal = quantity * costPrice;
@@ -728,7 +709,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                           Expanded(
                             child: Padding(
                               padding: const EdgeInsets.all(12),
-                              child: Text(product?.name ?? 'غير معروف'),
+                              child: Text(productName),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -883,41 +864,14 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
   // === الدوال المنطقية ===
 
-  Future<void> _createInvoice() async {
+  Future<void> _addItem() async {
     if (_selectedSupplierId == null) {
       _showError('يرجى اختيار المورد أولاً');
       return;
     }
 
-    setState(() => _isCreatingInvoice = true);
-
-    try {
-      final purchaseInvoiceProvider = context.read<PurchaseInvoiceProvider>();
-      _invoiceId = await purchaseInvoiceProvider.addPurchaseInvoice(
-        supplierId: _selectedSupplierId!,
-        totalCost: _invoiceTotal, // الآن سيكون صفراً أو القيمة الفعلية
-        paymentType: _selectedPaymentType ?? 'cash',
-        note: _noteController.text,
-      );
-
-      _showSuccess('تم إنشاء الفاتورة بنجاح');
-    } catch (e) {
-      _showError('خطأ في إنشاء الفاتورة: $e');
-    } finally {
-      setState(() => _isCreatingInvoice = false);
-    }
-  }
-
-  Future<void> _addItem() async {
-    if (_invoiceId == null) {
-      await _createInvoice();
-      if (_invoiceId == null) return;
-    }
-
-    if (_selectedProductId == null ||
-        _qtyController.text.isEmpty ||
-        _costController.text.isEmpty) {
-      _showError('يرجى ملء جميع الحقول');
+    if (_selectedProductId == null) {
+      _showError('يرجى اختيار المنتج');
       return;
     }
 
@@ -932,26 +886,28 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     setState(() => _isLoading = true);
 
     try {
-      final purchaseItemProvider = context.read<PurchaseItemProvider>();
-
-      await purchaseItemProvider.addPurchaseItem(
-        purchaseId: _invoiceId!,
-        productId: _selectedProductId!,
-        quantity: qty,
-        costPrice: cost,
+      // الحصول على معلومات المنتج
+      final productProvider = context.read<ProductProvider>();
+      final product = productProvider.products.firstWhere(
+        (p) => p.id == _selectedProductId,
+        orElse: () => throw Exception('المنتج غير موجود'),
       );
 
-      await _loadInvoiceItems(); // هذه ستُحدث _invoiceItems وتُحسب المجموع
+      // إضافة العنصر إلى القائمة المحلية
+      final newItem = {
+        'product_id': _selectedProductId!,
+        'product_name': product.name,
+        'quantity': qty,
+        'cost_price': cost,
+        'subtotal': qty * cost,
+      };
 
-      // تحديث التكلفة في الفاتورة في قاعدة البيانات
-      if (_invoiceId != null) {
-        final purchaseInvoiceProvider = context.read<PurchaseInvoiceProvider>();
-        await purchaseInvoiceProvider.updateInvoiceTotal(
-          invoiceId: _invoiceId!,
-          totalCost: _invoiceTotal,
-        );
-      }
+      _invoiceItems.add(newItem);
 
+      // تحديث الإجمالي
+      _invoiceTotal += qty * cost;
+
+      // تفريغ الحقول
       _qtyController.clear();
       _costController.clear();
       _selectedProductId = null;
@@ -966,33 +922,24 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   Future<void> _removeItem(int index) async {
-    if (index >= 0 && index < _invoiceItems.length) {
-      setState(() => _isLoading = true);
+    if (index < 0 || index >= _invoiceItems.length) return;
 
-      try {
-        final itemId = _invoiceItems[index]['id'] as int;
-        final purchaseItemProvider = context.read<PurchaseItemProvider>();
+    setState(() => _isLoading = true);
 
-        await purchaseItemProvider.deletePurchaseItem(itemId);
+    try {
+      // حذف العنصر وتحديث الإجمالي
+      final removedItem = _invoiceItems.removeAt(index);
+      final subtotal =
+          (removedItem['quantity'] as num).toDouble() *
+          (removedItem['cost_price'] as num).toDouble();
 
-        await _loadInvoiceItems(); // إعادة حساب المجموع بعد الحذف
+      _invoiceTotal -= subtotal;
 
-        // تحديث التكلفة في قاعدة البيانات
-        if (_invoiceId != null) {
-          final purchaseInvoiceProvider =
-              context.read<PurchaseInvoiceProvider>();
-          await purchaseInvoiceProvider.updateInvoiceTotal(
-            invoiceId: _invoiceId!,
-            totalCost: _invoiceTotal,
-          );
-        }
-
-        _showSuccess('تم حذف المنتج بنجاح');
-      } catch (e) {
-        _showError('حدث خطأ أثناء الحذف: $e');
-      } finally {
-        setState(() => _isLoading = false);
-      }
+      _showSuccess('تم حذف المنتج بنجاح');
+    } catch (e) {
+      _showError('حدث خطأ أثناء الحذف: $e');
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -1002,57 +949,45 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       return;
     }
 
-    setState(() => _isLoading = true);
-
-    // عرض رسالة النجاح أولاً
-    _showSuccess('تم حفظ الفاتورة بنجاح رقم #$_invoiceId');
-
-    // انتظر قليلاً
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    try {
-      // تحديث التكلفة في الخلفية (لا تنتظر النتيجة)
-      if (_invoiceId != null) {
-        final purchaseInvoiceProvider = context.read<PurchaseInvoiceProvider>();
-        purchaseInvoiceProvider
-            .updateInvoiceTotal(
-              invoiceId: _invoiceId!,
-              totalCost: _invoiceTotal,
-            )
-            .catchError((e) {
-              print('⚠️ تحديث التكلفة فشل في الخلفية: $e');
-            });
-      }
-    } catch (e) {
-      print('⚠️ خطأ غير متوقع: $e');
+    if (_selectedSupplierId == null) {
+      _showError('يرجى اختيار المورد أولاً');
+      return;
     }
 
-    // مسح الواجهة دون انتظار
-    _softClearInvoice();
+    setState(() => _isLoading = true);
 
-    setState(() => _isLoading = false);
-  }
+    try {
+      final purchaseInvoiceProvider = context.read<PurchaseInvoiceProvider>();
+      final purchaseItemProvider = context.read<PurchaseItemProvider>();
 
-  void _softClearInvoice() {
-    // مسح المتحكمات
-    _noteController.clear();
-    _qtyController.clear();
-    _costController.clear();
-    _searchProductController.clear();
+      // 1. إنشاء الفاتورة مع الإجمالي المحسوب
+      _invoiceId = await purchaseInvoiceProvider.addPurchaseInvoice(
+        supplierId: _selectedSupplierId!,
+        totalCost: _invoiceTotal,
+        paymentType: _selectedPaymentType ?? 'cash',
+        note: _noteController.text,
+        paidAmount: 0.0,
+      );
 
-    // إعادة تعيين المتغيرات دون إثارة أخطاء
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() {
-          _invoiceId = null;
-          _invoiceItems = [];
-          _invoiceTotal = 0.0;
-          _selectedProductId = null;
-          _selectedSupplierId = null;
-          _searchResults = [];
-        });
+      // 2. إضافة جميع العناصر إلى قاعدة البيانات
+      for (final item in _invoiceItems) {
+        await purchaseItemProvider.addPurchaseItem(
+          purchaseId: _invoiceId!,
+          productId: item['product_id'] as int,
+          quantity: (item['quantity'] as num).toDouble(),
+          costPrice: (item['cost_price'] as num).toDouble(),
+        );
       }
-    });
+
+      _showSuccess('تم حفظ الفاتورة بنجاح رقم #$_invoiceId');
+
+      // 3. مسح الواجهة بعد الحفظ
+      _clearInvoice();
+    } catch (e) {
+      _showError('خطأ في حفظ الفاتورة: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   void _clearInvoice() {
@@ -1090,27 +1025,5 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-  }
-
-  void _calculateTotal() {
-    double total = 0.0;
-    for (var item in _invoiceItems) {
-      final quantity = (item['quantity'] as num).toDouble();
-      final costPrice = (item['cost_price'] as num).toDouble();
-      total += quantity * costPrice;
-    }
-    setState(() {
-      _invoiceTotal = total;
-    });
-  }
-
-  Future<void> _loadInvoiceItems() async {
-    try {
-      final purchaseItemProvider = context.read<PurchaseItemProvider>();
-      _invoiceItems = await purchaseItemProvider.getPurchaseItems(_invoiceId!);
-      _calculateTotal(); // حساب التكلفة بعد تحميل العناصر
-    } catch (e) {
-      _showError('خطأ في تحميل العناصر: $e');
-    }
   }
 }

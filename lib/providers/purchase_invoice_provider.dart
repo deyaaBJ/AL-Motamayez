@@ -1,5 +1,5 @@
-// providers/purchase_invoice_provider.dart
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
 import '../db/db_helper.dart';
 
 class PurchaseInvoiceProvider with ChangeNotifier {
@@ -11,167 +11,557 @@ class PurchaseInvoiceProvider with ChangeNotifier {
   int _currentPage = 0;
   final int _itemsPerPage = 20;
   bool _hasMore = true;
-  String _lastSearchQuery = '';
+  String _currentSearchQuery = '';
+  bool _isLoading = false;
+  bool _isInitialized = false;
+  bool _hasError = false;
+  String? _lastError;
 
-  // Getter للوصول للمتغيرات الخاصة
+  // Getters
   bool get hasMore => _hasMore;
-  String get lastSearchQuery => _lastSearchQuery;
+  String get currentSearchQuery => _currentSearchQuery;
+  bool get isLoading => _isLoading;
+  bool get isInitialized => _isInitialized;
+  bool get hasError => _hasError;
+  String? get lastError => _lastError;
 
-  // === الدوال القديمة (لا تحذفها) ===
-
-  // تحميل فواتير الشراء (بدون ترقيم الصفحات) - للحفاظ على التوافق
-  Future<void> loadPurchaseInvoices() async {
-    final db = await _dbHelper.db;
-
-    _invoices = await db.rawQuery('''
-      SELECT pi.*, s.name AS supplier_name
-      FROM purchase_invoices pi
-      JOIN suppliers s ON s.id = pi.supplier_id
-      ORDER BY pi.date DESC
-    ''');
-
-    notifyListeners();
+  // ============================================
+  // دالة مساعدة للتحويل الآمن للأرقام
+  // ============================================
+  int _safeInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
   }
 
-  // إضافة فاتورة شراء جديدة
-  Future<int> addPurchaseInvoice({
-    required int supplierId,
-    required double totalCost,
-    required String paymentType,
-    String? note,
-  }) async {
-    final db = await _dbHelper.db;
-
-    final invoiceId = await db.insert('purchase_invoices', {
-      'supplier_id': supplierId,
-      'date': DateTime.now().toIso8601String(),
-      'total_cost': totalCost,
-      'payment_type': paymentType,
-      'note': note ?? '',
-    });
-
-    await loadPurchaseInvoices();
-    return invoiceId;
+  double _safeDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
   }
 
-  // حذف فاتورة شراء
-  Future<void> deletePurchaseInvoice(int invoiceId) async {
-    final db = await _dbHelper.db;
+  // ============================================
+  // الدالة الرئيسية للتحميل مع البحث
+  // ============================================
 
-    // حذف العناصر أولاً
-    await db.delete(
-      'purchase_items',
-      where: 'purchase_id = ?',
-      whereArgs: [invoiceId],
-    );
-
-    // ثم حذف الفاتورة
-    await db.delete(
-      'purchase_invoices',
-      where: 'id = ?',
-      whereArgs: [invoiceId],
-    );
-
-    await loadPurchaseInvoices();
-  }
-
-  // تحديث الفاتورة
-  Future<void> updatePurchaseInvoice({
-    required int invoiceId,
-    required String paymentType,
-    String? note,
-  }) async {
-    final db = await _dbHelper.db;
-
-    await db.update(
-      'purchase_invoices',
-      {'payment_type': paymentType, 'note': note ?? ''},
-      where: 'id = ?',
-      whereArgs: [invoiceId],
-    );
-
-    await loadPurchaseInvoices();
-  }
-
-  Future<void> updateInvoiceTotal({
-    required int invoiceId,
-    required double totalCost,
-  }) async {
-    final db = await _dbHelper.db;
-    await db.update(
-      'purchase_invoices',
-      {'total_cost': totalCost},
-      where: 'id = ?',
-      whereArgs: [invoiceId],
-    );
-    await loadPurchaseInvoices();
-  }
-
-  // === الدوال الجديدة للتحميل التدريجي ===
-
-  // تحميل فواتير الشراء مع التحميل التدريجي
-  Future<void> loadPurchaseInvoicesPaginated({
+  Future<void> loadPurchaseInvoices({
     bool reset = false,
     String query = '',
+    bool showLoading = true,
   }) async {
-    if (reset) {
-      _currentPage = 0;
-      _hasMore = true;
-      _invoices.clear();
-      _lastSearchQuery = query;
+    if (_isLoading) return;
+
+    // تحديث query الحالية
+    _currentSearchQuery = query.trim();
+
+    if (showLoading) {
+      _isLoading = true;
+      _hasError = false;
+      _lastError = null;
+      notifyListeners();
     }
 
-    if (!_hasMore && !reset) return;
+    try {
+      if (!_isInitialized) {
+        await _checkDatabaseTables();
+      }
 
-    final db = await _dbHelper.db;
+      if (reset) {
+        _currentPage = 0;
+        _hasMore = true;
+        _invoices.clear();
+      }
 
-    // بناء استعلام البحث
-    String whereClause = '';
-    List<dynamic> whereArgs = [];
+      if (!_hasMore && !reset) {
+        print('⏹️ لا يوجد المزيد من الفواتير للتحميل');
+        return;
+      }
 
-    if (query.isNotEmpty) {
-      whereClause = '''
-        WHERE (pi.id LIKE ? OR s.name LIKE ? OR pi.note LIKE ?)
+      final db = await _dbHelper.db;
+
+      String whereClause = '';
+      List<dynamic> whereArgs = [];
+
+      // بناء شرط البحث
+      if (_currentSearchQuery.isNotEmpty) {
+        // محاولة البحث برقم الفاتورة
+        int? invoiceId = int.tryParse(_currentSearchQuery);
+
+        if (invoiceId != null) {
+          // البحث برقم الفاتورة
+          whereClause = 'WHERE pi.id = ?';
+          whereArgs = [invoiceId];
+        } else {
+          // البحث باسم المورد
+          whereClause = 'WHERE s.name LIKE ?';
+          whereArgs = ['%$_currentSearchQuery%']; // % للبحث الجزئي
+        }
+      } else {
+        print('📄 تحميل جميع الفواتير');
+      }
+
+      final offset = _currentPage * _itemsPerPage;
+
+      String sqlQuery = '''
+        SELECT 
+          pi.*, 
+          s.name AS supplier_name
+        FROM purchase_invoices pi
+        LEFT JOIN suppliers s ON pi.supplier_id = s.id
+        $whereClause
+        ORDER BY pi.date DESC
+        LIMIT $_itemsPerPage OFFSET $offset
       ''';
-      whereArgs = ['%$query%', '%$query%', '%$query%'];
+
+      final newInvoices = await db.rawQuery(sqlQuery, whereArgs);
+
+      // تحويل البيانات لضمان أنواع صحيحة
+      final convertedInvoices =
+          newInvoices.map((invoice) {
+            return {
+              'id': _safeInt(invoice['id']),
+              'supplier_id': _safeInt(invoice['supplier_id']),
+              'supplier_name':
+                  invoice['supplier_name']?.toString() ?? 'غير محدد',
+              'date': invoice['date']?.toString() ?? '',
+              'total_cost': _safeDouble(invoice['total_cost']),
+              'paid_amount': _safeDouble(invoice['paid_amount']),
+              'remaining_amount': _safeDouble(invoice['remaining_amount']),
+              'payment_type': invoice['payment_type']?.toString() ?? 'cash',
+              'note': invoice['note']?.toString() ?? '',
+              'created_at': invoice['created_at']?.toString() ?? '',
+              'updated_at': invoice['updated_at']?.toString() ?? '',
+            };
+          }).toList();
+
+      // عرض عينة من النتائج للتشخيص
+
+      if (reset) {
+        _invoices = convertedInvoices;
+      } else {
+        _invoices.addAll(convertedInvoices);
+      }
+
+      // التحقق إذا كان هناك المزيد للتحميل
+      _hasMore = convertedInvoices.length == _itemsPerPage;
+
+      if (_hasMore) {
+        _currentPage++;
+      } else {
+        print('⏹️ لا يوجد المزيد من الفواتير');
+      }
+
+      _isInitialized = true;
+      _hasError = false;
+      _lastError = null;
+    } catch (e, stackTrace) {
+      _hasError = true;
+      _lastError = 'فشل في تحميل الفواتير: ${e.toString()}';
+
+      // في حالة الخطأ، إعادة تعيين القائمة
+      if (reset) {
+        _invoices = [];
+      }
+    } finally {
+      if (showLoading) {
+        _isLoading = false;
+      }
+      notifyListeners();
+    }
+  }
+
+  // ============================================
+  // دوال البحث والتحميل
+  // ============================================
+
+  // البحث في الفواتير
+  Future<void> searchInvoices(String query) async {
+    // إذا كان نفس البحث السابق والناتج ليس فارغاً، لا تفعل شيئاً
+    if (query.trim() == _currentSearchQuery &&
+        _invoices.isNotEmpty &&
+        !_isLoading) {
+      return;
     }
 
-    final offset = _currentPage * _itemsPerPage;
-
-    final newInvoices = await db.rawQuery('''
-      SELECT pi.*, s.name AS supplier_name
-      FROM purchase_invoices pi
-      JOIN suppliers s ON s.id = pi.supplier_id
-      $whereClause
-      ORDER BY pi.date DESC
-      LIMIT $_itemsPerPage OFFSET $offset
-    ''', whereArgs);
-
-    if (reset) {
-      _invoices = newInvoices;
-    } else {
-      _invoices.addAll(newInvoices);
-    }
-
-    // إذا كان عدد النتائج أقل من _itemsPerPage، فهذا يعني أنه لا يوجد المزيد
-    _hasMore = newInvoices.length == _itemsPerPage;
-    _currentPage++;
-
-    notifyListeners();
+    await loadPurchaseInvoices(reset: true, query: query);
   }
 
   // تحميل المزيد من الفواتير
   Future<void> loadMoreInvoices() async {
-    await loadPurchaseInvoicesPaginated(reset: false, query: _lastSearchQuery);
-  }
-
-  // البحث في الفواتير
-  Future<void> searchInvoices(String query) async {
-    await loadPurchaseInvoicesPaginated(reset: true, query: query);
+    await loadPurchaseInvoices(reset: false, query: _currentSearchQuery);
   }
 
   // تحديث القائمة
   Future<void> refreshInvoices() async {
-    await loadPurchaseInvoicesPaginated(reset: true, query: _lastSearchQuery);
+    await loadPurchaseInvoices(reset: true, query: _currentSearchQuery);
   }
+
+  // إعادة تعيين البحث
+  Future<void> resetSearch() async {
+    _currentPage = 0;
+    _hasMore = true;
+    _invoices.clear();
+    _currentSearchQuery = '';
+    _hasError = false;
+    _lastError = null;
+
+    notifyListeners();
+
+    // تحميل جميع الفواتير بعد الإعادة
+    await loadPurchaseInvoices(reset: true, query: '');
+  }
+
+  // ============================================
+  // دوال التحقق من قاعدة البيانات
+  // ============================================
+
+  Future<void> _checkDatabaseTables() async {
+    try {
+      final db = await _dbHelper.db;
+
+      // تحقق من وجود جدول purchase_invoices
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='purchase_invoices'",
+      );
+
+      if (tables.isEmpty) {
+        throw Exception('جدول purchase_invoices غير موجود في قاعدة البيانات');
+      }
+
+      // تحقق من وجود جدول suppliers
+      final suppliersTable = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='suppliers'",
+      );
+
+      if (suppliersTable.isEmpty) {
+        throw Exception('جدول suppliers غير موجود في قاعدة البيانات');
+      }
+    } catch (e) {
+      _hasError = true;
+      _lastError = e.toString();
+      rethrow;
+    }
+  }
+
+  // اختبار البحث مباشرة
+  Future<void> testSearch(String query) async {
+    try {
+      final db = await _dbHelper.db;
+
+      String whereClause = '';
+      List<dynamic> whereArgs = [];
+
+      if (query.isNotEmpty) {
+        int? invoiceId = int.tryParse(query);
+        if (invoiceId != null) {
+          whereClause = 'WHERE pi.id = ?';
+          whereArgs = [invoiceId];
+        } else {
+          whereClause = 'WHERE s.name LIKE ?';
+          whereArgs = ['%$query%'];
+        }
+      }
+
+      String sql = '''
+        SELECT pi.id, s.name as supplier_name
+        FROM purchase_invoices pi
+        LEFT JOIN suppliers s ON pi.supplier_id = s.id
+        $whereClause
+        ORDER BY pi.date DESC
+        LIMIT 10
+      ''';
+
+      final results = await db.rawQuery(sql, whereArgs);
+
+      if (results.isNotEmpty) {
+        for (var result in results) {
+          print('  - ID: ${result['id']}, المورد: ${result['supplier_name']}');
+        }
+      } else {
+        print('  لا توجد نتائج');
+      }
+
+      print('=== انتهى الاختبار ===\n');
+    } catch (e) {
+      print('❌ خطأ في اختبار البحث: $e');
+    }
+  }
+
+  // ============================================
+  // دوال CRUD الأساسية
+  // ============================================
+
+  Future<void> updatePurchaseInvoice({
+    required int invoiceId,
+    required String paymentType,
+    required String note,
+  }) async {
+    try {
+      final db = await _dbHelper.db;
+
+      await db.update(
+        'purchase_invoices',
+        {
+          'payment_type': paymentType,
+          'note': note,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      print('✅ تم تحديث الفاتورة #$invoiceId');
+      await refreshInvoices();
+    } catch (e) {
+      print('❌ خطأ في تحديث فاتورة الشراء: $e');
+      rethrow;
+    }
+  }
+
+  Future<int> addPurchaseInvoice({
+    required int supplierId,
+    required double totalCost,
+    required String paymentType,
+    double paidAmount = 0,
+    String? note,
+  }) async {
+    try {
+      final db = await _dbHelper.db;
+
+      double remainingAmount = 0;
+
+      if (paymentType == 'cash') {
+        paidAmount = totalCost;
+        remainingAmount = 0;
+        print('💰 فاتورة نقدية: دفع كامل $totalCost');
+      } else if (paymentType == 'credit') {
+        paidAmount = 0;
+        remainingAmount = totalCost;
+        print('🧾 فاتورة آجلة: دين $totalCost للمورد');
+      } else if (paymentType == 'partial') {
+        remainingAmount = totalCost - paidAmount;
+        print('💳 فاتورة جزئية: دفع $paidAmount، باقي $remainingAmount');
+      }
+
+      // إدخال الفاتورة
+      final invoiceId = await db.insert('purchase_invoices', {
+        'supplier_id': supplierId,
+        'date': DateTime.now().toIso8601String(),
+        'total_cost': totalCost,
+        'paid_amount': paidAmount,
+        'remaining_amount': remainingAmount,
+        'payment_type': paymentType,
+        'note': note ?? '',
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+
+      print('✅ تم إنشاء فاتورة شراء #$invoiceId');
+
+      await refreshInvoices();
+      return invoiceId;
+    } catch (e) {
+      print('❌ خطأ في إضافة فاتورة الشراء: $e');
+      rethrow;
+    }
+  }
+
+  Future<double> getSupplierBalance(int supplierId) async {
+    final db = await _dbHelper.db;
+
+    final res = await db.query(
+      'supplier_balance',
+      columns: ['balance'],
+      where: 'supplier_id = ?',
+      whereArgs: [supplierId],
+    );
+
+    if (res.isEmpty) return 0;
+    return _safeDouble(res.first['balance']);
+  }
+
+  Future<void> deletePurchaseInvoice(int invoiceId) async {
+    try {
+      print('🗑️ جاري حذف الفاتورة #$invoiceId');
+      final db = await _dbHelper.db;
+
+      // أولاً: الحصول على معلومات الفاتورة
+      final invoice = await db.query(
+        'purchase_invoices',
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      if (invoice.isEmpty) {
+        throw Exception('الفاتورة غير موجودة');
+      }
+
+      // ثانياً: حذف العناصر
+      await db.delete(
+        'purchase_items',
+        where: 'purchase_id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      // ثالثاً: حذف الفاتورة
+      await db.delete(
+        'purchase_invoices',
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      print('✅ تم حذف الفاتورة #$invoiceId');
+
+      // تحديث القائمة
+      await refreshInvoices();
+    } catch (e) {
+      print('❌ خطأ في حذف فاتورة الشراء: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> getInvoiceById(int invoiceId) async {
+    try {
+      final db = await _dbHelper.db;
+
+      final result = await db.rawQuery(
+        '''
+        SELECT pi.*, s.name AS supplier_name
+        FROM purchase_invoices pi
+        LEFT JOIN suppliers s ON s.id = pi.supplier_id
+        WHERE pi.id = ?
+      ''',
+        [invoiceId],
+      );
+
+      if (result.isEmpty) {
+        throw Exception('الفاتورة غير موجودة');
+      }
+
+      final invoice = result.first;
+      return {
+        'id': _safeInt(invoice['id']),
+        'supplier_id': _safeInt(invoice['supplier_id']),
+        'supplier_name': invoice['supplier_name']?.toString() ?? 'غير محدد',
+        'date': invoice['date']?.toString() ?? '',
+        'total_cost': _safeDouble(invoice['total_cost']),
+        'paid_amount': _safeDouble(invoice['paid_amount']),
+        'remaining_amount': _safeDouble(invoice['remaining_amount']),
+        'payment_type': invoice['payment_type']?.toString() ?? 'cash',
+        'note': invoice['note']?.toString() ?? '',
+        'created_at': invoice['created_at']?.toString() ?? '',
+        'updated_at': invoice['updated_at']?.toString() ?? '',
+      };
+    } catch (e) {
+      print('❌ خطأ في الحصول على الفاتورة: $e');
+      rethrow;
+    }
+  }
+
+  // دالة لفحص المشاكل في الاستعلام
+  Future<void> diagnoseQuery(String query) async {
+    try {
+      print('\n🔧 === تشخيص استعلام البحث ===');
+      print('البحث: "$query"');
+
+      final db = await _dbHelper.db;
+
+      // 1. فحص جداول قاعدة البيانات
+      print('\n1. فحص الجداول:');
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
+      );
+      for (var table in tables) {
+        print('   - ${table['name']}');
+      }
+
+      // 2. عدد السجلات في كل جدول
+      print('\n2. عدد السجلات:');
+
+      final purchaseCount = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM purchase_invoices',
+      );
+      print(
+        '   - purchase_invoices: ${_safeInt(purchaseCount.first['count'])}',
+      );
+
+      final supplierCount = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM suppliers',
+      );
+      print('   - suppliers: ${_safeInt(supplierCount.first['count'])}');
+
+      // 3. فحص بعض الموردين
+      print('\n3. عينة من الموردين:');
+      final suppliers = await db.rawQuery(
+        'SELECT id, name FROM suppliers LIMIT 10',
+      );
+      for (var supplier in suppliers) {
+        print('   - ID: ${supplier['id']}, Name: "${supplier['name']}"');
+      }
+
+      // 4. فحص بعض الفواتير مع الموردين
+      print('\n4. فواتير مع معلومات الموردين:');
+      final invoices = await db.rawQuery('''
+        SELECT pi.id, pi.supplier_id, s.name as supplier_name
+        FROM purchase_invoices pi
+        LEFT JOIN suppliers s ON pi.supplier_id = s.id
+        LIMIT 10
+      ''');
+
+      for (var invoice in invoices) {
+        print(
+          '   - Invoice ${invoice['id']}: Supplier "${invoice['supplier_name']}" (ID: ${invoice['supplier_id']})',
+        );
+      }
+
+      // 5. اختبار البحث
+      print('\n5. اختبار البحث:');
+
+      if (query.isNotEmpty) {
+        int? invoiceId = int.tryParse(query);
+
+        if (invoiceId != null) {
+          print('   البحث برقم فاتورة: $invoiceId');
+          final results = await db.rawQuery(
+            'SELECT id, supplier_id FROM purchase_invoices WHERE id = ?',
+            [invoiceId],
+          );
+          print('   النتائج: ${results.length}');
+        } else {
+          print('   البحث باسم مورد: "$query"');
+          final results = await db.rawQuery(
+            'SELECT id, name FROM suppliers WHERE name LIKE ?',
+            ['%$query%'],
+          );
+          print('   النتائج في جدول suppliers: ${results.length}');
+
+          if (results.isNotEmpty) {
+            for (var supplier in results) {
+              final supplierId = _safeInt(supplier['id']);
+              final invoicesForSupplier = await db.rawQuery(
+                'SELECT COUNT(*) as count FROM purchase_invoices WHERE supplier_id = ?',
+                [supplierId],
+              );
+              print(
+                '   - المورد "${supplier['name']}" (ID: $supplierId) له ${_safeInt(invoicesForSupplier.first['count'])} فاتورة',
+              );
+            }
+          }
+        }
+      }
+
+      print('\n✅ === انتهى التشخيص ===\n');
+    } catch (e, stackTrace) {
+      print('\n❌ === خطأ في التشخيص ===');
+      print('الخطأ: $e');
+      print('Stack Trace: $stackTrace');
+    }
+  }
+
+  // دالة لإنشاء بيانات تجريبية للاختبار
 }

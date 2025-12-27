@@ -27,6 +27,7 @@ class _SidebarState extends State<Sidebar> {
     AppSection('التقارير', Icons.analytics, const Color(0xFF4A1C6D)),
     AppSection('المشتريات', Icons.store, const Color(0xFF8B5FBF)),
     AppSection('الفواتير', Icons.receipt, const Color(0xFF6A3093)),
+    AppSection('الموردين', Icons.person, const Color(0xFF4A1C6D)),
     AppSection(
       'العملاء',
       Icons.people,
@@ -58,7 +59,8 @@ class _SidebarState extends State<Sidebar> {
               }
               return section.title == 'المنتجات' ||
                   section.title == 'المشتريات' ||
-                  section.title == 'الفواتير';
+                  section.title == 'الفواتير' ||
+                  section.title == 'الموردين';
             }).toList();
 
     return AnimatedContainer(

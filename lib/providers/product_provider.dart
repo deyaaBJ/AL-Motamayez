@@ -162,6 +162,24 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
+  // أضف هذه الدالة في ProductProvider
+  Future<List<ProductUnit>> searchProductUnitsByBarcode(String barcode) async {
+    final db = await _dbHelper.db;
+
+    try {
+      final result = await db.query(
+        'product_units',
+        where: 'barcode = ?',
+        whereArgs: [barcode],
+      );
+
+      return result.map((map) => ProductUnit.fromMap(map)).toList();
+    } catch (e) {
+      print('Error searching unit by barcode: $e');
+      return [];
+    }
+  }
+
   // إضافة وحدة جديدة للمنتج
   Future<void> addProductUnit(ProductUnit unit) async {
     final db = await _dbHelper.db;
@@ -217,15 +235,6 @@ class ProductProvider with ChangeNotifier {
   }
 
   // البحث عن وحدة بالباركود
-  Future<List<ProductUnit>> searchProductUnitsByBarcode(String barcode) async {
-    final db = await _dbHelper.db;
-    final result = await db.query(
-      'product_units',
-      where: 'barcode LIKE ?',
-      whereArgs: ['%$barcode%'],
-    );
-    return result.map((map) => ProductUnit.fromMap(map)).toList();
-  }
 
   Future<void> addProduct(Product product) async {
     final db = await _dbHelper.db;
