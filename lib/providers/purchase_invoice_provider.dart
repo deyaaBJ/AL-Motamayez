@@ -326,7 +326,7 @@ class PurchaseInvoiceProvider with ChangeNotifier {
   Future<int> addPurchaseInvoice({
     required int supplierId,
     required double totalCost,
-    required String paymentType,
+    required String paymentType, // 'cash' أو 'credit' أو 'partial'
     double paidAmount = 0,
     String? note,
   }) async {
@@ -335,17 +335,15 @@ class PurchaseInvoiceProvider with ChangeNotifier {
 
       double remainingAmount = 0;
 
+      // حساب المبالغ بناءً على طريقة الدفع
       if (paymentType == 'cash') {
         paidAmount = totalCost;
         remainingAmount = 0;
-        print('💰 فاتورة نقدية: دفع كامل $totalCost');
       } else if (paymentType == 'credit') {
         paidAmount = 0;
         remainingAmount = totalCost;
-        print('🧾 فاتورة آجلة: دين $totalCost للمورد');
       } else if (paymentType == 'partial') {
         remainingAmount = totalCost - paidAmount;
-        print('💳 فاتورة جزئية: دفع $paidAmount، باقي $remainingAmount');
       }
 
       // إدخال الفاتورة
@@ -357,11 +355,59 @@ class PurchaseInvoiceProvider with ChangeNotifier {
         'remaining_amount': remainingAmount,
         'payment_type': paymentType,
         'note': note ?? '',
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
       });
 
-      print('✅ تم إنشاء فاتورة شراء #$invoiceId');
+      // 🔹 تسجيل حركة الشراء (دائماً)
+      await db.insert('supplier_transactions', {
+        'supplier_id': supplierId,
+        'purchase_invoice_id': invoiceId,
+        'amount': totalCost,
+        'type': 'purchase',
+        'date': DateTime.now().toIso8601String(),
+        'note': 'فاتورة شراء #$invoiceId ($paymentType)',
+      });
+
+      // 🔹 تسجيل الدفعة (إذا وجدت)
+      if (paidAmount > 0) {
+        await db.insert('supplier_transactions', {
+          'supplier_id': supplierId,
+          'purchase_invoice_id': invoiceId,
+          'amount': paidAmount,
+          'type': 'payment',
+          'date': DateTime.now().toIso8601String(),
+          'note': 'دفعة على فاتورة #$invoiceId',
+        });
+        print('   ✅ تم تسجيل دفعة: $paidAmount');
+      }
+
+      // 🔹 تحديث رصيد المورد (فقط للدين المتبقي)
+      if (remainingAmount > 0) {
+        // الحصول على الرصيد الحالي
+        final currentBalance = await getSupplierBalance(supplierId);
+
+        // تحديث الرصيد (زيادة الدين = زيادة الرصيد الموجب)
+        await db.rawInsert(
+          '''
+        INSERT INTO supplier_balance (supplier_id, balance, last_updated)
+        VALUES (?, ?, ?)
+        ON CONFLICT(supplier_id)
+        DO UPDATE SET
+          balance = balance + ?,
+          last_updated = ?
+        ''',
+          [
+            supplierId,
+            remainingAmount,
+            DateTime.now().toIso8601String(),
+            remainingAmount,
+            DateTime.now().toIso8601String(),
+          ],
+        );
+
+        final newBalance = currentBalance + remainingAmount;
+      } else {
+        print('   ✅ لا يوجد دين متبقي، لم يتم تحديث الرصيد');
+      }
 
       await refreshInvoices();
       return invoiceId;

@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class DBHelper {
   static Database? _db;
+  static const int _version = 3; // زيادة الرقم لتطبيق التحديثات
 
   Future<Database> get db async {
     if (_db != null) return _db!;
@@ -13,6 +14,12 @@ class DBHelper {
   }
 
   Future<Database> initDb() async {
+    // تهيئة sqflite للويب أو سطح المكتب
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
+
     String folderPath = join(Directory.current.path, 'data');
     Directory(folderPath).createSync(recursive: true);
 
@@ -20,65 +27,148 @@ class DBHelper {
 
     Database database = await openDatabase(
       path,
-      version: 1,
+      version: _version,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
 
     await _archiveOldInvoices(database);
     return database;
   }
 
-  Future<void> _archiveOldInvoices(Database db) async {
-    // 1️⃣ خزن IDs الفواتير القديمة (أقدم من سنة)
-    final oldSales = await db.query(
-      'sales',
-      columns: ['id'],
-      where: "date < DATE('now', '-1 year')",
-    );
-    final oldSaleIds = oldSales.map((row) => row['id']).toList();
-
-    if (oldSaleIds.isNotEmpty) {
-      final idsString = oldSaleIds.join(',');
-
-      // 2️⃣ أرشيف عناصر الفواتير القديمة
-      await db.execute('''
-      INSERT INTO sale_items_archive
-      SELECT * FROM sale_items
-      WHERE sale_id IN ($idsString);
-    ''');
-
-      // 3️⃣ أرشيف الفواتير القديمة
-      await db.execute('''
-      INSERT INTO sales_archive (id, date, total_amount, total_profit, customer_id, payment_type, show_for_tax)
-      SELECT id, date, total_amount, total_profit, customer_id, payment_type, show_for_tax
-      FROM sales
-      WHERE id IN ($idsString);
-    ''');
-
-      // 4️⃣ حذف الفواتير القديمة من sales
-      await db.execute('''
-      DELETE FROM sales
-      WHERE id IN ($idsString);
-    ''');
-
-      // 5️⃣ حذف عناصر الفواتير القديمة من sale_items
-      await db.execute('''
-      DELETE FROM sale_items
-      WHERE sale_id IN ($idsString);
-    ''');
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // إضافة الفهارس في الترقية
+      await _createIndexes(db);
     }
+    if (oldVersion < 3) {
+      // أي تحديثات أخرى
+    }
+  }
 
-    // 6️⃣ حذف الأرشيف الأقدم من 3 سنوات من sales_archive
-    await db.execute('''
-    DELETE FROM sales_archive
-    WHERE date < DATE('now', '-3 years');
-  ''');
+  // دالة لإنشاء الفهارس
+  Future<void> _createIndexes(Database db) async {
+    try {
+      // فهارس للموردين
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers (name)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_suppliers_phone ON suppliers (phone)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_suppliers_created ON suppliers (created_at)',
+      );
 
-    // 7️⃣ حذف عناصر الأرشيف القديمة من sale_items_archive
-    await db.execute('''
-    DELETE FROM sale_items_archive
-    WHERE sale_id NOT IN (SELECT id FROM sales_archive);
-  ''');
+      // فهارس للمنتجات
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_products_name ON products (name)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_products_barcode ON products (barcode)',
+      );
+
+      // فهارس للزبائن
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_customers_name ON customers (name)',
+      );
+
+      // فهارس للفواتير
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_sales_date ON sales (date)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales (customer_id)',
+      );
+
+      // فهارس لفواتير الشراء
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_purchase_invoices_date ON purchase_invoices (date)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_purchase_invoices_supplier ON purchase_invoices (supplier_id)',
+      );
+
+      // فهارس للأرصدة
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_supplier_balance_supplier ON supplier_balance (supplier_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_customer_balance_customer ON customer_balance (customer_id)',
+      );
+
+      // فهارس للمعاملات
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier ON supplier_transactions (supplier_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions (customer_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_supplier_transactions_date ON supplier_transactions (date)',
+      );
+
+      print('✅ تم إنشاء الفهارس بنجاح!');
+    } catch (e) {
+      print('❌ خطأ في إنشاء الفهارس: $e');
+    }
+  }
+
+  Future<void> _archiveOldInvoices(Database db) async {
+    try {
+      // 1️⃣ خزن IDs الفواتير القديمة (أقدم من سنة)
+      final oldSales = await db.query(
+        'sales',
+        columns: ['id'],
+        where: "date < DATE('now', '-1 year')",
+      );
+      final oldSaleIds = oldSales.map((row) => row['id']).toList();
+
+      if (oldSaleIds.isNotEmpty) {
+        final idsString = oldSaleIds.join(',');
+
+        // 2️⃣ أرشيف عناصر الفواتير القديمة
+        await db.execute('''
+        INSERT INTO sale_items_archive
+        SELECT * FROM sale_items
+        WHERE sale_id IN ($idsString);
+      ''');
+
+        // 3️⃣ أرشيف الفواتير القديمة
+        await db.execute('''
+        INSERT INTO sales_archive (id, date, total_amount, total_profit, customer_id, payment_type, show_for_tax)
+        SELECT id, date, total_amount, total_profit, customer_id, payment_type, show_for_tax
+        FROM sales
+        WHERE id IN ($idsString);
+      ''');
+
+        // 4️⃣ حذف الفواتير القديمة من sales
+        await db.execute('''
+        DELETE FROM sales
+        WHERE id IN ($idsString);
+      ''');
+
+        // 5️⃣ حذف عناصر الفواتير القديمة من sale_items
+        await db.execute('''
+        DELETE FROM sale_items
+        WHERE sale_id IN ($idsString);
+      ''');
+      }
+
+      // 6️⃣ حذف الأرشيف الأقدم من 3 سنوات من sales_archive
+      await db.execute('''
+      DELETE FROM sales_archive
+      WHERE date < DATE('now', '-3 years');
+    ''');
+
+      // 7️⃣ حذف عناصر الأرشيف القديمة من sale_items_archive
+      await db.execute('''
+      DELETE FROM sale_items_archive
+      WHERE sale_id NOT IN (SELECT id FROM sales_archive);
+    ''');
+    } catch (e) {
+      print('❌ خطأ في أرشفة الفواتير: $e');
+    }
   }
 
   Future _onCreate(Database db, int version) async {
@@ -105,7 +195,7 @@ class DBHelper {
         barcode TEXT UNIQUE,
         contain_qty REAL NOT NULL,
         sell_price REAL NOT NULL,
-        FOREIGN KEY (product_id) REFERENCES products (id)
+        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
       );
     ''');
 
@@ -152,27 +242,27 @@ class DBHelper {
 
     // جدول رصيد الزبائن (الدين)
     await db.execute('''
-  CREATE TABLE customer_balance (
-    customer_id INTEGER PRIMARY KEY,
-    balance REAL NOT NULL DEFAULT 0,
-    last_updated TEXT,
-    FOREIGN KEY (customer_id) REFERENCES customers (id)
-  );
-''');
+      CREATE TABLE customer_balance (
+        customer_id INTEGER PRIMARY KEY,
+        balance REAL NOT NULL DEFAULT 0,
+        last_updated TEXT,
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+      );
+    ''');
 
     // جدول الدفعات
     await db.execute('''
-  CREATE TABLE IF NOT EXISTS transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_id INTEGER NOT NULL,
-    amount REAL NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('payment', 'withdrawal')),
-    date TEXT NOT NULL,
-    note TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (customer_id) REFERENCES customers (id)
-  );
-''');
+      CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('payment', 'withdrawal')),
+        date TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+      );
+    ''');
 
     // جدول الفواتير
     await db.execute('''
@@ -184,7 +274,7 @@ class DBHelper {
         customer_id INTEGER, 
         payment_type TEXT NOT NULL DEFAULT 'cash', 
         show_for_tax INTEGER,
-        FOREIGN KEY (customer_id) REFERENCES customers (id)
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL
       );
     ''');
 
@@ -202,9 +292,9 @@ class DBHelper {
         cost_price REAL NOT NULL,
         subtotal REAL NOT NULL,
         profit REAL NOT NULL,
-        FOREIGN KEY (sale_id) REFERENCES sales (id),
-        FOREIGN KEY (product_id) REFERENCES products (id),
-        FOREIGN KEY (unit_id) REFERENCES product_units (id)
+        FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+        FOREIGN KEY (unit_id) REFERENCES product_units (id) ON DELETE SET NULL
       );
     ''');
 
@@ -252,84 +342,64 @@ class DBHelper {
 
     // جدول فواتير الشراء
     await db.execute('''
-  CREATE TABLE purchase_invoices (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  supplier_id INTEGER NOT NULL,
+      CREATE TABLE purchase_invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplier_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        total_cost REAL NOT NULL,              
+        paid_amount REAL NOT NULL DEFAULT 0,   
+        remaining_amount REAL NOT NULL DEFAULT 0,
+        payment_type TEXT NOT NULL CHECK (
+          payment_type IN ('cash', 'credit', 'partial')
+        ),
+        note TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
+      );
+    ''');
 
-  date TEXT NOT NULL,
-
-  total_cost REAL NOT NULL,              -- إجمالي الفاتورة
-  paid_amount REAL NOT NULL DEFAULT 0,   -- المدفوع وقت الفاتورة
-  remaining_amount REAL NOT NULL DEFAULT 0, -- الدين المتبقي
-
-  payment_type TEXT NOT NULL CHECK (
-    payment_type IN ('cash', 'credit', 'partial')
-  ),
-
-  note TEXT,
-
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-  FOREIGN KEY (supplier_id) REFERENCES suppliers (id)
-);
-
-''');
-
-    // جدول عناصر فاتورة
-
+    // جدول عناصر فاتورة الشراء
     await db.execute('''
       CREATE TABLE purchase_items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  purchase_id INTEGER NOT NULL,
-  product_id INTEGER NOT NULL,
-  quantity REAL NOT NULL,
-  cost_price REAL NOT NULL,
-  subtotal REAL NOT NULL,
-  FOREIGN KEY (purchase_id) REFERENCES purchase_invoices (id),
-  FOREIGN KEY (product_id) REFERENCES products (id)
-);
-
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        purchase_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        quantity REAL NOT NULL,
+        cost_price REAL NOT NULL,
+        subtotal REAL NOT NULL,
+        FOREIGN KEY (purchase_id) REFERENCES purchase_invoices (id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+      );
     ''');
 
     // جدول رصيد الموردين
-
     await db.execute('''
-
-CREATE TABLE supplier_balance (
-  supplier_id INTEGER PRIMARY KEY,
-  balance REAL NOT NULL DEFAULT 0,
-  last_updated TEXT,
-  FOREIGN KEY (supplier_id) REFERENCES suppliers (id)
-);
-
-
+      CREATE TABLE supplier_balance (
+        supplier_id INTEGER PRIMARY KEY,
+        balance REAL NOT NULL DEFAULT 0,
+        last_updated TEXT,
+        FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
+      );
     ''');
 
     // جدول معاملات الموردين
-
     await db.execute('''
-CREATE TABLE supplier_transactions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-  supplier_id INTEGER NOT NULL,
-  purchase_invoice_id INTEGER, -- NULL = دفعة عامة
-
-  amount REAL NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('purchase', 'payment')),
-
-  date TEXT NOT NULL,
-  note TEXT,
-
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-  FOREIGN KEY (supplier_id) REFERENCES suppliers (id),
-  FOREIGN KEY (purchase_invoice_id) REFERENCES purchase_invoices (id)
-);
-
+      CREATE TABLE supplier_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplier_id INTEGER NOT NULL,
+        purchase_invoice_id INTEGER,
+        amount REAL NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('purchase', 'payment')),
+        date TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE,
+        FOREIGN KEY (purchase_invoice_id) REFERENCES purchase_invoices (id) ON DELETE SET NULL
+      );
     ''');
-    // جدول الإعدادات
 
+    // جدول الإعدادات
     await db.execute('''
       CREATE TABLE settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -347,6 +417,22 @@ CREATE TABLE supplier_transactions (
       'currency': 'ILS',
     });
 
-    print('✅ تم إنشاء الجداول بنجاح!');
+    // إنشاء الفهارس بعد إنشاء الجداول
+    await _createIndexes(db);
+
+    print('✅ تم إنشاء الجداول والفهارس بنجاح!');
+  }
+
+  // دالة مساعدة للتحقق من وجود فهرس
+  Future<bool> indexExists(Database db, String indexName) async {
+    try {
+      final result = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name=?",
+        [indexName],
+      );
+      return result.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
   }
 }

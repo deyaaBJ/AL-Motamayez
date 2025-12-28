@@ -47,6 +47,7 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
   @override
   void initState() {
     super.initState();
+    _resetSearch();
 
     // إعداد listener للتمرير
     _scrollController.addListener(_scrollListener);
@@ -197,140 +198,6 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-  }
-
-  Future<void> _editInvoice(
-    PurchaseInvoiceProvider provider,
-    Map<String, dynamic> invoice,
-  ) async {
-    final TextEditingController noteController = TextEditingController(
-      text: invoice['note']?.toString() ?? '',
-    );
-    String paymentType = invoice['payment_type'] ?? 'cash';
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
-            return AlertDialog(
-              title: const Text('تعديل طريقة الدفع'),
-              content: SizedBox(
-                width: 300,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ChoiceChip(
-                          label: const Text('نقدي'),
-                          selected: paymentType == 'cash',
-                          onSelected: (selected) {
-                            setState(() {
-                              paymentType = 'cash';
-                            });
-                          },
-                          selectedColor: Colors.green,
-                          backgroundColor: Colors.grey.shade200,
-                        ),
-                        const SizedBox(width: 20),
-                        ChoiceChip(
-                          label: const Text('آجل (دين)'),
-                          selected: paymentType == 'credit',
-                          onSelected: (selected) {
-                            setState(() {
-                              paymentType = 'credit';
-                            });
-                          },
-                          selectedColor: Colors.orange,
-                          backgroundColor: Colors.grey.shade200,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: noteController,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        hintText: 'ملاحظات',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.all(12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('إلغاء'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                  ),
-                  child: const Text('حفظ'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (result == true && mounted) {
-      try {
-        await provider.updatePurchaseInvoice(
-          invoiceId: invoice['id'],
-          paymentType: paymentType,
-          note: noteController.text,
-        );
-        _showSnackBar('تم تحديث الفاتورة بنجاح', Colors.green);
-      } catch (e) {
-        _showSnackBar('خطأ في التحديث: ${e.toString()}', Colors.red);
-      }
-    }
-  }
-
-  Future<void> _deleteInvoice(
-    PurchaseInvoiceProvider provider,
-    Map<String, dynamic> invoice,
-  ) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder:
-          (BuildContext context) => AlertDialog(
-            title: const Text('تأكيد الحذف'),
-            content: Text('هل تريد حذف الفاتورة #${invoice['id']}؟'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('لا'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text('نعم'),
-              ),
-            ],
-          ),
-    );
-
-    if (confirm != true || !mounted) return;
-
-    try {
-      await provider.deletePurchaseInvoice(invoice['id']);
-      _showSnackBar('تم حذف الفاتورة بنجاح', Colors.green);
-    } catch (e) {
-      _showSnackBar('خطأ في الحذف: ${e.toString()}', Colors.red);
-    }
   }
 
   Widget _buildHeader(PurchaseInvoiceProvider provider) {
@@ -516,7 +383,6 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
           Expanded(flex: 2, child: _buildHeaderCell('المورد')),
           Expanded(flex: 2, child: _buildHeaderCell('المبلغ')),
           Expanded(flex: 2, child: _buildHeaderCell('طريقة الدفع')),
-          Expanded(flex: 3, child: _buildHeaderCell('الإجراءات')),
         ],
       ),
     );
@@ -637,7 +503,6 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: InkWell(
-                      onTap: () => _editInvoice(provider, invoice),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
@@ -674,74 +539,12 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
                     ),
                   ),
                 ),
+
                 // الإجراءات
-                Expanded(
-                  flex: 3,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildActionButton(
-                          icon: Icons.visibility,
-                          color: Colors.blue,
-                          tooltip: 'عرض التفاصيل',
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => PurchaseInvoiceDetailsPage(
-                                      invoice: invoice,
-                                    ),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(width: 4),
-                        _buildActionButton(
-                          icon: Icons.edit,
-                          color: Colors.orange,
-                          tooltip: 'تعديل',
-                          onPressed: () => _editInvoice(provider, invoice),
-                        ),
-                        const SizedBox(width: 4),
-                        _buildActionButton(
-                          icon: Icons.delete,
-                          color: Colors.red,
-                          tooltip: 'حذف',
-                          onPressed: () => _deleteInvoice(provider, invoice),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required Color color,
-    required String tooltip,
-    required VoidCallback onPressed,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: IconButton(
-        icon: Icon(icon, size: 18),
-        color: color,
-        onPressed: onPressed,
-        tooltip: tooltip,
-        padding: const EdgeInsets.all(6),
-        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
       ),
     );
   }
@@ -1005,62 +808,8 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Divider(height: 1, color: Colors.grey.shade200),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildMobileActionButton(
-                    icon: Icons.visibility,
-                    label: 'عرض',
-                    color: Colors.blue,
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) =>
-                                  PurchaseInvoiceDetailsPage(invoice: invoice),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildMobileActionButton(
-                    icon: Icons.edit,
-                    label: 'تعديل',
-                    color: Colors.orange,
-                    onPressed: () => _editInvoice(provider, invoice),
-                  ),
-                  _buildMobileActionButton(
-                    icon: Icons.delete,
-                    label: 'حذف',
-                    color: Colors.red,
-                    onPressed: () => _deleteInvoice(provider, invoice),
-                  ),
-                ],
-              ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMobileActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onPressed,
-  }) {
-    return Expanded(
-      child: TextButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 18, color: color),
-        label: Text(label, style: TextStyle(color: color, fontSize: 12)),
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
       ),
     );

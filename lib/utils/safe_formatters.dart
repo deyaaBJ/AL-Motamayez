@@ -3,7 +3,7 @@ import 'formatters.dart';
 class SafeFormatters {
   static String formatDate(DateTime date) {
     try {
-      return Formatters.formatDate(date);
+      return Formatters.formatDate(date as String);
     } catch (e) {
       // بديل إذا فشل Formatters
       final year = date.year;
