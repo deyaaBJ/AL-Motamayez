@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/components/base_layout.dart';
-import 'package:shopmate/providers/auth_provider.dart';
-import 'package:shopmate/providers/product_provider.dart';
-import 'package:shopmate/providers/sales_provider.dart';
-import 'package:shopmate/providers/settings_provider.dart';
-import 'package:shopmate/widgets/PosCartAnimation.dart';
+import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/providers/auth_provider.dart';
+import 'package:motamayez/providers/product_provider.dart';
+import 'package:motamayez/providers/sales_provider.dart';
+import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/widgets/PosCartAnimation.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -52,7 +52,7 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildMainContent(BuildContext context, String? role) {
     final salesProvider = Provider.of<SalesProvider>(context);
     final productProvider = Provider.of<ProductProvider>(context);
-    final settingsProvider = Provider.of<SettingsProvider>(context);
+    Provider.of<SettingsProvider>(context);
 
     return Column(
       children: [

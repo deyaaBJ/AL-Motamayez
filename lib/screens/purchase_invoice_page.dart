@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/components/base_layout.dart';
-import 'package:shopmate/models/product.dart';
-import 'package:shopmate/screens/add_product_screen.dart';
-import 'package:shopmate/screens/add_supplier_page.dart';
+import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/models/product.dart';
+import 'package:motamayez/screens/add_product_screen.dart';
+import 'package:motamayez/screens/add_supplier_page.dart';
 import '../providers/supplier_provider.dart';
 import '../providers/purchase_invoice_provider.dart';
 import '../providers/purchase_item_provider.dart';
@@ -23,19 +24,13 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   final TextEditingController _costController = TextEditingController();
   final TextEditingController _searchProductController =
       TextEditingController();
-  final TextEditingController _noteController = TextEditingController();
+  final TextEditingController _discountController =
+      TextEditingController(); // المتحكم الجديد للخصم
 
-  // المتغيرات
-  int? _selectedSupplierId;
+  // المتغيرات المحلية فقط
   int? _selectedProductId;
-  String? _selectedPaymentType = 'cash';
   int? _invoiceId;
-  List<Map<String, dynamic>> _invoiceItems = [];
-  double _invoiceTotal = 0.0;
-
-  // حالات التحميل
   bool _isLoading = false;
-  bool _isCreatingInvoice = false;
   bool _isInitialLoading = true;
   bool _isSearching = false;
   List<Product> _searchResults = [];
@@ -89,10 +84,23 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     final productProvider = context.read<ProductProvider>();
     final products = productProvider.products;
 
+    final bool isBarcodeSearch = RegExp(r'^\d+$').hasMatch(query);
+
     final results =
         products.where((p) {
-          return p.name.toLowerCase().contains(query) ||
-              (p.barcode ?? '').toLowerCase().contains(query);
+          final name = p.name.toLowerCase();
+
+          // 🔹 بحث بالاسم → كل المنتجات
+          if (!isBarcodeSearch) {
+            return name.contains(query);
+          }
+
+          // 🔹 بحث بالباركود → فقط اللي عنده باركود
+          if (p.barcode == null || p.barcode!.isEmpty) {
+            return false;
+          }
+
+          return p.barcode!.toLowerCase().contains(query);
         }).toList();
 
     setState(() {
@@ -107,7 +115,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     _costController.dispose();
     _searchProductController.removeListener(_performSearch);
     _searchProductController.dispose();
-    _noteController.dispose();
+    _discountController.dispose(); // التخلص من المتحكم الجديد
     super.dispose();
   }
 
@@ -172,7 +180,11 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
             children: [
               _buildInvoicePreview(),
               const SizedBox(height: 20),
-              if (_invoiceItems.isNotEmpty) _buildInvoiceActions(),
+              if (context
+                  .watch<PurchaseInvoiceProvider>()
+                  .tempInvoiceItems
+                  .isNotEmpty)
+                _buildInvoiceActions(),
             ],
           ),
         ),
@@ -191,12 +203,17 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         const SizedBox(height: 20),
         _buildInvoicePreview(),
         const SizedBox(height: 20),
-        if (_invoiceItems.isNotEmpty) _buildInvoiceActions(),
+        if (context
+            .watch<PurchaseInvoiceProvider>()
+            .tempInvoiceItems
+            .isNotEmpty)
+          _buildInvoiceActions(),
       ],
     );
   }
 
   Widget _buildInvoiceHeader() {
+    final invoiceProvider = context.watch<PurchaseInvoiceProvider>();
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -218,9 +235,14 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _invoiceId == null ? 'مسودة' : 'فاتورة #${_invoiceId}',
+                  _invoiceId == null ? 'مسودة' : 'فاتورة #$_invoiceId',
                   style: const TextStyle(color: Colors.grey, fontSize: 14),
                 ),
+                if (invoiceProvider.tempInvoiceItems.isNotEmpty)
+                  Text(
+                    '${invoiceProvider.tempInvoiceItems.length} منتج | الإجمالي: ${Formatters.formatCurrency(invoiceProvider.tempInvoiceTotal)}',
+                    style: const TextStyle(color: Colors.green, fontSize: 14),
+                  ),
               ],
             ),
             Icon(Icons.receipt_long, size: 48, color: Colors.blue.shade400),
@@ -231,6 +253,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   Widget _buildSupplierSection(List<Map<String, dynamic>> suppliers) {
+    final invoiceProvider = context.watch<PurchaseInvoiceProvider>();
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -252,7 +275,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const AddSupplierPage(),
+                        builder: (context) => const AddEditSupplierPage(),
                       ),
                     ).then((_) {
                       Provider.of<SupplierProvider>(
@@ -287,7 +310,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const AddSupplierPage(),
+                            builder: (context) => const AddEditSupplierPage(),
                           ),
                         ).then((_) {
                           Provider.of<SupplierProvider>(
@@ -312,7 +335,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                       ),
                       prefixIcon: const Icon(Icons.person),
                     ),
-                    value: _selectedSupplierId,
+                    value: invoiceProvider.tempSelectedSupplierId,
                     items:
                         suppliers.map((supplier) {
                           return DropdownMenuItem<int>(
@@ -321,9 +344,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                           );
                         }).toList(),
                     onChanged: (value) {
-                      setState(() {
-                        _selectedSupplierId = value;
-                      });
+                      invoiceProvider.setTempSupplierId(value);
                     },
                   ),
 
@@ -337,15 +358,13 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                       ),
                       prefixIcon: const Icon(Icons.payment),
                     ),
-                    value: _selectedPaymentType,
+                    value: invoiceProvider.tempPaymentType,
                     items: const [
                       DropdownMenuItem(value: 'cash', child: Text('نقدي')),
                       DropdownMenuItem(value: 'credit', child: Text('آجل')),
                     ],
                     onChanged: (value) {
-                      setState(() {
-                        _selectedPaymentType = value;
-                      });
+                      invoiceProvider.setTempPaymentType(value);
                     },
                   ),
                 ],
@@ -354,7 +373,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
             const SizedBox(height: 16),
 
             TextField(
-              controller: _noteController,
+              controller: TextEditingController(
+                text: invoiceProvider.tempNote ?? '',
+              ),
               decoration: InputDecoration(
                 labelText: 'ملاحظات (اختياري)',
                 border: OutlineInputBorder(
@@ -363,6 +384,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 prefixIcon: const Icon(Icons.note),
               ),
               maxLines: 2,
+              onChanged: (value) {
+                invoiceProvider.setTempNote(value);
+              },
             ),
           ],
         ),
@@ -439,7 +463,12 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 Expanded(
                   child: TextField(
                     controller: _qtyController,
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                    ],
                     decoration: InputDecoration(
                       labelText: 'الكمية',
                       border: OutlineInputBorder(
@@ -453,7 +482,12 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 Expanded(
                   child: TextField(
                     controller: _costController,
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                    ],
                     decoration: InputDecoration(
                       labelText: 'سعر التكلفة',
                       border: OutlineInputBorder(
@@ -560,7 +594,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
               ),
             ),
             title: Text(product.name),
-            subtitle: Text('المخزون: ${product.quantity} ${product.baseUnit}'),
+            subtitle: Text(
+              'المخزون: ${product.quantity} ${getUnitArabic(product.baseUnit)}',
+            ),
             trailing: Icon(
               isSelected ? Icons.check_circle : Icons.add_circle,
               color: isSelected ? Colors.green : Colors.blue,
@@ -568,8 +604,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
             onTap: () {
               setState(() {
                 _selectedProductId = product.id;
-                _costController.text =
-                    product.costPrice?.toStringAsFixed(2) ?? '0.00';
+                _costController.text = product.costPrice.toStringAsFixed(2);
                 _qtyController.text = '1';
               });
             },
@@ -580,6 +615,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   Widget _buildInvoicePreview() {
+    final invoiceProvider = context.watch<PurchaseInvoiceProvider>();
+    final invoiceItems = invoiceProvider.tempInvoiceItems;
+
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -596,7 +634,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 Chip(
-                  label: Text('${_invoiceItems.length} منتج'),
+                  label: Text('${invoiceItems.length} منتج'),
                   backgroundColor: Colors.blue.shade50,
                 ),
               ],
@@ -604,7 +642,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
             const SizedBox(height: 16),
 
-            if (_invoiceItems.isEmpty)
+            if (invoiceItems.isEmpty)
               Container(
                 padding: const EdgeInsets.all(40),
                 decoration: BoxDecoration(
@@ -688,7 +726,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                   const SizedBox(height: 8),
 
                   // المنتجات
-                  ..._invoiceItems.asMap().entries.map((entry) {
+                  ...invoiceItems.asMap().entries.map((entry) {
                     final index = entry.key;
                     final item = entry.value;
 
@@ -742,11 +780,11 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                         ],
                       ),
                     );
-                  }).toList(),
+                  }),
 
                   const SizedBox(height: 20),
 
-                  // الملخص
+                  // الملخص - القسم الذي تم إصلاحه
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -760,7 +798,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('عدد المنتجات:'),
-                            Text(_invoiceItems.length.toString()),
+                            Text(invoiceItems.length.toString()),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -769,7 +807,107 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                           children: [
                             const Text('طريقة الدفع:'),
                             Text(
-                              _selectedPaymentType == 'cash' ? 'نقدي' : 'آجل',
+                              invoiceProvider.tempPaymentType == 'cash'
+                                  ? 'نقدي'
+                                  : 'آجل',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('الإجمالي قبل الخصم:'),
+                            Text(
+                              Formatters.formatCurrency(
+                                invoiceProvider.tempInvoiceTotal,
+                              ),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('قيمة الخصم:'),
+                            SizedBox(
+                              width: 150,
+                              child: TextFormField(
+                                controller: _discountController,
+                                keyboardType: TextInputType.numberWithOptions(
+                                  decimal: true,
+                                  signed: false,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: '0.0',
+                                  border: const OutlineInputBorder(),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 8,
+                                  ),
+                                  suffixIcon:
+                                      invoiceProvider.tempDiscountValue > 0
+                                          ? IconButton(
+                                            icon: const Icon(
+                                              Icons.clear,
+                                              size: 16,
+                                            ),
+                                            onPressed: () {
+                                              invoiceProvider
+                                                  .setTempDiscountValue(0.0);
+                                              _discountController.clear();
+                                            },
+                                          )
+                                          : null,
+                                ),
+                                onChanged: (value) {
+                                  if (value.isEmpty) {
+                                    invoiceProvider.setTempDiscountValue(0.0);
+                                    return;
+                                  }
+
+                                  // السماح فقط بالأرقام والنقطة
+                                  String cleanedValue = value.replaceAll(
+                                    RegExp(r'[^\d.]'),
+                                    '',
+                                  );
+
+                                  // منع أكثر من نقطة واحدة
+                                  final dotCount =
+                                      cleanedValue.split('.').length - 1;
+                                  if (dotCount > 1) {
+                                    final parts = cleanedValue.split('.');
+                                    cleanedValue = '${parts[0]}.${parts[1]}';
+
+                                    if (_discountController.text !=
+                                        cleanedValue) {
+                                      _discountController.text = cleanedValue;
+                                      _discountController.selection =
+                                          TextSelection.fromPosition(
+                                            TextPosition(
+                                              offset: cleanedValue.length,
+                                            ),
+                                          );
+                                    }
+                                  }
+
+                                  if (cleanedValue.isEmpty) {
+                                    invoiceProvider.setTempDiscountValue(0.0);
+                                    return;
+                                  }
+
+                                  final discountValue =
+                                      double.tryParse(cleanedValue) ?? 0.0;
+                                  invoiceProvider.setTempDiscountValue(
+                                    discountValue,
+                                  );
+                                },
+                              ),
                             ),
                           ],
                         ),
@@ -787,7 +925,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                               ),
                             ),
                             Text(
-                              Formatters.formatCurrency(_invoiceTotal),
+                              Formatters.formatCurrency(
+                                invoiceProvider.tempInvoiceFinalTotal,
+                              ),
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
@@ -863,9 +1003,10 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   // === الدوال المنطقية ===
-
   Future<void> _addItem() async {
-    if (_selectedSupplierId == null) {
+    final invoiceProvider = context.read<PurchaseInvoiceProvider>();
+
+    if (invoiceProvider.tempSelectedSupplierId == null) {
       _showError('يرجى اختيار المورد أولاً');
       return;
     }
@@ -893,7 +1034,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         orElse: () => throw Exception('المنتج غير موجود'),
       );
 
-      // إضافة العنصر إلى القائمة المحلية
+      // إضافة العنصر إلى الـProvider
       final newItem = {
         'product_id': _selectedProductId!,
         'product_name': product.name,
@@ -902,10 +1043,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         'subtotal': qty * cost,
       };
 
-      _invoiceItems.add(newItem);
-
-      // تحديث الإجمالي
-      _invoiceTotal += qty * cost;
+      invoiceProvider.addTempItem(newItem);
 
       // تفريغ الحقول
       _qtyController.clear();
@@ -922,19 +1060,15 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   Future<void> _removeItem(int index) async {
-    if (index < 0 || index >= _invoiceItems.length) return;
+    final invoiceProvider = context.read<PurchaseInvoiceProvider>();
+
+    if (index < 0 || index >= invoiceProvider.tempInvoiceItems.length) return;
 
     setState(() => _isLoading = true);
 
     try {
-      // حذف العنصر وتحديث الإجمالي
-      final removedItem = _invoiceItems.removeAt(index);
-      final subtotal =
-          (removedItem['quantity'] as num).toDouble() *
-          (removedItem['cost_price'] as num).toDouble();
-
-      _invoiceTotal -= subtotal;
-
+      // حذف العنصر من الـProvider
+      invoiceProvider.removeTempItem(index);
       _showSuccess('تم حذف المنتج بنجاح');
     } catch (e) {
       _showError('حدث خطأ أثناء الحذف: $e');
@@ -944,13 +1078,22 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   Future<void> _saveInvoice() async {
-    if (_invoiceItems.isEmpty) {
+    final invoiceProvider = context.read<PurchaseInvoiceProvider>();
+    final invoiceItems = invoiceProvider.tempInvoiceItems;
+
+    if (invoiceItems.isEmpty) {
       _showError('لا يمكن حفظ فاتورة فارغة');
       return;
     }
 
-    if (_selectedSupplierId == null) {
+    if (invoiceProvider.tempSelectedSupplierId == null) {
       _showError('يرجى اختيار المورد أولاً');
+      return;
+    }
+
+    // تحقق من أن الخصم لا يتجاوز الإجمالي
+    if (invoiceProvider.tempDiscountValue > invoiceProvider.tempInvoiceTotal) {
+      _showError('قيمة الخصم لا يمكن أن تتجاوز الإجمالي');
       return;
     }
 
@@ -960,17 +1103,17 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       final purchaseInvoiceProvider = context.read<PurchaseInvoiceProvider>();
       final purchaseItemProvider = context.read<PurchaseItemProvider>();
 
-      // 1. إنشاء الفاتورة مع الإجمالي المحسوب
+      // 🔹 نرسل المبلغ النهائي (بعد الخصم)
       _invoiceId = await purchaseInvoiceProvider.addPurchaseInvoice(
-        supplierId: _selectedSupplierId!,
-        totalCost: _invoiceTotal,
-        paymentType: _selectedPaymentType ?? 'cash',
-        note: _noteController.text,
+        supplierId: invoiceProvider.tempSelectedSupplierId!,
+        totalCost: invoiceProvider.tempInvoiceFinalTotal, // ← المبلغ بعد الخصم
+        paymentType: invoiceProvider.tempPaymentType ?? 'cash',
+        note: invoiceProvider.tempNote,
         paidAmount: 0.0,
       );
 
-      // 2. إضافة جميع العناصر إلى قاعدة البيانات
-      for (final item in _invoiceItems) {
+      // إضافة العناصر
+      for (final item in invoiceItems) {
         await purchaseItemProvider.addPurchaseItem(
           purchaseId: _invoiceId!,
           productId: item['product_id'] as int,
@@ -980,8 +1123,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       }
 
       _showSuccess('تم حفظ الفاتورة بنجاح رقم #$_invoiceId');
-
-      // 3. مسح الواجهة بعد الحفظ
       _clearInvoice();
     } catch (e) {
       _showError('خطأ في حفظ الفاتورة: $e');
@@ -991,18 +1132,20 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   void _clearInvoice() {
+    // مسح الفاتورة من الـProvider فقط
+    final invoiceProvider = context.read<PurchaseInvoiceProvider>();
+    invoiceProvider.clearTempInvoice();
+
     setState(() {
       _invoiceId = null;
-      _invoiceItems.clear();
-      _invoiceTotal = 0.0;
       _selectedProductId = null;
-      _selectedSupplierId = null;
-      _noteController.clear();
-      _qtyController.clear();
-      _costController.clear();
       _searchProductController.clear();
       _searchResults.clear();
     });
+
+    _qtyController.clear();
+    _costController.clear();
+    _discountController.clear(); // مسح حقل الخصم أيضاً
   }
 
   void _showError(String message) {
@@ -1025,5 +1168,16 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  String getUnitArabic(String unit) {
+    switch (unit.toLowerCase()) {
+      case 'piece':
+        return 'قطعة';
+      case 'kg':
+        return 'كيلو';
+      default:
+        return unit;
+    }
   }
 }

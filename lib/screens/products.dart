@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:shopmate/components/base_layout.dart';
-import 'package:shopmate/models/productFilter.dart';
-import 'package:shopmate/providers/product_provider.dart';
-import 'package:shopmate/models/product.dart';
-import 'package:shopmate/screens/add_product_screen.dart' show AddProductScreen;
-import 'package:shopmate/widgets/product_filter_bar.dart';
-import 'package:shopmate/widgets/product_item.dart';
-import 'package:shopmate/widgets/product_table_header.dart';
+import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/models/productFilter.dart';
+import 'package:motamayez/providers/product_provider.dart';
+import 'package:motamayez/models/product.dart';
+import 'package:motamayez/screens/add_product_screen.dart'
+    show AddProductScreen;
+import 'package:motamayez/widgets/product_filter_bar.dart';
+import 'package:motamayez/widgets/product_item.dart';
+import 'package:motamayez/widgets/product_table_header.dart';
+import 'dart:developer';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -46,7 +48,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           !_isLoading &&
           _provider.hasMore &&
           _searchQuery.isEmpty) {
-        print('Loading more products...');
+        log('Loading more products...');
         _loadMoreProducts();
       }
     });
@@ -60,7 +62,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     try {
       await _provider.loadProducts(reset: true);
     } catch (e) {
-      print('Error loading initial products: $e');
+      log('Error loading initial products: $e');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('حدث خطأ في تحميل المنتجات: $e')));
@@ -77,7 +79,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     try {
       await _provider.loadProducts(reset: false);
     } catch (e) {
-      print('Error loading more products: $e');
+      log('Error loading more products: $e');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -125,10 +127,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
             tooltip: 'تحديث',
           ),
         ],
-        floatingActionButton: FloatingActionButton(
-          onPressed: _addNewProduct,
-          backgroundColor: const Color(0xFF8B5FBF),
-          child: const Icon(Icons.add, color: Colors.white, size: 28),
+        floatingActionButton: Hero(
+          tag: 'products_fab',
+          child: FloatingActionButton(
+            onPressed: _addNewProduct,
+            backgroundColor: const Color(0xFF8B5FBF),
+            child: const Icon(Icons.add, color: Colors.white, size: 28),
+          ),
         ),
         child: Column(
           children: [
@@ -248,7 +253,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           const SizedBox(height: 16),
           Text(
             _searchQuery.isNotEmpty
-                ? 'لا توجد نتائج للبحث "${_searchQuery}"'
+                ? 'لا توجد نتائج للبحث "$_searchQuery"'
                 : 'لا توجد منتجات',
             style: const TextStyle(fontSize: 18, color: Colors.grey),
           ),

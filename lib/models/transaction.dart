@@ -1,5 +1,4 @@
 // models/transaction.dart
-import 'package:shopmate/models/customer.dart';
 
 enum TransactionType { payment, withdrawal }
 

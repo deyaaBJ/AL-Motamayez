@@ -4,8 +4,7 @@ import '../models/product.dart'; // إذا عندك موديل للمنتج
 class ExistingProductMessage extends StatelessWidget {
   final Product existingProduct;
 
-  const ExistingProductMessage({Key? key, required this.existingProduct})
-    : super(key: key);
+  const ExistingProductMessage({super.key, required this.existingProduct});
 
   @override
   Widget build(BuildContext context) {

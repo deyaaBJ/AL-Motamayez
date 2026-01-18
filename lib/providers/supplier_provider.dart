@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
+import 'dart:developer';
 
 class SupplierProvider with ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
@@ -90,9 +91,9 @@ class SupplierProvider with ChangeNotifier {
 
       // معالجة النتائج
       if (loadMore) {
-        _suppliers.addAll(results);
+        _suppliers.addAll(List<Map<String, dynamic>>.from(results));
       } else {
-        _suppliers = results;
+        _suppliers = List<Map<String, dynamic>>.from(results);
       }
 
       // تحديث الكاش
@@ -109,7 +110,7 @@ class SupplierProvider with ChangeNotifier {
       _currentPage++;
       _hasMore = results.length == _pageSize;
     } catch (e) {
-      print('❌ خطأ في تحميل الموردين: $e');
+      log('❌ خطأ في تحميل الموردين: $e');
     } finally {
       _isLoading = false;
       _safeNotifyListeners();
@@ -202,7 +203,7 @@ class SupplierProvider with ChangeNotifier {
         'abs_balance': 0,
       };
     } catch (e) {
-      print('❌ خطأ في جلب ملخص الحركات: $e');
+      log('❌ خطأ في جلب ملخص الحركات: $e');
       return {
         'total_invoices': 0,
         'total_payments': 0,
@@ -246,7 +247,7 @@ class SupplierProvider with ChangeNotifier {
 
       return result.isNotEmpty ? (result.first['count'] as int?) ?? 0 : 0;
     } catch (e) {
-      print('❌ خطأ في جلب عدد الحركات: $e');
+      log('❌ خطأ في جلب عدد الحركات: $e');
       return 0;
     }
   }
@@ -275,21 +276,23 @@ class SupplierProvider with ChangeNotifier {
       final currentPage = _transactionPage[supplierId] ?? 0;
       final offset = currentPage * _transactionsPageSize;
 
+      // الاستعلام المعدل - إضافة payment_type
       final results = await db.rawQuery(
         '''
-        SELECT 
-          st.*, 
-          pi.id as invoice_id,
-          pi.date as invoice_date,
-          pi.total_cost,
-          pi.paid_amount,
-          pi.remaining_amount
-        FROM supplier_transactions st
-        LEFT JOIN purchase_invoices pi ON st.purchase_invoice_id = pi.id
-        WHERE st.supplier_id = ?
-        ORDER BY st.date DESC, st.created_at DESC, st.id DESC
-        LIMIT ? OFFSET ?
-        ''',
+      SELECT 
+        st.*, 
+        pi.id as purchase_invoice_id,
+        pi.date as invoice_date,
+        pi.total_cost,
+        pi.paid_amount,
+        pi.remaining_amount,
+        pi.payment_type  -- ✅ أضف هذا السطر
+      FROM supplier_transactions st
+      LEFT JOIN purchase_invoices pi ON st.purchase_invoice_id = pi.id
+      WHERE st.supplier_id = ?
+      ORDER BY st.date DESC, st.created_at DESC, st.id DESC
+      LIMIT ? OFFSET ?
+      ''',
         [supplierId, _transactionsPageSize, offset],
       );
 
@@ -307,7 +310,7 @@ class SupplierProvider with ChangeNotifier {
 
       return results;
     } catch (e) {
-      print('❌ خطأ في تحميل حركات المورد: $e');
+      log('❌ خطأ في تحميل حركات المورد: $e');
       return [];
     } finally {
       _isLoadingTransactions[supplierId] = false;
@@ -316,6 +319,7 @@ class SupplierProvider with ChangeNotifier {
   }
 
   // جلب عدد الحركات الكلي
+
   Future<int> getTotalTransactionsCount(int supplierId) async {
     final db = await _dbHelper.db;
     try {
@@ -325,7 +329,7 @@ class SupplierProvider with ChangeNotifier {
       );
       return result.isNotEmpty ? (result.first['count'] as int?) ?? 0 : 0;
     } catch (e) {
-      print('❌ خطأ في جلب عدد الحركات الكلي: $e');
+      log('❌ خطأ في جلب عدد الحركات الكلي: $e');
       return 0;
     }
   }
@@ -350,7 +354,7 @@ class SupplierProvider with ChangeNotifier {
         ['%$query%', limit],
       );
     } catch (e) {
-      print('❌ خطأ في البحث السريع: $e');
+      log('❌ خطأ في البحث السريع: $e');
       return [];
     }
   }
@@ -379,7 +383,7 @@ class SupplierProvider with ChangeNotifier {
       _balanceCache[supplierId] = balance;
       return balance;
     } catch (e) {
-      print('❌ خطأ في جلب رصيد المورد: $e');
+      log('❌ خطأ في جلب رصيد المورد: $e');
       return 0.0;
     }
   }
@@ -439,7 +443,37 @@ class SupplierProvider with ChangeNotifier {
 
       await loadSuppliers(searchQuery: _lastSearchQuery);
     } catch (e) {
-      print('❌ خطأ في إضافة المورد: $e');
+      log('❌ خطأ في إضافة المورد: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateSupplier({
+    required int supplierId,
+    required String name,
+    String? phone,
+    String? address,
+    String? notes,
+  }) async {
+    final db = await _dbHelper.db;
+
+    try {
+      await db.update(
+        'suppliers',
+        {
+          'name': name,
+          'phone': phone ?? '',
+          'address': address ?? '',
+          'notes': notes ?? '',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [supplierId],
+      );
+
+      await loadSuppliers(searchQuery: _lastSearchQuery);
+    } catch (e) {
+      log('❌ خطأ في تعديل المورد: $e');
       rethrow;
     }
   }
@@ -455,6 +489,48 @@ class SupplierProvider with ChangeNotifier {
 
     try {
       await db.transaction((txn) async {
+        // إذا كانت الدفعة مرتبطة بفاتورة محددة
+        if (purchaseInvoiceId != null) {
+          // 1. التحقق من المبلغ المتبقي في الفاتورة
+          final invoiceResult = await txn.query(
+            'purchase_invoices',
+            columns: ['remaining_amount', 'paid_amount'],
+            where: 'id = ?',
+            whereArgs: [purchaseInvoiceId],
+          );
+
+          if (invoiceResult.isNotEmpty) {
+            final remaining = _toDouble(
+              invoiceResult.first['remaining_amount'],
+            );
+            final paid = _toDouble(invoiceResult.first['paid_amount']);
+
+            // التحقق من أن المبلغ لا يتجاوز المتبقي
+            if (amount > remaining) {
+              throw Exception('المبلغ أكبر من المتبقي في الفاتورة');
+            }
+
+            // 2. تحديث الفاتورة (زيادة المدفوع وتقليل المتبقي)
+            await txn.rawUpdate(
+              '''
+            UPDATE purchase_invoices 
+            SET 
+              paid_amount = ?,
+              remaining_amount = ?,
+              updated_at = ?
+            WHERE id = ?
+            ''',
+              [
+                paid + amount,
+                remaining - amount,
+                DateTime.now().toIso8601String(),
+                purchaseInvoiceId,
+              ],
+            );
+          }
+        }
+
+        // 3. إضافة حركة الدفع في جدول المعاملات
         await txn.insert('supplier_transactions', {
           'supplier_id': supplierId,
           'purchase_invoice_id': purchaseInvoiceId,
@@ -468,6 +544,7 @@ class SupplierProvider with ChangeNotifier {
                   : 'دفعة عامة'),
         });
 
+        // 4. تحديث رصيد المورد العام
         await txn.rawUpdate(
           '''
         UPDATE supplier_balance
@@ -478,14 +555,25 @@ class SupplierProvider with ChangeNotifier {
         );
       });
 
+      // تحديث الكاش المحلي
       final currentBalance = _balanceCache[supplierId] ?? 0;
       _balanceCache[supplierId] = currentBalance - amount;
 
+      // إعادة تحميل الموردين
       await loadSuppliers(searchQuery: _lastSearchQuery);
     } catch (e) {
-      print('❌ خطأ في إضافة دفعة: $e');
+      log('❌ خطأ في إضافة دفعة: $e');
       rethrow;
     }
+  }
+
+  double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    if (value is num) return value.toDouble();
+    return 0.0;
   }
 
   // إحصائيات الموردين
@@ -513,7 +601,7 @@ class SupplierProvider with ChangeNotifier {
         'current_balance': balance,
       };
     } catch (e) {
-      print('❌ خطأ في جلب إحصائيات المورد: $e');
+      log('❌ خطأ في جلب إحصائيات المورد: $e');
       return {};
     }
   }
@@ -569,14 +657,14 @@ class SupplierProvider with ChangeNotifier {
             'remaining_amount': remainingAmount,
           });
         } catch (e) {
-          print('خطأ في معالجة فاتورة: $e');
+          log('خطأ في معالجة فاتورة: $e');
           continue;
         }
       }
 
       return result;
     } catch (e) {
-      print('❌ خطأ في جلب فواتير المورد للدروب داون: $e');
+      log('❌ خطأ في جلب فواتير المورد للدروب داون: $e');
       return [];
     }
   }
@@ -608,7 +696,7 @@ class SupplierProvider with ChangeNotifier {
   void resetPagination() {
     _currentPage = 0;
     _hasMore = true;
-    _suppliers.clear();
+    _suppliers = [];
     _safeNotifyListeners();
   }
 

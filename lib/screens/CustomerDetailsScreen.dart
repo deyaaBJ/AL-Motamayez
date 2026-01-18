@@ -1,23 +1,24 @@
 // screens/customer_details_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/components/base_layout.dart';
-import 'package:shopmate/models/customer.dart';
-import 'package:shopmate/models/transaction.dart';
-import 'package:shopmate/providers/DebtProvider.dart';
-import 'package:shopmate/providers/settings_provider.dart';
-import 'package:shopmate/utils/date_formatter.dart';
-import 'package:shopmate/widgets/quick_payment_dialog.dart';
+import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/models/customer.dart';
+import 'package:motamayez/models/transaction.dart';
+import 'package:motamayez/providers/DebtProvider.dart';
+import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/utils/date_formatter.dart';
+import 'package:motamayez/widgets/quick_payment_dialog.dart';
+import 'dart:developer';
 
 class CustomerDetailsScreen extends StatefulWidget {
   final Customer customer;
   final double initialBalance;
 
   const CustomerDetailsScreen({
-    Key? key,
+    super.key,
     required this.customer,
     required this.initialBalance,
-  }) : super(key: key);
+  });
 
   @override
   State<CustomerDetailsScreen> createState() => _CustomerDetailsScreenState();
@@ -57,7 +58,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
 
   Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
-    final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+    Provider.of<DebtProvider>(context, listen: false);
 
     // تحميل المعاملات الأولى
     await _loadTransactionsPage(0);
@@ -101,8 +102,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         final dateTime = transaction.date;
 
         // استخدام الشهر والسنة كمفتاح (مثال: "2024-01")
-        final key =
-            '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}';
         final monthName = _getArabicMonthName(dateTime.month);
         final displayKey = '$monthName ${dateTime.year}';
 
@@ -197,7 +196,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       // إعادة تحميل رصيد العميل
       await debtProvider.recalculateAndUpdateBalance(widget.customer.id!);
     } catch (e) {
-      print('Error refreshing data: $e');
+      log('Error refreshing data: $e');
     } finally {
       setState(() {
         _isLoading = false;
@@ -273,7 +272,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             }
 
             if (snapshot.hasError) {
-              print('Error loading balance: ${snapshot.error}');
+              log('Error loading balance: ${snapshot.error}');
 
               // حاول إعادة الحساب
               WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -303,8 +302,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             }
 
             final balance = snapshot.data ?? 0.0;
-            print('Customer ID: ${customer.id}');
-            print('Current balance: $balance');
+            log('Customer ID: ${customer.id}');
+            log('Current balance: $balance');
 
             return Container(
               padding: const EdgeInsets.all(16),
@@ -433,7 +432,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                         Row(
                           children: [
                             Text(
-                              '${balance.abs().toStringAsFixed(2)}',
+                              balance.abs().toStringAsFixed(2),
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,

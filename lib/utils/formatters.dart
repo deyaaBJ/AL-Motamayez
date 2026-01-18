@@ -2,7 +2,7 @@ import 'package:intl/intl.dart';
 
 class Formatters {
   static final NumberFormat _currencyFormat = NumberFormat.currency(
-    symbol: 'د.إ',
+    symbol: '',
     decimalDigits: 2,
     locale: 'ar_AE',
   );

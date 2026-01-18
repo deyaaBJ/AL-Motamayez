@@ -1,10 +1,10 @@
 import 'package:provider/provider.dart';
-import 'package:shopmate/components/base_layout.dart';
+import 'package:motamayez/components/base_layout.dart';
 import '../providers/supplier_provider.dart';
 import '../utils/formatters.dart';
-import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/material.dart' as m;
+import 'dart:developer';
 
 class SupplierAccountStatementPage extends StatefulWidget {
   final int supplierId;
@@ -30,15 +30,17 @@ class _SupplierAccountStatementPageState
   bool _isLoadingMore = false;
   late List<Map<String, dynamic>> _transactions = [];
   bool _hasMore = true;
-  bool _isLoadingTransactions = false;
 
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+
+    // تأجيل تحميل البيانات حتى بعد انتهاء البناء
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollController.addListener(_scrollListener);
+      _loadInitialData();
     });
+
+    _scrollController.addListener(_scrollListener);
   }
 
   @override
@@ -71,7 +73,7 @@ class _SupplierAccountStatementPageState
         });
       }
     } catch (e) {
-      print('خطأ في تحميل البيانات: $e');
+      log('خطأ في تحميل البيانات: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -98,7 +100,7 @@ class _SupplierAccountStatementPageState
         });
       }
     } catch (e) {
-      print('خطأ في تحميل المزيد من الحركات: $e');
+      log('خطأ في تحميل المزيد من الحركات: $e');
       if (mounted) {
         setState(() => _isLoadingMore = false);
       }
@@ -485,41 +487,41 @@ class _SupplierAccountStatementPageState
         '';
     final note = transaction['note'] as String? ?? '';
     final isPayment = type == 'payment';
-
-    // معلومات إضافية للفاتورة
     final invoiceId = transaction['purchase_invoice_id'];
     final remainingAmount = transaction['remaining_amount'] as num?;
     final paymentType = transaction['payment_type'] as String?;
-    final totalCost = transaction['total_cost'] as num?;
 
     Color typeColor = isPayment ? Colors.green : Colors.orange;
     IconData typeIcon = isPayment ? Icons.payment : Icons.receipt;
 
+    // تصميم مدمج
     return Card(
       margin: EdgeInsets.fromLTRB(
-        16,
+        12,
         4,
-        16,
-        index == _transactions.length - 1 ? 16 : 4,
+        12,
+        index == _transactions.length - 1 ? 12 : 4,
       ),
       elevation: 1,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: Colors.grey.shade200, width: 1),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+      child: Container(
+        padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // الصف الأول: النوع والرقم
+            // الصف الأول: النوع والمبلغ والتاريخ في سطر واحد
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // النوع والرقم
                 Row(
                   children: [
                     Container(
-                      padding: EdgeInsets.all(8),
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
                         color: typeColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
@@ -528,17 +530,17 @@ class _SupplierAccountStatementPageState
                           width: 1,
                         ),
                       ),
-                      child: Icon(typeIcon, size: 24, color: typeColor),
+                      child: Icon(typeIcon, size: 20, color: typeColor),
                     ),
-                    SizedBox(width: 12),
+                    SizedBox(width: 8),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isPayment ? 'دفعة' : 'فاتورة شراء',
+                          isPayment ? 'دفعة' : 'فاتورة',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 18,
+                            fontSize: 14,
                             color: Colors.black87,
                           ),
                         ),
@@ -546,9 +548,8 @@ class _SupplierAccountStatementPageState
                           Text(
                             '#$invoiceId',
                             style: TextStyle(
-                              color: Colors.black87,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
                             ),
                           ),
                       ],
@@ -563,159 +564,178 @@ class _SupplierAccountStatementPageState
                     Text(
                       '${isPayment ? '-' : '+'} ${Formatters.formatCurrency(amount)}',
                       style: TextStyle(
-                        fontSize: 22,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: isPayment ? Colors.green : Colors.red,
                       ),
                     ),
-                    if (totalCost != null && totalCost > 0)
-                      Text(
-                        'الإجمالي: ${Formatters.formatCurrency(totalCost.toDouble())}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
+                    Text(
+                      _formatDateTimeShort(date),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
                       ),
+                    ),
                   ],
                 ),
               ],
             ),
 
-            SizedBox(height: 12),
+            SizedBox(height: 8),
 
-            // التاريخ والوقت - بتنسيق عربي أفضل
-            Container(
-              padding: EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.calendar_today, size: 16, color: Colors.blue),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _formatDateTime(date),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.black87,
-                        fontWeight: FontWeight.w500,
+            // الصف الثاني: المعلومات الإضافية في سطر واحد
+            Row(
+              children: [
+                // نوع الدفع
+                if (paymentType != null && !isPayment)
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: Colors.blue.shade100,
+                        width: 0.5,
                       ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.payment, size: 16, color: Colors.blue),
+                        SizedBox(width: 4),
+                        Text(
+                          _translatePaymentType(paymentType),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.blue.shade800,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+
+                // المبلغ المتبقي
+                if (remainingAmount != null && remainingAmount > 0)
+                  Container(
+                    margin: EdgeInsets.only(left: 6),
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: Colors.orange.shade100,
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          size: 16,
+                          color: Colors.orange,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          Formatters.formatCurrency(remainingAmount.toDouble()),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.orange.shade800,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // أيقونة الملاحظات إذا وجدت
+                if (note.isNotEmpty)
+                  Container(
+                    margin: EdgeInsets.only(left: 6),
+                    child: Icon(
+                      Icons.note,
+                      size: 14,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+              ],
             ),
 
-            // معلومات الدفع
-            if (paymentType != null && paymentType.isNotEmpty) ...[
-              SizedBox(height: 8),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.blue.shade100, width: 1),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.payment, size: 14, color: Colors.blue),
-                    SizedBox(width: 6),
-                    Text(
-                      'نوع الدفع: ',
-                      style: TextStyle(
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      _translatePaymentType(paymentType),
-                      style: TextStyle(
-                        color: Colors.blue.shade900,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            // المبلغ المتبقي إذا كان هناك فاتورة
-            if (remainingAmount != null && remainingAmount > 0) ...[
-              SizedBox(height: 8),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.orange.shade100, width: 1),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      size: 14,
-                      color: Colors.orange,
-                    ),
-                    SizedBox(width: 6),
-                    Text(
-                      'متبقي للدفع: ',
-                      style: TextStyle(
-                        color: Colors.orange.shade700,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      Formatters.formatCurrency(remainingAmount.toDouble()),
-                      style: TextStyle(
-                        color: Colors.orange.shade900,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            // الملاحظات إذا وجدت
-            if (note.isNotEmpty) ...[
-              SizedBox(height: 8),
-              Container(
-                padding: EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade200, width: 1),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.note, size: 16, color: Colors.grey.shade600),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        note,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w500,
+            // الملاحظات تظهر عند النقر (اختياري)
+            if (note.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  // يمكنك إظهار الملاحظات في Dialog إذا أردت
+                  _showNoteDialog(note);
+                },
+                child: Container(
+                  margin: EdgeInsets.only(top: 6),
+                  padding: EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.note, size: 12, color: Colors.grey.shade600),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          note,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade800,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                      Icon(
+                        Icons.chevron_left,
+                        size: 16,
+                        color: Colors.grey.shade400,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
           ],
         ),
       ),
+    );
+  }
+
+  // دالة لتنسيق التاريخ بشكل مختصر
+  String _formatDateTimeShort(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      final hour = date.hour;
+      final minute = date.minute.toString().padLeft(2, '0');
+      final period = hour < 12 ? 'ص' : 'م';
+      final hour12 = hour > 12 ? hour - 12 : hour;
+
+      return '${date.day}/${date.month}/${date.year} - ${hour12 == 0 ? 12 : hour12}:$minute $period';
+    } catch (e) {
+      return Formatters.formatDate(dateString);
+    }
+  }
+
+  // دالة لعرض الملاحظات في Dialog
+  void _showNoteDialog(String note) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('ملاحظات'),
+            content: Text(note),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('تم'),
+              ),
+            ],
+          ),
     );
   }
 }

@@ -1,8 +1,8 @@
-// في DebtProvider.dart
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
 import '../models/customer_balance.dart';
 import '../models/transaction.dart';
+import 'dart:developer';
 
 class DebtProvider extends ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
@@ -196,16 +196,14 @@ class DebtProvider extends ChangeNotifier {
       if (balanceRes.isNotEmpty) {
         final balanceValue = balanceRes.first['balance'];
         final balance = _safeToDouble(balanceValue);
-        print(
-          'Balance from customer_balance for customer $customerId: $balance',
-        );
+        log('Balance from customer_balance for customer $customerId: $balance');
         return balance;
       }
 
       // 2. إذا لم يكن هناك رصيد، احسب من الصفر
       return await calculateTotalDebtFromScratch(customerId);
     } catch (e) {
-      print('Error calculating debt for customer $customerId: $e');
+      log('Error calculating debt for customer $customerId: $e');
       return 0.0;
     }
   }
@@ -217,7 +215,7 @@ class DebtProvider extends ChangeNotifier {
     final db = await _dbHelper.db;
 
     try {
-      print('Calculating debt from scratch for customer $customerId');
+      log('Calculating debt from scratch for customer $customerId');
 
       // 1. مجموع الفواتير الآجلة من جدول sales
       double totalCreditSales = 0.0;
@@ -235,9 +233,9 @@ class DebtProvider extends ChangeNotifier {
         final totalCreditValue = salesResult.first['total_credit'];
         totalCreditSales = _safeToDouble(totalCreditValue);
 
-        print('Total credit sales from sales table: $totalCreditSales');
+        log('Total credit sales from sales table: $totalCreditSales');
       } catch (e) {
-        print('Error reading sales table: $e');
+        log('Error reading sales table: $e');
       }
 
       // 2. مجموع المعاملات من جدول transactions
@@ -270,20 +268,20 @@ class DebtProvider extends ChangeNotifier {
           }
         }
 
-        print('Total payments: $totalPayments');
-        print('Total withdrawals: $totalWithdrawals');
+        log('Total payments: $totalPayments');
+        log('Total withdrawals: $totalWithdrawals');
       } catch (e) {
-        print('Error reading transactions table: $e');
+        log('Error reading transactions table: $e');
       }
 
       // 3. الحساب النهائي
       // الدين = فواتير آجلة - دفعات - مسحوبات رصيد
       final totalDebt = totalCreditSales - totalPayments - totalWithdrawals;
-      print('Calculated total debt: $totalDebt');
+      log('Calculated total debt: $totalDebt');
 
       return totalDebt;
     } catch (e) {
-      print('Error calculating total debt from scratch: $e');
+      log('Error calculating total debt from scratch: $e');
       return 0.0;
     }
   }
@@ -304,7 +302,7 @@ class DebtProvider extends ChangeNotifier {
       return value.toDouble();
     }
 
-    print(
+    log(
       'Warning: Cannot convert value $value of type ${value.runtimeType} to double',
     );
     return 0.0;
@@ -330,9 +328,9 @@ class DebtProvider extends ChangeNotifier {
       await loadCustomerBalance(customerId);
       notifyListeners();
 
-      print('Recalculated balance for customer $customerId: $totalDebt');
+      log('Recalculated balance for customer $customerId: $totalDebt');
     } catch (e) {
-      print('Error recalculating balance: $e');
+      log('Error recalculating balance: $e');
     }
   }
 
@@ -385,7 +383,7 @@ class DebtProvider extends ChangeNotifier {
       final currentBalance = await getTotalDebtByCustomerId(customerId);
       stats['current_balance'] = currentBalance;
     } catch (e) {
-      print('Error getting debt statistics: $e');
+      log('Error getting debt statistics: $e');
     }
 
     return stats;
@@ -412,7 +410,7 @@ class DebtProvider extends ChangeNotifier {
   Future<void> debugCustomerData(int customerId) async {
     final db = await _dbHelper.db;
 
-    print('=== بدء فحص بيانات العميل $customerId ===');
+    log('=== بدء فحص بيانات العميل $customerId ===');
 
     try {
       // 1. الفواتير الآجلة من جدول sales
@@ -420,9 +418,9 @@ class DebtProvider extends ChangeNotifier {
         'SELECT id, total_amount, created_at FROM sales WHERE customer_id = ? AND payment_type = "credit"',
         [customerId],
       );
-      print('1. عدد الفواتير الآجلة: ${sales.length}');
+      log('1. عدد الفواتير الآجلة: ${sales.length}');
       for (var sale in sales) {
-        print(
+        log(
           '   فاتورة ${sale['id']}: ${sale['total_amount']} (${sale['created_at']})',
         );
       }
@@ -432,9 +430,9 @@ class DebtProvider extends ChangeNotifier {
         'SELECT id, amount, type, date, note FROM transactions WHERE customer_id = ? ORDER BY date DESC',
         [customerId],
       );
-      print('2. عدد المعاملات: ${transactions.length}');
+      log('2. عدد المعاملات: ${transactions.length}');
       for (var t in transactions) {
-        print(
+        log(
           '   معاملة ${t['id']}: ${t['amount']} (${t['type']}) في ${t['date']} - ${t['note']}',
         );
       }
@@ -445,27 +443,27 @@ class DebtProvider extends ChangeNotifier {
         where: 'customer_id = ?',
         whereArgs: [customerId],
       );
-      print('3. سجلات customer_balance: ${balance.length}');
+      log('3. سجلات customer_balance: ${balance.length}');
       if (balance.isNotEmpty) {
-        print('   الرصيد: ${balance.first['balance']}');
-        print('   آخر تحديث: ${balance.first['last_updated']}');
+        log('   الرصيد: ${balance.first['balance']}');
+        log('   آخر تحديث: ${balance.first['last_updated']}');
       }
 
       // 4. الحساب من الصفر
       final calculated = await calculateTotalDebtFromScratch(customerId);
-      print('4. الرصيد المحسوب من الصفر: $calculated');
+      log('4. الرصيد المحسوب من الصفر: $calculated');
     } catch (e) {
-      print('خطأ في الفحص: $e');
+      log('خطأ في الفحص: $e');
     }
 
-    print('=== انتهاء الفحص ===');
+    log('=== انتهاء الفحص ===');
   }
 
   // ==============================
   // 1️⃣1️⃣ تصحيح بيانات العميل
   // ==============================
   Future<void> fixCustomerData(int customerId) async {
-    print('بدأ تصحيح بيانات العميل $customerId');
+    log('بدأ تصحيح بيانات العميل $customerId');
 
     // 1. أعد حساب الرصيد من الصفر
     await recalculateAndUpdateBalance(customerId);
@@ -474,7 +472,7 @@ class DebtProvider extends ChangeNotifier {
     await loadCustomerBalance(customerId);
     await loadTransactionsPage(customerId);
 
-    print('تم تصحيح بيانات العميل $customerId');
+    log('تم تصحيح بيانات العميل $customerId');
   }
 
   // ==============================
@@ -493,7 +491,7 @@ class DebtProvider extends ChangeNotifier {
     try {
       return await getTotalDebtByCustomerId(customerId);
     } catch (e) {
-      print('Error getting current balance: $e');
+      log('Error getting current balance: $e');
       return 0.0;
     }
   }

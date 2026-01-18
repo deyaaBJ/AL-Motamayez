@@ -1,23 +1,17 @@
 class Product {
   int? id;
   String name;
-  String barcode;
+  String? barcode;
   String baseUnit; // piece أو kg
   double price;
   double quantity;
   double costPrice;
   String? addedDate;
 
-  // حذف الحقول القديمة
-  // double? packPrice;
-  // double? packSize;
-  // int allowPack;
-  // String unit;
-
   Product({
     this.id,
     required this.name,
-    required this.barcode,
+    this.barcode,
     required this.baseUnit,
     required this.price,
     required this.quantity,
@@ -30,7 +24,7 @@ class Product {
     return {
       'id': id,
       'name': name,
-      'barcode': barcode,
+      'barcode': barcode ?? '',
       'base_unit': baseUnit,
       'price': price,
       'quantity': quantity,

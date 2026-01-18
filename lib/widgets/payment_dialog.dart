@@ -1,6 +1,8 @@
 // widgets/payment_dialog.dart - النسخة المحدثة
 import 'package:flutter/material.dart';
-import 'package:shopmate/models/customer.dart';
+import 'package:provider/provider.dart';
+import 'package:motamayez/models/customer.dart';
+import 'package:motamayez/providers/settings_provider.dart';
 
 class PaymentDialog extends StatefulWidget {
   final Customer customer;
@@ -8,11 +10,11 @@ class PaymentDialog extends StatefulWidget {
   final Function(double amount, String? note) onPayment;
 
   const PaymentDialog({
-    Key? key,
+    super.key,
     required this.customer,
     required this.currentDebt,
     required this.onPayment,
-  }) : super(key: key);
+  });
 
   @override
   _PaymentDialogState createState() => _PaymentDialogState();
@@ -31,7 +33,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
     super.dispose();
   }
 
-  void _validateAmount(String value) {
+  void _validateAmount(String value, String currencyName) {
     if (value.isEmpty) {
       setState(() => _errorMessage = null);
       return;
@@ -51,7 +53,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
     if (amount > widget.currentDebt) {
       setState(() {
         _errorMessage =
-            'المبلغ أكبر من الدين الحالي (${widget.currentDebt.toStringAsFixed(2)} دينار)';
+            'المبلغ أكبر من الدين الحالي (${widget.currentDebt.toStringAsFixed(2)} $currencyName)';
       });
       return;
     }
@@ -61,6 +63,9 @@ class _PaymentDialogState extends State<PaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
+
     return AlertDialog(
       title: Row(
         children: [
@@ -123,7 +128,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
                             ),
                           ),
                           Text(
-                            'الدين الحالي: ${widget.currentDebt.toStringAsFixed(2)} دينار',
+                            'الدين الحالي: ${widget.currentDebt.toStringAsFixed(2)} $currencyName',
                             style: TextStyle(
                               fontSize: 12,
                               color:
@@ -146,7 +151,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
                 controller: _amountController,
                 keyboardType: TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
-                  labelText: 'المبلغ (دينار)',
+                  labelText: 'المبلغ ($currencyName)',
                   hintText: 'أدخل المبلغ',
                   prefixIcon: const Icon(Icons.money),
                   suffixIcon: IconButton(
@@ -164,7 +169,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
                     borderSide: const BorderSide(color: Colors.green, width: 2),
                   ),
                 ),
-                onChanged: _validateAmount,
+                onChanged: (value) => _validateAmount(value, currencyName),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'يرجى إدخال المبلغ';
@@ -227,7 +232,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: _buildQuickAmountButtons(),
+                      children: _buildQuickAmountButtons(currencyName),
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -281,7 +286,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
     );
   }
 
-  List<Widget> _buildQuickAmountButtons() {
+  List<Widget> _buildQuickAmountButtons(String currencyName) {
     final suggestions = <double>[];
 
     if (widget.currentDebt >= 5) suggestions.add(5);
@@ -310,8 +315,8 @@ class _PaymentDialogState extends State<PaymentDialog> {
       return ChoiceChip(
         label: Text(
           amount == widget.currentDebt
-              ? 'كل الدين (${amount.toStringAsFixed(2)})'
-              : amount.toStringAsFixed(amount % 1 == 0 ? 0 : 2),
+              ? 'كل الدين (${amount.toStringAsFixed(2)} $currencyName)'
+              : '${amount.toStringAsFixed(amount % 1 == 0 ? 0 : 2)} $currencyName',
           style: TextStyle(
             color: amount <= widget.currentDebt ? Colors.green : Colors.grey,
             fontSize: 12,
@@ -325,7 +330,14 @@ class _PaymentDialogState extends State<PaymentDialog> {
                 ? (selected) {
                   if (selected) {
                     _amountController.text = amount.toStringAsFixed(2);
-                    _validateAmount(amount.toStringAsFixed(2));
+                    final settings = Provider.of<SettingsProvider>(
+                      context,
+                      listen: false,
+                    );
+                    _validateAmount(
+                      amount.toStringAsFixed(2),
+                      settings.currencyName,
+                    );
                   }
                 }
                 : null,

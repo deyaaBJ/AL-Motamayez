@@ -141,7 +141,7 @@ class DateFormatter {
   // دالة للحصول على الفرق بين تاريخين - تصحيح الخطأ
   static String getTimeDifference(String dateString) {
     try {
-      final Map<String, String> formattedDate = formatDateTime(dateString);
+      formatDateTime(dateString);
       final date = DateTime.parse(
         dateString.contains('T') ? dateString : '${dateString}T00:00:00',
       );

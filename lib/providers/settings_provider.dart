@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
+import 'dart:developer';
 
 class SettingsProvider with ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
@@ -19,6 +20,22 @@ class SettingsProvider with ChangeNotifier {
   // 🔹 العملة
   String? _currency;
   String? get currency => _currency;
+
+  //printerPort
+  int? _printerPort;
+  int? get printerPort => _printerPort;
+
+  //printerIp
+  String? _printerIp;
+  String? get printerIp => _printerIp;
+
+  //size
+  String? _paperSize;
+  String? get paperSize => _paperSize;
+
+  //numberOfCopies
+  int? _numberOfCopies;
+  int? get numberOfCopies => _numberOfCopies;
 
   // 🔹 تحميل جميع الإعدادات من قاعدة البيانات
   Future<void> loadSettings() async {
@@ -40,17 +57,20 @@ class SettingsProvider with ChangeNotifier {
 
         // 🔹 تحميل العملة
         _currency = result.first['currency'] as String? ?? 'USD';
-
-        print('🔄 تم تحميل الإعدادات:');
-        print('   - lowStockThreshold: $_lowStockThreshold');
-        print('   - marketName: $_marketName');
-        print('   - defaultTaxSetting: $_defaultTaxSetting');
-        print('   - currency: $_currency');
+        // تحميل printerPort
+        dynamic port = result.first['printerPort'];
+        _printerPort = port;
+        // تحميل printerIp
+        _printerIp = result.first['printerIp'] as String?;
+        // تحميل paperSize
+        _paperSize = result.first['paperSize'] as String? ?? '58mm';
+        // تحميل numberOfCopies
+        _numberOfCopies = _parseInt(result.first['numberOfCopies']) ?? 1;
       }
 
       notifyListeners();
     } catch (e) {
-      print('Error loading settings: $e');
+      log('Error loading settings: $e');
     }
   }
 
@@ -75,7 +95,7 @@ class SettingsProvider with ChangeNotifier {
       _lowStockThreshold = newValue;
       notifyListeners();
     } catch (e) {
-      print('Error updating lowStockThreshold: $e');
+      log('Error updating lowStockThreshold: $e');
     }
   }
 
@@ -92,7 +112,7 @@ class SettingsProvider with ChangeNotifier {
       _defaultTaxSetting = newValue;
       notifyListeners();
     } catch (e) {
-      print('Error updating defaultTaxSetting: $e');
+      log('Error updating defaultTaxSetting: $e');
     }
   }
 
@@ -109,7 +129,7 @@ class SettingsProvider with ChangeNotifier {
       _marketName = newName;
       notifyListeners();
     } catch (e) {
-      print('Error updating marketName: $e');
+      log('Error updating marketName: $e');
     }
   }
 
@@ -140,12 +160,60 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // 🔹 دالة للتصحيح
-  void printCurrentState() {
-    print('🔄 الحالة الحالية:');
-    print('   - _lowStockThreshold: $_lowStockThreshold');
-    print('   - _defaultTaxSetting: $_defaultTaxSetting');
-    print('   - _marketName: $_marketName');
-    print('   - _currency: $_currency');
+  //updatePrinterSettings تحديث
+  Future<void> updatePrinterSettings({
+    required String ip,
+    required int port,
+    required String size,
+  }) async {
+    try {
+      final db = await _dbHelper.db;
+      await db.update(
+        'settings',
+        {'printerIp': ip, 'printerPort': port, 'paperSize': size},
+        where: 'id = ?',
+        whereArgs: [1],
+      );
+      _printerIp = ip;
+      _printerPort = port;
+      _paperSize = size;
+      notifyListeners();
+    } catch (e) {
+      log('Error updating printer settings: $e');
+    }
+  }
+
+  // في class SettingsProvider
+  Future<void> updatePaperSize(String newSize) async {
+    try {
+      final db = await _dbHelper.db;
+      await db.update(
+        'settings',
+        {'paperSize': newSize},
+        where: 'id = ?',
+        whereArgs: [1],
+      );
+      _paperSize = newSize;
+      notifyListeners();
+    } catch (e) {
+      log('Error updating paperSize: $e');
+    }
+  }
+
+  //_numberOfCopies تحديث
+  Future<void> updateNumberOfCopies(int newCopies) async {
+    try {
+      final db = await _dbHelper.db;
+      await db.update(
+        'settings',
+        {'numberOfCopies': newCopies},
+        where: 'id = ?',
+        whereArgs: [1],
+      );
+      _numberOfCopies = newCopies;
+      notifyListeners();
+    } catch (e) {
+      log('Error updating numberOfCopies: $e');
+    }
   }
 }

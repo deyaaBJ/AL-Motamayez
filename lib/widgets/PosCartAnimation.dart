@@ -3,8 +3,7 @@ import 'dart:math' as math;
 
 class BeautifulCartAnimation extends StatefulWidget {
   final Color color;
-  const BeautifulCartAnimation({Key? key, required this.color})
-    : super(key: key);
+  const BeautifulCartAnimation({super.key, required this.color});
 
   @override
   State<BeautifulCartAnimation> createState() => _BeautifulCartAnimationState();

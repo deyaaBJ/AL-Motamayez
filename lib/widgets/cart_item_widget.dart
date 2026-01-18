@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/helpers/helpers.dart';
-import 'package:shopmate/models/cart_item.dart';
-import 'package:shopmate/models/product_unit.dart';
-import 'package:shopmate/providers/settings_provider.dart';
+import 'package:motamayez/helpers/helpers.dart';
+import 'package:motamayez/models/cart_item.dart';
+import 'package:motamayez/models/product_unit.dart';
+import 'package:motamayez/providers/settings_provider.dart';
 
 class CartItemWidget extends StatefulWidget {
   final CartItem item;
   final Function(CartItem, double) onQuantityChange;
   final Function(CartItem) onRemove;
   final Function(CartItem, ProductUnit?) onUnitChange;
+  final Function(CartItem, double?) onPriceChange;
 
   const CartItemWidget({
     super.key,
@@ -18,6 +19,7 @@ class CartItemWidget extends StatefulWidget {
     required this.onQuantityChange,
     required this.onRemove,
     required this.onUnitChange,
+    required this.onPriceChange,
   });
 
   @override
@@ -28,6 +30,9 @@ class _CartItemWidgetState extends State<CartItemWidget> {
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context);
+
+    // التحقق إذا كان السعر معدلاً
+    final bool isPriceModified = _isPriceModified();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -51,24 +56,41 @@ class _CartItemWidgetState extends State<CartItemWidget> {
             child: Text(
               widget.item.product.name,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              softWrap: false,
             ),
           ),
 
           // اختيار الوحدة
           Expanded(flex: 2, child: _buildUnitDropdown()),
 
-          // السعر
+          // السعر (قابل للنقر لتعديله)
           Expanded(
             flex: 1,
-            child: Text(
-              '${settings.currencyName} ${widget.item.unitPrice.toStringAsFixed(2)}',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF8B5FBF),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click, // 👈 كيرسر يد
+              child: GestureDetector(
+                onTap: () => _showPriceEditor(context, settings),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${settings.currencyName} ${widget.item.unitPrice.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color:
+                          isPriceModified
+                              ? Colors.orange[800]
+                              : const Color(0xFF8B5FBF),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               ),
-              textAlign: TextAlign.center,
             ),
           ),
 
@@ -80,21 +102,29 @@ class _CartItemWidgetState extends State<CartItemWidget> {
             flex: 1,
             child: Text(
               '${settings.currencyName} ${widget.item.totalPrice.toStringAsFixed(2)}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF6A3093),
+                color:
+                    isPriceModified
+                        ? Colors.orange[800]
+                        : const Color(0xFF6A3093),
               ),
               textAlign: TextAlign.center,
             ),
           ),
 
-          // زر الحذف
+          // الأزرار
           Expanded(
             flex: 1,
-            child: IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => widget.onRemove(widget.item),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => widget.onRemove(widget.item),
+                ),
+              ],
             ),
           ),
         ],
@@ -102,21 +132,178 @@ class _CartItemWidgetState extends State<CartItemWidget> {
     );
   }
 
+  // دالة للتحقق إذا كان السعر معدلاً
+  bool _isPriceModified() {
+    if (widget.item.selectedUnit != null) {
+      return widget.item.unitPrice != widget.item.selectedUnit!.sellPrice;
+    }
+    return widget.item.unitPrice != widget.item.product.price;
+  }
+
+  // دالة للحصول على السعر الأصلي
+  double _getOriginalPrice() {
+    if (widget.item.selectedUnit != null) {
+      return widget.item.selectedUnit!.sellPrice;
+    }
+    return widget.item.product.price;
+  }
+
+  // دالة لعرض محرر السعر
+  void _showPriceEditor(BuildContext context, SettingsProvider settings) {
+    final originalPrice = _getOriginalPrice();
+    final TextEditingController controller = TextEditingController(
+      text: widget.item.unitPrice.toStringAsFixed(2),
+    );
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.edit, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('تعديل سعر المنتج'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.item.product.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'السعر الأصلي: ${settings.currencyName} ${originalPrice.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: false,
+                  ),
+                  autofocus: true,
+                  textAlign: TextAlign.center,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'السعر الجديد',
+                    hintText: '0.00',
+                    suffixText: settings.currencyName,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.restore, size: 16),
+                        label: const Text('السعر الأصلي'),
+                        onPressed: () {
+                          controller.text = originalPrice.toStringAsFixed(2);
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.money_off, size: 16),
+                        label: const Text('مجاني'),
+                        onPressed: () {
+                          controller.text = '0';
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final String value = controller.text.trim();
+                  if (value.isNotEmpty) {
+                    double? newPrice = double.tryParse(value);
+                    if (newPrice != null && newPrice >= 0) {
+                      widget.onPriceChange(widget.item, newPrice);
+                      Navigator.pop(context);
+
+                      if (newPrice == 0) {
+                        showAppToast(
+                          context,
+                          'تم تعيين السعر إلى 0 (مجاني)',
+                          ToastType.warning,
+                        );
+                      } else if (newPrice != originalPrice) {
+                        showAppToast(
+                          context,
+                          'تم تعديل السعر بنجاح',
+                          ToastType.success,
+                        );
+                      }
+                    } else {
+                      showAppToast(
+                        context,
+                        'الرجاء إدخال رقم صالح',
+                        ToastType.error,
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6A3093),
+                ),
+                child: const Text(
+                  'حفظ التغيير',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
   Widget _buildUnitDropdown() {
     final List<DropdownMenuItem<ProductUnit?>> items = [];
 
-    // 🔥 أولاً: إضافة الخيار الأساسي (الوحدة الأساسية) - قيمة null
+    // الخيار الأساسي (الوحدة الأساسية)
     items.add(
       DropdownMenuItem<ProductUnit?>(
-        value: null, // 🔥 null يعني الوحدة الأساسية
+        value: null,
         child: Row(
           children: [
-            Icon(Icons.barcode_reader, size: 16, color: Colors.grey),
-            SizedBox(width: 6),
+            const Icon(Icons.barcode_reader, size: 16, color: Colors.grey),
+            const SizedBox(width: 6),
             Expanded(
               child: Text(
                 _getBaseUnitDisplayName(widget.item.product.baseUnit),
-                style: TextStyle(fontSize: 12),
+                style: const TextStyle(fontSize: 12),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -125,7 +312,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
       ),
     );
 
-    // 🔥 ثانياً: إضافة جميع الوحدات الإضافية
+    // الوحدات الإضافية
     final addedUnitIds = <int>{};
     for (final unit in widget.item.availableUnits) {
       if (unit.id != null && !addedUnitIds.contains(unit.id)) {
@@ -134,12 +321,16 @@ class _CartItemWidgetState extends State<CartItemWidget> {
             value: unit,
             child: Row(
               children: [
-                Icon(Icons.inventory_2, size: 16, color: Color(0xFF2196F3)),
-                SizedBox(width: 6),
+                const Icon(
+                  Icons.inventory_2,
+                  size: 16,
+                  color: Color(0xFF2196F3),
+                ),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     '${unit.unitName} (${unit.containQty.toStringAsFixed(0)} ${_getBaseUnitDisplayName(widget.item.product.baseUnit)})',
-                    style: TextStyle(fontSize: 12),
+                    style: const TextStyle(fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -151,23 +342,23 @@ class _CartItemWidgetState extends State<CartItemWidget> {
       }
     }
 
-    // إذا لم يكن هناك وحدات إضافية، فقط عرض الوحدة الأساسية
+    // إذا لم يكن هناك وحدات إضافية
     if (items.length == 1) {
       return Container(
         decoration: BoxDecoration(
-          color: Color(0xFFF8F5FF),
+          color: const Color(0xFFF8F5FF),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Color(0xFFE1D4F7)),
+          border: Border.all(color: const Color(0xFFE1D4F7)),
         ),
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.barcode_reader, size: 16, color: Colors.grey),
-            SizedBox(width: 6),
+            const Icon(Icons.barcode_reader, size: 16, color: Colors.grey),
+            const SizedBox(width: 6),
             Text(
               _getBaseUnitDisplayName(widget.item.product.baseUnit),
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
         ),
@@ -176,22 +367,21 @@ class _CartItemWidgetState extends State<CartItemWidget> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Color(0xFFF8F5FF),
+        color: const Color(0xFFF8F5FF),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Color(0xFFE1D4F7)),
+        border: Border.all(color: const Color(0xFFE1D4F7)),
       ),
-      padding: EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<ProductUnit?>(
           value: widget.item.selectedUnit,
           isExpanded: true,
-          icon: Icon(Icons.arrow_drop_down, color: Color(0xFF6A3093)),
+          icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF6A3093)),
           items: items,
           onChanged: (ProductUnit? newUnit) {
             widget.onUnitChange(widget.item, newUnit);
           },
           selectedItemBuilder: (context) {
-            // 🔥 هذا لتحسين عرض العنصر المختار
             return items.map<Widget>((item) {
               final isBaseUnit = item.value == null;
               final unit = item.value;
@@ -202,18 +392,17 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                     Icon(
                       isBaseUnit ? Icons.barcode_reader : Icons.inventory_2,
                       size: 16,
-                      color: isBaseUnit ? Colors.grey : Color(0xFF2196F3),
+                      color: isBaseUnit ? Colors.grey : const Color(0xFF2196F3),
                     ),
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         isBaseUnit
                             ? _getBaseUnitDisplayName(
                               widget.item.product.baseUnit,
                             )
-                            // 🔥 هنا التغيير للعنصر المختار
                             : '${unit!.unitName} (${unit.containQty.toStringAsFixed(0)} ${_getBaseUnitDisplayName(widget.item.product.baseUnit)})',
-                        style: TextStyle(fontSize: 12),
+                        style: const TextStyle(fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -332,10 +521,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                   autofocus: true,
                   textAlign: TextAlign.center,
                   inputFormatters: [
-                    // تغيير الـ formatter ليسمح بالأرقام والنقطة بشكل صحيح
-                    FilteringTextInputFormatter.allow(
-                      RegExp(r'[0-9.]'), // السماح بالأرقام والنقطة فقط
-                    ),
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                   ],
                   decoration: InputDecoration(
                     hintText: 'أدخل الكمية',
@@ -364,11 +550,9 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                 onPressed: () {
                   final String value = controller.text.trim();
                   if (value.isNotEmpty) {
-                    // تحقق من صيغة الرقم العشري
                     double? newQuantity = double.tryParse(value);
 
                     if (newQuantity != null && newQuantity > 0) {
-                      // حساب الفرق بين الكمية الجديدة والقديمة
                       final double difference =
                           newQuantity - widget.item.quantity;
 
@@ -420,9 +604,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
     if (quantity % 1 == 0) {
       return quantity.toInt().toString();
     } else {
-      // عرض منزلتين عشريتين كحد أقصى
       final String formatted = quantity.toStringAsFixed(2);
-      // إزالة الأصفار غير الضرورية
       if (formatted.endsWith('.00')) {
         return quantity.toInt().toString();
       } else if (formatted.endsWith('0')) {
@@ -441,24 +623,22 @@ class _CartItemWidgetState extends State<CartItemWidget> {
     }
   }
 
-  // دالة لتحديد لون الكمية - معدلة لدعم الكسور العشرية
+  // دالة لتحديد لون الكمية
   Color _getQuantityColor(double quantity) {
     if (quantity == 0) {
       return Colors.red;
     } else if (quantity < 1) {
       return Colors.orange;
     } else if (quantity < 5) {
-      // إذا كانت الكمية أقل من 5 ولكنها تحتوي على كسر عشري
       if (quantity % 1 != 0) {
-        return Colors.orange; // برتقالي للكميات العشرية أقل من 5
+        return Colors.orange;
       }
-      return Colors.amber[700]!; // كهرماني للكميات الصحيحة أقل من 5
+      return Colors.amber[700]!;
     } else {
-      // إذا كانت الكمية 5 أو أكثر ولكنها تحتوي على كسر عشري
       if (quantity % 1 != 0) {
-        return Colors.orange; // برتقالي للكميات العشرية 5 أو أكثر
+        return Colors.orange;
       }
-      return const Color(0xFF6A3093); // بنفسجي للكميات الصحيحة 5 أو أكثر
+      return const Color(0xFF6A3093);
     }
   }
 }

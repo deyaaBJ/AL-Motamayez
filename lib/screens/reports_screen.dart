@@ -1,9 +1,13 @@
 // screens/reports_screen.dart
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/components/base_layout.dart';
-import 'package:shopmate/providers/settings_provider.dart';
-import '../providers/reports_provider.dart'; // تأكد من استخدام ReportsProvider
+import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/providers/auth_provider.dart';
+import 'package:motamayez/providers/settings_provider.dart';
+import '../providers/reports_provider.dart';
+import '../utils/pdf_exporter.dart';
+import '../models/report_data.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -20,26 +24,195 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => context.read<ReportsProvider>().loadReportsData());
+    Future.microtask(() async {
+      final provider = context.read<ReportsProvider>();
+      await provider.loadReportsData();
+    });
   }
+
+  // دالة لتوليد بيانات التقرير
+  Future<ReportData> _generateReportData(
+    ReportsProvider reportsProvider,
+    SettingsProvider settingsProvider,
+  ) async {
+    final now = DateTime.now();
+    DateTime fromDate;
+    DateTime toDate = now;
+
+    // تحديد تواريخ الفترة
+    switch (_selectedPeriod) {
+      case 'اليوم':
+        fromDate = DateTime(now.year, now.month, now.day);
+        break;
+      case 'الأسبوع':
+        fromDate = now.subtract(const Duration(days: 7));
+        break;
+      case 'الشهر':
+        fromDate = DateTime(now.year, now.month, 1);
+        break;
+      case 'السنة':
+        fromDate = DateTime(now.year, 1, 1);
+        break;
+      case 'شهر محدد':
+        fromDate = DateTime(_selectedYear!, _selectedMonth!, 1);
+        toDate = DateTime(_selectedYear!, _selectedMonth! + 1, 0);
+        break;
+      case 'سنة محددة':
+        fromDate = DateTime(_selectedYear!, 1, 1);
+        toDate = DateTime(_selectedYear!, 12, 31);
+        break;
+      default:
+        fromDate = now.subtract(const Duration(days: 30));
+    }
+
+    // إحصائيات التقرير
+    // الإحصائيات ستكون صحيحة الآن:
+    final stats = {
+      'totalSales': reportsProvider.totalSalesAmount,
+      'totalProfit': reportsProvider.totalProfit,
+      'cashSales': reportsProvider.cashSalesAmount,
+      'creditSales': reportsProvider.creditSalesAmount,
+      'totalExpensesAll': reportsProvider.totalExpensesAll,
+      'totalCashExpenses': reportsProvider.totalCashExpenses,
+      'netProfit': reportsProvider.netProfit, // ✅ الآن صحيح
+      'netCashProfit': reportsProvider.netCashProfit,
+      'adjustedNetProfit': reportsProvider.adjustedNetProfit,
+      'salesCount': reportsProvider.salesCount,
+      'profitPercentage': reportsProvider.profitPercentage,
+      'bestSalesDay': reportsProvider.bestSalesDay ?? 'لا يوجد',
+      'averageSale':
+          reportsProvider.salesCount > 0
+              ? reportsProvider.totalSalesAmount / reportsProvider.salesCount
+              : 0,
+    };
+
+    return ReportData(
+      period: _selectedPeriod,
+      fromDate: fromDate,
+      toDate: toDate,
+      statistics: stats,
+      topProducts: reportsProvider.topProducts.take(5).toList(),
+      topCustomers: reportsProvider.topCustomers.take(5).toList(),
+      weeklySales: reportsProvider.weeklySalesData,
+      currency: settingsProvider.currencyName,
+    );
+  }
+
+  // دالة تصدير PDF - هذه هي الدالة المفقودة
+  Future<void> _exportToPDF() async {
+    try {
+      final reportsProvider = context.read<ReportsProvider>();
+      final settingsProvider = context.read<SettingsProvider>();
+
+      // عرض مؤشر التحميل
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // توليد بيانات التقرير
+      final reportData = await _generateReportData(
+        reportsProvider,
+        settingsProvider,
+      );
+
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+      // جلب قائمة المسؤولين
+      final admins = await authProvider.getUsersByRole('admin');
+      final adminName = admins.isNotEmpty ? admins[0]['name'] : 'غير محدد';
+
+      // جلب إعدادات المتجر
+      await settingsProvider.loadSettings();
+      final marketName = settingsProvider.marketName ?? 'غير محدد';
+
+      // إنشاء وتصدير التقرير
+      final pdfExporter = PDFExporter();
+      final result = await pdfExporter.exportReport(
+        reportData: reportData,
+        adminName: adminName,
+        marketName: marketName,
+      );
+
+      // إغلاق مؤشر التحميل
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      if (result.success && result.filePath != null) {
+        // فتح ملف PDF باستخدام open_filex
+        final openResult = await OpenFilex.open(result.filePath!);
+
+        if (openResult.type == ResultType.done) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('تم فتح التقرير بنجاح'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('لم يتم العثور على تطبيق لفتح PDF'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في تصدير التقرير: ${result.error}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      // إغلاق مؤشر التحميل في حالة الخطأ
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  // دالة فلترة تاريخ مخصص (اختياري)
 
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      textDirection: TextDirection.rtl,
       child: BaseLayout(
-        currentPage: 'التقارير', // اسم الصفحة للسايدبار
-        showAppBar: true, // إظهار AppBar
+        currentPage: 'التقارير',
+        showAppBar: true,
         title: 'التقارير والإحصائيات',
         actions: [
+          // زر تصدير PDF
+          IconButton(
+            onPressed: _exportToPDF, // ✅ تم إصلاح الخطأ هنا
+            icon: const Icon(Icons.picture_as_pdf),
+            tooltip: 'تصدير التقرير PDF',
+          ),
+          // زر تحديث البيانات
           IconButton(
             onPressed: () {
-              // أي عملية تحديث
+              context.read<ReportsProvider>().loadReportsData();
             },
             icon: const Icon(Icons.refresh),
+            tooltip: 'تحديث البيانات',
           ),
         ],
-        floatingActionButton: null, // إذا ما في FAB، ضع null
+        floatingActionButton: null,
         child: Consumer<ReportsProvider>(
           builder: (context, provider, _) {
             if (provider.isLoadingReports) {
@@ -52,19 +225,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 children: [
                   _buildPeriodFilter(provider),
                   const SizedBox(height: 20),
-
-                  _buildStatsCards(provider),
+                  _buildAllStatsCards(provider),
                   const SizedBox(height: 24),
-
                   _buildWeeklySalesTable(provider),
                   const SizedBox(height: 24),
-
                   _buildDetailedStats(provider),
                   const SizedBox(height: 24),
-
                   _buildTopProducts(provider),
                   const SizedBox(height: 24),
-
                   _buildTopCustomers(provider),
                 ],
               ),
@@ -155,7 +323,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       setState(() {
                         _selectedMonth = value;
                       });
-                      // لا تطبق الفلتر هنا، فقط احفظ القيمة
                     },
                   ),
                 ),
@@ -178,7 +345,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       setState(() {
                         _selectedYear = value;
                       });
-                      // لا تطبق الفلتر هنا، فقط احفظ القيمة
                     },
                   ),
                 ),
@@ -191,7 +357,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 if (_selectedMonth != null && _selectedYear != null) {
                   _applyFilter(provider);
                 } else {
-                  // عرض رسالة تنبيه
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
@@ -228,7 +393,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 setState(() {
                   _selectedYear = value;
                 });
-                // لا تطبق الفلتر هنا
               },
             ),
             const SizedBox(height: 10),
@@ -257,68 +421,35 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
     );
   }
+  // في reports_screen.dart - استبدل _buildStatsCards و _buildFinancialCards بـ:
 
-  String _getMonthName(int month) {
-    final months = [
-      'يناير',
-      'فبراير',
-      'مارس',
-      'أبريل',
-      'مايو',
-      'يونيو',
-      'يوليو',
-      'أغسطس',
-      'سبتمبر',
-      'أكتوبر',
-      'نوفمبر',
-      'ديسمبر',
-    ];
-    return months[month - 1];
-  }
-
-  List<int> _getAvailableYears() {
-    final currentYear = DateTime.now().year;
-    return List.generate(10, (index) => currentYear - index);
-  }
-
-  void _applyFilter(ReportsProvider provider) {
-    if (_selectedPeriod == 'شهر محدد' &&
-        _selectedMonth != null &&
-        _selectedYear != null) {
-      provider.filterBySpecificMonth(_selectedMonth!, _selectedYear!);
-    } else if (_selectedPeriod == 'سنة محددة' && _selectedYear != null) {
-      provider.filterBySpecificYear(_selectedYear!);
-    } else {
-      provider.filterByPeriod(_selectedPeriod);
-    }
-  }
-
-  Widget _buildStatsCards(ReportsProvider provider) {
+  Widget _buildAllStatsCards(ReportsProvider provider) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final currencyName = settings.currencyName;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // المساحات والـ spacing
         const double spacing = 10;
         final double maxWidth = constraints.maxWidth;
 
-        // قواعد بسيطة للحجم: 3 أعمدة للكبار، 2 للمتوسط، 1 للصغير
+        // تحديد عدد الأعمدة بناءً على عرض الشاشة
         int columns;
-        if (maxWidth >= 900) {
-          columns = 3;
+        if (maxWidth >= 1200) {
+          columns = 4; // شاشات كبيرة جداً: 4 أعمدة
+        } else if (maxWidth >= 900) {
+          columns = 4; // شاشات كبيرة: 3 أعمدة
         } else if (maxWidth >= 600) {
-          columns = 2;
+          columns = 3; // شاشات متوسطة: 2 عمود
         } else {
-          columns = 1;
+          columns = 1; // شاشات صغيرة: عمود واحد
         }
 
-        // نحسب عرض كل كرت مع مراعاة الـ spacing
         final double totalSpacing = spacing * (columns - 1);
         final double cardWidth = (maxWidth - totalSpacing) / columns;
 
-        // عناصر الكروت
+        // جميع الكروت في قائمة واحدة بترتيب منطقي
         final cards = [
+          // المجموعة 1: المبيعات الأساسية
           _buildStatCard(
             'إجمالي المبيعات',
             '${provider.totalSalesAmount.toStringAsFixed(0)} $currencyName',
@@ -326,6 +457,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Colors.blue,
             '${provider.salesCount} فاتورة',
           ),
+
+          _buildStatCard(
+            'المبيعات النقدية',
+            '${provider.cashSalesAmount.toStringAsFixed(0)} $currencyName',
+            Icons.money,
+            Colors.green,
+            'المدفوعات نقداً',
+          ),
+          _buildStatCard(
+            'المبيعات الآجلة',
+            '${provider.creditSalesAmount.toStringAsFixed(0)} $currencyName',
+            Icons.credit_card,
+            Colors.orange,
+            'المبيعات الآجلة',
+          ),
+
+          // المجموعة 2: الأرباح
           _buildStatCard(
             'إجمالي الأرباح',
             '${provider.totalProfit.toStringAsFixed(0)} $currencyName',
@@ -334,23 +482,123 @@ class _ReportsScreenState extends State<ReportsScreen> {
             '${provider.profitPercentage.toStringAsFixed(1)}% من المبيعات',
           ),
           _buildStatCard(
-            'عدد الفواتير',
-            provider.salesCount.toString(),
-            Icons.receipt,
-            Colors.purple,
-            'إجمالي المعاملات',
+            'الأرباح النقدية',
+            '${provider.totalCashProfit.toStringAsFixed(0)} $currencyName',
+            Icons.monetization_on,
+            Colors.green.shade700,
+            'أرباح المبيعات النقدية فقط',
           ),
+
+          // المجموعة 3: المصاريف
+          _buildStatCard(
+            'إجمالي المصاريف',
+            '${provider.totalExpensesAll.toStringAsFixed(0)} $currencyName',
+            Icons.money_off,
+            Colors.red.shade700,
+            'كل المصاريف (نقدية وغير نقدية)',
+          ),
+
+          // المجموعة 4: صافي الربح
+          _buildStatCard(
+            'صافي الربح',
+            '${provider.netProfit.toStringAsFixed(0)} $currencyName',
+            Icons.trending_up,
+            provider.netProfit >= 0 ? Colors.green : Colors.red,
+            'إجمالي الأرباح - المصاريف النقدية',
+          ),
+          _buildStatCard(
+            'صافي الربح الكاش',
+            '${provider.netCashProfit.toStringAsFixed(0)} $currencyName',
+            Icons.account_balance_wallet,
+            provider.netCashProfit >= 0 ? Colors.green : Colors.red,
+            'الأرباح النقدية - المصاريف النقدية',
+          ),
+
+          // المجموعة 5: إحصائيات إضافية
         ];
+
+        // إزالة أي كروت فارغة (في حالة عدم وجود بيانات)
+        // ignore: unnecessary_null_comparison
+        final filteredCards = cards.where((card) => card != null).toList();
 
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
           children:
-              cards.map((card) {
+              filteredCards.map((card) {
                 return SizedBox(width: cardWidth, child: card);
               }).toList(),
         );
       },
+    );
+  }
+
+  // دالة جديدة لعرض كروت المصاريف وصافي الربح
+
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+    String subtitle,
+  ) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: double.infinity, // لملء المساحة المتاحة
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 24),
+                ),
+                // يمكن إضافة زر أو أيقونة إضافية هنا إذا لزم
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 22, // زيادة حجم الخط
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16, // زيادة حجم الخط
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 13, // زيادة حجم الخط قليلاً
+                color: Colors.grey[600],
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -418,7 +666,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             sales: dayData['sales'] as double,
             profit: dayData['profit'] as double,
           );
-        }).toList(),
+        }),
 
         // المجموع
         _buildTableTotal(totalSales),
@@ -584,65 +832,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  // باقي الدوال تبقى كما هي بدون تغيير...
-  Widget _buildStatCard(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-    String subtitle,
-  ) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-                const Spacer(),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildDetailedStats(ReportsProvider provider) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final currencyName = settings.currencyName;
@@ -668,6 +857,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
               'المبيعات الآجلة',
               '${provider.creditSalesAmount.toStringAsFixed(0)} $currencyName',
               Colors.orange,
+            ),
+            _buildStatRow(
+              'المصاريف النقدية',
+              '${provider.totalCashExpenses.toStringAsFixed(0)} $currencyName',
+              Colors.red,
+            ),
+            _buildStatRow(
+              'صافي الربح',
+              '${provider.netProfit.toStringAsFixed(0)} $currencyName',
+              provider.netProfit >= 0 ? Colors.green : Colors.red,
             ),
             _buildStatRow(
               'عدد العملاء',
@@ -714,8 +913,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
     );
   }
-
-  // في reports_screen.dart - عدّل دوال عرض المنتجات
 
   Widget _buildTopProducts(ReportsProvider provider) {
     return Card(
@@ -983,4 +1180,46 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
     );
   }
+
+  // دوال مساعدة
+
+  String _getMonthName(int month) {
+    final months = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
+    ];
+    return months[month - 1];
+  }
+
+  List<int> _getAvailableYears() {
+    final currentYear = DateTime.now().year;
+    return List.generate(10, (index) => currentYear - index);
+  }
+
+  void _applyFilter(ReportsProvider provider) {
+    if (_selectedPeriod == 'شهر محدد' &&
+        _selectedMonth != null &&
+        _selectedYear != null) {
+      provider.filterBySpecificMonth(_selectedMonth!, _selectedYear!);
+    } else if (_selectedPeriod == 'سنة محددة' && _selectedYear != null) {
+      provider.filterBySpecificYear(_selectedYear!);
+    } else {
+      provider.filterByPeriod(_selectedPeriod);
+    }
+
+    // بعد تطبيق الفلتر، حساب صافي الربح
+    _calculateNetProfitForCurrentFilter(provider);
+  }
+
+  void _calculateNetProfitForCurrentFilter(ReportsProvider provider) {}
 }

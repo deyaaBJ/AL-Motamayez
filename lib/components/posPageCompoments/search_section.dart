@@ -69,7 +69,7 @@ class SearchSection extends StatelessWidget {
                           ),
                           style: const TextStyle(fontSize: 14),
                           onChanged: (value) {
-                            if (value.length >= 1) {
+                            if (value.isNotEmpty) {
                               performSearch(value);
                             } else {
                               refreshState();

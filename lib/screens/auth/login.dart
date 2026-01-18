@@ -2,21 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:math';
 
-import 'package:shopmate/components/LoginCard.dart';
-import 'package:shopmate/helpers/helpers.dart';
-import 'package:shopmate/providers/auth_provider.dart';
+import 'package:motamayez/components/LoginCard.dart';
+import 'package:motamayez/helpers/helpers.dart';
+import 'package:motamayez/providers/auth_provider.dart';
 
 void main() {
-  runApp(const ShopMateApp());
+  runApp(const MotamayezApp());
 }
 
-class ShopMateApp extends StatelessWidget {
-  const ShopMateApp({super.key});
+class MotamayezApp extends StatelessWidget {
+  const MotamayezApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ShopMate POS',
+      title: 'المتميز',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.purple, fontFamily: 'Poppins'),
       home: const LoginScreen(),
@@ -146,13 +146,28 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                           ),
                           const SizedBox(height: 20),
-                          const Text(
-                            'ShopMate',
+                          Text(
+                            'المتميز',
                             style: TextStyle(
-                              fontSize: 40,
-                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Amiri', // اسم family الصحيح
+                              fontWeight:
+                                  FontWeight.bold, // لاختيار Bold أو BoldItalic
+                              fontStyle: FontStyle.italic, // لتفعيل الـ Italic
+                              letterSpacing: 1.0,
+                              fontSize: 50,
                               color: Colors.white,
-                              letterSpacing: 1.5,
+                              shadows: const [
+                                Shadow(
+                                  offset: Offset(3, 3),
+                                  blurRadius: 6,
+                                  color: Colors.black45,
+                                ),
+                                Shadow(
+                                  offset: Offset(-2, -2),
+                                  blurRadius: 4,
+                                  color: Colors.black26,
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -172,7 +187,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                     // حقوق النشر
                     const Text(
-                      '© ShopMate POS. جميع الحقوق محفوظة',
+                      '© Motamayez POS. جميع الحقوق محفوظة',
                       style: TextStyle(color: Colors.white70, fontSize: 14),
                     ),
                   ],

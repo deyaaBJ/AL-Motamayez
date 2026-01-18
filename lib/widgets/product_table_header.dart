@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class ProductTableHeader extends StatelessWidget {
   final List<HeaderColumn> columns;
 
-  const ProductTableHeader({Key? key, required this.columns}) : super(key: key);
+  const ProductTableHeader({super.key, required this.columns});
 
   @override
   Widget build(BuildContext context) {

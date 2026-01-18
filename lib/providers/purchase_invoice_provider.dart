@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:sqflite/sqflite.dart';
 import '../db/db_helper.dart';
+import 'dart:convert';
+import 'dart:developer';
 
 class PurchaseInvoiceProvider with ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
@@ -48,7 +49,6 @@ class PurchaseInvoiceProvider with ChangeNotifier {
   // ============================================
   // الدالة الرئيسية للتحميل مع البحث
   // ============================================
-
   Future<void> loadPurchaseInvoices({
     bool reset = false,
     String query = '',
@@ -78,7 +78,7 @@ class PurchaseInvoiceProvider with ChangeNotifier {
       }
 
       if (!_hasMore && !reset) {
-        print('⏹️ لا يوجد المزيد من الفواتير للتحميل');
+        log('⏹️ لا يوجد المزيد من الفواتير للتحميل');
         return;
       }
 
@@ -102,7 +102,7 @@ class PurchaseInvoiceProvider with ChangeNotifier {
           whereArgs = ['%$_currentSearchQuery%']; // % للبحث الجزئي
         }
       } else {
-        print('📄 تحميل جميع الفواتير');
+        log('📄 تحميل جميع الفواتير');
       }
 
       final offset = _currentPage * _itemsPerPage;
@@ -139,8 +139,6 @@ class PurchaseInvoiceProvider with ChangeNotifier {
             };
           }).toList();
 
-      // عرض عينة من النتائج للتشخيص
-
       if (reset) {
         _invoices = convertedInvoices;
       } else {
@@ -153,13 +151,13 @@ class PurchaseInvoiceProvider with ChangeNotifier {
       if (_hasMore) {
         _currentPage++;
       } else {
-        print('⏹️ لا يوجد المزيد من الفواتير');
+        log('⏹️ لا يوجد المزيد من الفواتير');
       }
 
       _isInitialized = true;
       _hasError = false;
       _lastError = null;
-    } catch (e, stackTrace) {
+    } catch (e) {
       _hasError = true;
       _lastError = 'فشل في تحميل الفواتير: ${e.toString()}';
 
@@ -219,7 +217,6 @@ class PurchaseInvoiceProvider with ChangeNotifier {
   // ============================================
   // دوال التحقق من قاعدة البيانات
   // ============================================
-
   Future<void> _checkDatabaseTables() async {
     try {
       final db = await _dbHelper.db;
@@ -280,22 +277,21 @@ class PurchaseInvoiceProvider with ChangeNotifier {
 
       if (results.isNotEmpty) {
         for (var result in results) {
-          print('  - ID: ${result['id']}, المورد: ${result['supplier_name']}');
+          log('  - ID: ${result['id']}, المورد: ${result['supplier_name']}');
         }
       } else {
-        print('  لا توجد نتائج');
+        log('  لا توجد نتائج');
       }
 
-      print('=== انتهى الاختبار ===\n');
+      log('=== انتهى الاختبار ===\n');
     } catch (e) {
-      print('❌ خطأ في اختبار البحث: $e');
+      log('❌ خطأ في اختبار البحث: $e');
     }
   }
 
   // ============================================
   // دوال CRUD الأساسية
   // ============================================
-
   Future<void> updatePurchaseInvoice({
     required int invoiceId,
     required String paymentType,
@@ -315,10 +311,10 @@ class PurchaseInvoiceProvider with ChangeNotifier {
         whereArgs: [invoiceId],
       );
 
-      print('✅ تم تحديث الفاتورة #$invoiceId');
+      log('✅ تم تحديث الفاتورة #$invoiceId');
       await refreshInvoices();
     } catch (e) {
-      print('❌ خطأ في تحديث فاتورة الشراء: $e');
+      log('❌ خطأ في تحديث فاتورة الشراء: $e');
       rethrow;
     }
   }
@@ -377,15 +373,11 @@ class PurchaseInvoiceProvider with ChangeNotifier {
           'date': DateTime.now().toIso8601String(),
           'note': 'دفعة على فاتورة #$invoiceId',
         });
-        print('   ✅ تم تسجيل دفعة: $paidAmount');
+        log('   ✅ تم تسجيل دفعة: $paidAmount');
       }
 
       // 🔹 تحديث رصيد المورد (فقط للدين المتبقي)
       if (remainingAmount > 0) {
-        // الحصول على الرصيد الحالي
-        final currentBalance = await getSupplierBalance(supplierId);
-
-        // تحديث الرصيد (زيادة الدين = زيادة الرصيد الموجب)
         await db.rawInsert(
           '''
         INSERT INTO supplier_balance (supplier_id, balance, last_updated)
@@ -403,16 +395,14 @@ class PurchaseInvoiceProvider with ChangeNotifier {
             DateTime.now().toIso8601String(),
           ],
         );
-
-        final newBalance = currentBalance + remainingAmount;
       } else {
-        print('   ✅ لا يوجد دين متبقي، لم يتم تحديث الرصيد');
+        log('   ✅ لا يوجد دين متبقي، لم يتم تحديث الرصيد');
       }
 
       await refreshInvoices();
       return invoiceId;
     } catch (e) {
-      print('❌ خطأ في إضافة فاتورة الشراء: $e');
+      log('❌ خطأ في إضافة فاتورة الشراء: $e');
       rethrow;
     }
   }
@@ -433,7 +423,7 @@ class PurchaseInvoiceProvider with ChangeNotifier {
 
   Future<void> deletePurchaseInvoice(int invoiceId) async {
     try {
-      print('🗑️ جاري حذف الفاتورة #$invoiceId');
+      log('🗑️ جاري حذف الفاتورة #$invoiceId');
       final db = await _dbHelper.db;
 
       // أولاً: الحصول على معلومات الفاتورة
@@ -461,12 +451,12 @@ class PurchaseInvoiceProvider with ChangeNotifier {
         whereArgs: [invoiceId],
       );
 
-      print('✅ تم حذف الفاتورة #$invoiceId');
+      log('✅ تم حذف الفاتورة #$invoiceId');
 
       // تحديث القائمة
       await refreshInvoices();
     } catch (e) {
-      print('❌ خطأ في حذف فاتورة الشراء: $e');
+      log('❌ خطأ في حذف فاتورة الشراء: $e');
       rethrow;
     }
   }
@@ -504,7 +494,7 @@ class PurchaseInvoiceProvider with ChangeNotifier {
         'updated_at': invoice['updated_at']?.toString() ?? '',
       };
     } catch (e) {
-      print('❌ خطأ في الحصول على الفاتورة: $e');
+      log('❌ خطأ في الحصول على الفاتورة: $e');
       rethrow;
     }
   }
@@ -512,46 +502,44 @@ class PurchaseInvoiceProvider with ChangeNotifier {
   // دالة لفحص المشاكل في الاستعلام
   Future<void> diagnoseQuery(String query) async {
     try {
-      print('\n🔧 === تشخيص استعلام البحث ===');
-      print('البحث: "$query"');
+      log('\n🔧 === تشخيص استعلام البحث ===');
+      log('البحث: "$query"');
 
       final db = await _dbHelper.db;
 
       // 1. فحص جداول قاعدة البيانات
-      print('\n1. فحص الجداول:');
+      log('\n1. فحص الجداول:');
       final tables = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
       );
       for (var table in tables) {
-        print('   - ${table['name']}');
+        log('   - ${table['name']}');
       }
 
       // 2. عدد السجلات في كل جدول
-      print('\n2. عدد السجلات:');
+      log('\n2. عدد السجلات:');
 
       final purchaseCount = await db.rawQuery(
         'SELECT COUNT(*) as count FROM purchase_invoices',
       );
-      print(
-        '   - purchase_invoices: ${_safeInt(purchaseCount.first['count'])}',
-      );
+      log('   - purchase_invoices: ${_safeInt(purchaseCount.first['count'])}');
 
       final supplierCount = await db.rawQuery(
         'SELECT COUNT(*) as count FROM suppliers',
       );
-      print('   - suppliers: ${_safeInt(supplierCount.first['count'])}');
+      log('   - suppliers: ${_safeInt(supplierCount.first['count'])}');
 
       // 3. فحص بعض الموردين
-      print('\n3. عينة من الموردين:');
+      log('\n3. عينة من الموردين:');
       final suppliers = await db.rawQuery(
         'SELECT id, name FROM suppliers LIMIT 10',
       );
       for (var supplier in suppliers) {
-        print('   - ID: ${supplier['id']}, Name: "${supplier['name']}"');
+        log('   - ID: ${supplier['id']}, Name: "${supplier['name']}"');
       }
 
       // 4. فحص بعض الفواتير مع الموردين
-      print('\n4. فواتير مع معلومات الموردين:');
+      log('\n4. فواتير مع معلومات الموردين:');
       final invoices = await db.rawQuery('''
         SELECT pi.id, pi.supplier_id, s.name as supplier_name
         FROM purchase_invoices pi
@@ -560,31 +548,31 @@ class PurchaseInvoiceProvider with ChangeNotifier {
       ''');
 
       for (var invoice in invoices) {
-        print(
+        log(
           '   - Invoice ${invoice['id']}: Supplier "${invoice['supplier_name']}" (ID: ${invoice['supplier_id']})',
         );
       }
 
       // 5. اختبار البحث
-      print('\n5. اختبار البحث:');
+      log('\n5. اختبار البحث:');
 
       if (query.isNotEmpty) {
         int? invoiceId = int.tryParse(query);
 
         if (invoiceId != null) {
-          print('   البحث برقم فاتورة: $invoiceId');
+          log('   البحث برقم فاتورة: $invoiceId');
           final results = await db.rawQuery(
             'SELECT id, supplier_id FROM purchase_invoices WHERE id = ?',
             [invoiceId],
           );
-          print('   النتائج: ${results.length}');
+          log('   النتائج: ${results.length}');
         } else {
-          print('   البحث باسم مورد: "$query"');
+          log('   البحث باسم مورد: "$query"');
           final results = await db.rawQuery(
             'SELECT id, name FROM suppliers WHERE name LIKE ?',
             ['%$query%'],
           );
-          print('   النتائج في جدول suppliers: ${results.length}');
+          log('   النتائج في جدول suppliers: ${results.length}');
 
           if (results.isNotEmpty) {
             for (var supplier in results) {
@@ -593,7 +581,7 @@ class PurchaseInvoiceProvider with ChangeNotifier {
                 'SELECT COUNT(*) as count FROM purchase_invoices WHERE supplier_id = ?',
                 [supplierId],
               );
-              print(
+              log(
                 '   - المورد "${supplier['name']}" (ID: $supplierId) له ${_safeInt(invoicesForSupplier.first['count'])} فاتورة',
               );
             }
@@ -601,13 +589,111 @@ class PurchaseInvoiceProvider with ChangeNotifier {
         }
       }
 
-      print('\n✅ === انتهى التشخيص ===\n');
+      log('\n✅ === انتهى التشخيص ===\n');
     } catch (e, stackTrace) {
-      print('\n❌ === خطأ في التشخيص ===');
-      print('الخطأ: $e');
-      print('Stack Trace: $stackTrace');
+      log('\n❌ === خطأ في التشخيص ===');
+      log('الخطأ: $e');
+      log('Stack Trace: $stackTrace');
     }
   }
 
-  // دالة لإنشاء بيانات تجريبية للاختبار
+  // ============================================
+  // بيانات فاتورة مؤقتة
+  // ============================================
+
+  int? _tempSelectedSupplierId;
+  String? _tempPaymentType = 'cash';
+  String? _tempNote;
+  final List<Map<String, dynamic>> _tempInvoiceItems = [];
+  double _tempInvoiceTotal = 0.0;
+  double _tempDiscountValue = 0.0; // قيمة الخصم بالعملة
+
+  // Getters
+  int? get tempSelectedSupplierId => _tempSelectedSupplierId;
+  String? get tempPaymentType => _tempPaymentType;
+  String? get tempNote => _tempNote;
+  List<Map<String, dynamic>> get tempInvoiceItems => _tempInvoiceItems;
+  double get tempInvoiceTotal => _tempInvoiceTotal;
+  double get tempDiscountValue => _tempDiscountValue;
+
+  // حساب الإجمالي النهائي (بعد الخصم)
+  double get tempInvoiceFinalTotal {
+    double total = _tempInvoiceTotal;
+    if (_tempDiscountValue > 0) {
+      total = total - _tempDiscountValue;
+      if (total < 0) total = 0;
+    }
+    return total;
+  }
+
+  // Setters
+  void setTempSupplierId(int? id) {
+    _tempSelectedSupplierId = id;
+    notifyListeners();
+  }
+
+  void setTempPaymentType(String? type) {
+    _tempPaymentType = type ?? 'cash';
+    notifyListeners();
+  }
+
+  void setTempNote(String? note) {
+    _tempNote = note;
+    notifyListeners();
+  }
+
+  // دالة لتحديث قيمة الخصم
+  void setTempDiscountValue(double discountValue) {
+    // لا نسمح للخصم أن يكون أكبر من الإجمالي أو سالباً
+    if (discountValue < 0) {
+      _tempDiscountValue = 0.0;
+    } else if (discountValue > _tempInvoiceTotal) {
+      _tempDiscountValue = _tempInvoiceTotal;
+    } else {
+      _tempDiscountValue = discountValue;
+    }
+    notifyListeners();
+  }
+
+  void addTempItem(Map<String, dynamic> item) {
+    _tempInvoiceItems.add(item);
+    // تحديث الإجمالي
+    double itemTotal =
+        (item['quantity'] as num).toDouble() *
+        (item['cost_price'] as num).toDouble();
+    _tempInvoiceTotal += itemTotal;
+
+    // تحديث الخصم إذا كان أكبر من الإجمالي الجديد
+    if (_tempDiscountValue > _tempInvoiceTotal) {
+      _tempDiscountValue = _tempInvoiceTotal;
+    }
+    notifyListeners();
+  }
+
+  void removeTempItem(int index) {
+    if (index >= 0 && index < _tempInvoiceItems.length) {
+      final removedItem = _tempInvoiceItems.removeAt(index);
+      // تحديث الإجمالي
+      double removedAmount =
+          (removedItem['quantity'] as num).toDouble() *
+          (removedItem['cost_price'] as num).toDouble();
+      _tempInvoiceTotal -= removedAmount;
+
+      // تحديث الخصم إذا كان أكبر من الإجمالي الجديد
+      if (_tempDiscountValue > _tempInvoiceTotal) {
+        _tempDiscountValue = _tempInvoiceTotal;
+      }
+      notifyListeners();
+    }
+  }
+
+  void clearTempInvoice() {
+    _tempSelectedSupplierId = null;
+    _tempPaymentType = 'cash';
+    _tempNote = null;
+    _tempInvoiceItems.clear();
+    _tempInvoiceTotal = 0.0;
+    _tempDiscountValue = 0.0;
+    notifyListeners();
+  }
 }

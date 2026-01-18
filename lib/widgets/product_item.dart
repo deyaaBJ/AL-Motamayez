@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/helpers/helpers.dart';
-import 'package:shopmate/models/product.dart';
-import 'package:shopmate/providers/settings_provider.dart';
-import 'package:shopmate/providers/product_provider.dart';
-import 'package:shopmate/screens/add_product_screen.dart';
+import 'package:motamayez/helpers/helpers.dart';
+import 'package:motamayez/models/product.dart';
+import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/providers/product_provider.dart';
+import 'package:motamayez/screens/add_product_screen.dart';
 
 class ProductItem extends StatelessWidget {
   final Product product;
@@ -12,11 +12,11 @@ class ProductItem extends StatelessWidget {
   final VoidCallback onUpdate;
 
   const ProductItem({
-    Key? key,
+    super.key,
     required this.product,
     required this.provider,
     required this.onUpdate,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +44,7 @@ class ProductItem extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    product.barcode,
+                    product.barcode ?? '',
                     style: const TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                 ],

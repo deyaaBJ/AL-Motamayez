@@ -5,10 +5,10 @@ class QRScanSection extends StatelessWidget {
   final Function(String) onQRCodeChanged;
 
   const QRScanSection({
-    Key? key,
+    super.key,
     required this.qrController,
     required this.onQRCodeChanged,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -3,11 +3,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/components/base_layout.dart';
-import 'package:shopmate/helpers/helpers.dart';
-import 'package:shopmate/providers/auth_provider.dart';
-import 'package:shopmate/providers/settings_provider.dart';
-import 'package:shopmate/screens/pos_screen.dart';
+import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/helpers/helpers.dart';
+import 'package:motamayez/providers/auth_provider.dart';
+import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/screens/pos_screen.dart';
 import '../providers/sales_provider.dart';
 import '../widgets/SaleDetailsDialog.dart';
 import '../models/sale.dart';
@@ -19,13 +19,15 @@ class SalesHistoryScreen extends StatefulWidget {
   State<SalesHistoryScreen> createState() => _SalesHistoryScreenState();
 }
 
-class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
+class _SalesHistoryScreenState extends State<SalesHistoryScreen>
+    with WidgetsBindingObserver {
   final ScrollController _verticalScrollController = ScrollController();
   Timer? _filterDebounceTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<SalesProvider>();
@@ -38,7 +40,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       } else {
         // ✅ للسنة الحالية، استخدم resetForNewSearch
         final isCurrentYear = provider.selectedYear == DateTime.now().year;
-        provider.fetchSales(resetPagination: isCurrentYear);
+        provider.fetchSales();
       }
     });
   }
@@ -47,7 +49,15 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   void dispose() {
     _filterDebounceTimer?.cancel();
     _verticalScrollController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      context.read<SalesProvider>().fetchSales(forceRefresh: true);
+    }
   }
 
   // ✅ دالة لمسح جميع الفلاتر عدا التاريخ
@@ -71,24 +81,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         currentPage: 'المبيعات',
         showAppBar: true,
         title: 'سجل الفواتير',
-        actions: [
-          IconButton(
-            onPressed: () {
-              context.read<SalesProvider>().fetchSales();
-            },
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-        floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => PosScreen()),
-            );
-          },
-          backgroundColor: const Color(0xFF8B5FBF),
-          child: const Icon(Icons.add, color: Colors.white, size: 28),
-        ),
+
         child: Consumer<SalesProvider>(
           builder: (context, provider, _) {
             // ✅ التحقق من صحة قيمة Dropdown قبل بناء الواجهة
@@ -104,8 +97,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
               builder: (context, constraints) {
                 final bool isMobile = constraints.maxWidth < 600;
                 final bool isTablet =
-                    constraints.maxWidth >= 600 && constraints.maxWidth < 1024;
-                final bool isDesktop = constraints.maxWidth >= 1024;
+                    constraints.maxWidth >= 600 && constraints.maxWidth < 900;
+                final bool isDesktop = constraints.maxWidth >= 900;
 
                 return Column(
                   children: [
@@ -765,7 +758,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
   // ✅ فلتر الشهر المتجاوب
   Widget _buildResponsiveMonthFilter(SalesProvider provider, bool isMobile) {
-    return Container(
+    return SizedBox(
       height: isMobile ? 42 : 48,
       child: Row(
         children: [
@@ -1103,7 +1096,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       child: Column(
         children: [
           SizedBox(height: isMobile ? 0 : 24),
-          Container(
+          SizedBox(
             height: isMobile ? 42 : 48,
             width: isMobile ? double.infinity : 48,
             child: ElevatedButton(
@@ -1163,8 +1156,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   Widget _buildMobileSalesList() {
     return Consumer2<SalesProvider, SettingsProvider>(
       builder: (context, salesProvider, settingsProvider, _) {
-        final currencyName = settingsProvider.currencyName;
-
         if (salesProvider.sales.isEmpty && !salesProvider.isLoading) {
           return _buildEmptyState(salesProvider);
         }
@@ -1236,7 +1227,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         ),
       ),
       child: InkWell(
-        onTap: () => _showSaleDetails(sale.id!, context),
+        onTap: () => _showSaleDetails(sale.id, context),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -1264,7 +1255,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                     Checkbox(
                       value: isSelected,
                       onChanged: (value) {
-                        salesProvider.toggleSaleSelection(sale.id!);
+                        salesProvider.toggleSaleSelection(sale.id);
                       },
                     ),
 
@@ -1457,7 +1448,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                               : Colors.blue[700],
                       size: 22,
                     ),
-                    onPressed: () => _showSaleDetails(sale.id!, context),
+                    onPressed: () => _showSaleDetails(sale.id, context),
                     tooltip: 'تفاصيل',
                   ),
                 ],
@@ -1473,7 +1464,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   Widget _buildDesktopDataTable(bool isTablet, bool isDesktop) {
     return Consumer2<SalesProvider, SettingsProvider>(
       builder: (context, salesProvider, settingsProvider, _) {
-        final currencyName = settingsProvider.currencyName;
         final hasSelectedSales = salesProvider.selectedSaleIds.isNotEmpty;
 
         if (salesProvider.sales.isEmpty && !salesProvider.isLoading) {
@@ -1610,8 +1600,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                           child: DataTable(
                             showCheckboxColumn: false,
                             headingRowColor:
-                                MaterialStateProperty.resolveWith<Color?>(
-                                  (Set<MaterialState> states) =>
+                                WidgetStateProperty.resolveWith<Color?>(
+                                  (Set<WidgetState> states) =>
                                       salesProvider.isArchiveMode
                                           ? Colors.orange[50]
                                           : Colors.blue[50],
@@ -1795,7 +1785,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
           Checkbox(
             value: isSelected,
             onChanged: (value) {
-              salesProvider.toggleSaleSelection(sale.id!);
+              salesProvider.toggleSaleSelection(sale.id);
             },
           ),
         ),
@@ -2011,7 +2001,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                           ? Colors.blue[600]
                           : Colors.blue[700],
                 ),
-                onPressed: () => _showSaleDetails(sale.id!, context),
+                onPressed: () => _showSaleDetails(sale.id, context),
                 padding: const EdgeInsets.all(6),
                 constraints: const BoxConstraints(),
                 tooltip: 'عرض التفاصيل',
@@ -2024,10 +2014,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
     return DataRow(
       key: ValueKey(key),
-      onSelectChanged: (_) => _showSaleDetails(sale.id!, context),
-      color: MaterialStateProperty.resolveWith<Color?>((
-        Set<MaterialState> states,
-      ) {
+      onSelectChanged: (_) => _showSaleDetails(sale.id, context),
+      color: WidgetStateProperty.resolveWith<Color?>((Set<WidgetState> states) {
         if (isSelected) {
           return Colors.blue[50];
         }
@@ -2460,13 +2448,22 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
   // ✅ زر تحميل المزيد
   Widget _buildLoadMoreButton(SalesProvider salesProvider) {
+    print(
+      '🔘 بناء زر عرض المزيد: hasMore=${salesProvider.hasMore}, isLoading=${salesProvider.isLoading}',
+    );
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
         child: ElevatedButton.icon(
           icon: Icon(Icons.expand_more, size: 18),
-          label: const Text('تحميل المزيد'),
-          onPressed: () => salesProvider.loadMoreSales(),
+          label: Text(
+            'تحميل المزيد (${salesProvider.sales.length} / ${salesProvider.loadedSalesCount})',
+          ),
+          onPressed: () {
+            print('🖱️ تم النقر على زر تحميل المزيد');
+            salesProvider.loadMoreSales();
+          },
           style: ElevatedButton.styleFrom(
             backgroundColor:
                 salesProvider.isArchiveMode
@@ -2701,13 +2698,13 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: Text('تأكيد التغيير ($count فاتورة)'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor:
                       targetPaymentType == 'cash'
                           ? Colors.green
                           : Colors.orange,
                 ),
+                child: Text('تأكيد التغيير ($count فاتورة)'),
               ),
             ],
           ),
@@ -2864,7 +2861,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         showAppToast(context, 'لا يمكن حذف فواتير الأرشيف', ToastType.warning);
         return;
       }
-      await provider.deleteSale(sale.id!);
+      await provider.deleteSale(sale.id);
       showAppToast(
         context,
         'تم حذف الفاتورة رقم ${sale.id} بنجاح',
@@ -2876,7 +2873,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   }
 
   void _showSaleDetails(int saleId, BuildContext context) {
-    final provider = Provider.of<SalesProvider>(context, listen: false);
+    Provider.of<SalesProvider>(context, listen: false);
     showDialog(
       context: context,
       builder: (context) => SaleDetailsDialog(saleId: saleId),

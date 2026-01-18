@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/models/customer.dart';
-import 'package:shopmate/providers/settings_provider.dart';
+import 'package:motamayez/models/customer.dart';
+import 'package:motamayez/providers/settings_provider.dart';
 
 enum PaymentMode {
   payment, // تسديد دفعة (العميل يدفع للمتجر)

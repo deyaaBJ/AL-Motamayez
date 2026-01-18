@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/components/base_layout.dart';
+import 'package:motamayez/components/base_layout.dart';
 import '../providers/supplier_provider.dart';
-import '../providers/purchase_invoice_provider.dart';
 import '../utils/formatters.dart';
+import 'dart:developer';
 
 class AddSupplierPaymentPage extends StatefulWidget {
   final int supplierId;
@@ -80,7 +80,7 @@ class _AddSupplierPaymentPageState extends State<AddSupplierPaymentPage> {
         _loadingInvoices = false;
       });
     } catch (e) {
-      print('❌ خطأ في تحميل الفواتير: $e');
+      log('❌ خطأ في تحميل الفواتير: $e');
       _showError('تعذر تحميل الفواتير');
       setState(() => _loadingInvoices = false);
     }
@@ -849,10 +849,6 @@ class _AddSupplierPaymentPageState extends State<AddSupplierPaymentPage> {
                                   invoice['remaining_amount'],
                                 );
                                 final paid = _toDouble(invoice['paid_amount']);
-                                final paymentPercentage =
-                                    totalCost > 0
-                                        ? ((paid / totalCost) * 100).round()
-                                        : 0;
 
                                 return ListTile(
                                   leading: Icon(
@@ -1019,6 +1015,9 @@ class _AddSupplierPaymentPageState extends State<AddSupplierPaymentPage> {
                                 Navigator.pop(context, _selectedInvoiceId);
                               },
                               style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    Colors
+                                        .blue, // Use backgroundColor instead of color
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 12,
                                 ),
@@ -1027,11 +1026,11 @@ class _AddSupplierPaymentPageState extends State<AddSupplierPaymentPage> {
                                 ),
                               ),
                               child: Text(
-                                'تأكيد الاختيار',
+                                'تسجيل الدفعة',
                                 style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
                                   color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),

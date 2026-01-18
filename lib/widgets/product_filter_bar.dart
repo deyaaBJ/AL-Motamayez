@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/models/productFilter.dart';
-import 'package:shopmate/providers/settings_provider.dart';
+import 'package:motamayez/models/productFilter.dart';
+import 'package:motamayez/providers/settings_provider.dart';
 import '../models/product.dart';
 
 // ==================== دالة الفلترة ====================
@@ -37,10 +37,10 @@ class ProductFilterBar extends StatelessWidget {
   final Function(ProductFilter) onFilterChanged;
 
   const ProductFilterBar({
-    Key? key,
+    super.key,
     required this.currentFilter,
     required this.onFilterChanged,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

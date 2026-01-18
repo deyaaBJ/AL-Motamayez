@@ -1,5 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:shopmate/models/customer.dart';
+import 'package:motamayez/models/customer.dart';
+import 'package:provider/provider.dart';
+import 'package:motamayez/providers/customer_provider.dart';
+import 'package:motamayez/helpers/helpers.dart';
 
 class CustomerFormDialog extends StatefulWidget {
   final Customer? customer;
@@ -15,6 +19,10 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  Timer? _nameCheckTimer;
+  bool _isCheckingName = false;
+  String? _nameError;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -23,21 +31,110 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
     // إذا كان تعديل، املأ البيانات الحالية
     if (widget.customer != null) {
       _nameController.text = widget.customer!.name;
-      _phoneController.text = widget.customer!.phone!;
+      _phoneController.text = widget.customer!.phone ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCheckTimer?.cancel();
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  // دالة التحقق من توفر الاسم
+  Future<void> _checkNameAvailability() async {
+    final name = _nameController.text.trim();
+
+    if (name.isEmpty) {
+      setState(() => _nameError = null);
+      return;
+    }
+
+    // إلغاء المؤقت السابق إذا كان موجوداً
+    _nameCheckTimer?.cancel();
+
+    // إضافة تأخير 500ms لمنع التحقق المتكرر السريع
+    _nameCheckTimer = Timer(const Duration(milliseconds: 500), () async {
+      if (!mounted) return;
+
+      setState(() => _isCheckingName = true);
+
+      try {
+        final provider = Provider.of<CustomerProvider>(context, listen: false);
+        final nameExists = await provider.isCustomerNameExists(
+          name,
+          excludeId: widget.customer?.id,
+        );
+
+        if (mounted) {
+          setState(() {
+            _isCheckingName = false;
+            _nameError = nameExists ? 'هذا الاسم مستخدم بالفعل' : null;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _isCheckingName = false;
+            _nameError = null;
+          });
+        }
+      }
+    });
+  }
+
+  void _saveCustomer() async {
+    if (_formKey.currentState!.validate()) {
+      // التحقق النهائي من الاسم
+      final name = _nameController.text.trim();
+      if (_nameError != null || _isCheckingName) {
+        showAppToast(
+          context,
+          'الرجاء انتظار التحقق من الاسم',
+          ToastType.warning,
+        );
+        return;
+      }
+
+      setState(() => _isSaving = true);
+
+      try {
+        final customer = Customer(
+          id: widget.customer?.id,
+          name: name,
+          phone:
+              _phoneController.text.trim().isNotEmpty
+                  ? _phoneController.text.trim()
+                  : null,
+        );
+
+        await widget.onSave(customer);
+
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        if (mounted) {
+          showAppToast(context, e.toString(), ToastType.error);
+          setState(() => _isSaving = false);
+        }
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      textDirection: TextDirection.rtl,
       child: Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start, // النص يبدأ من اليمين
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // العنوان
               _buildHeader(),
@@ -95,11 +192,21 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
           // حقل الاسم
           TextFormField(
             controller: _nameController,
-            textDirection: TextDirection.rtl, // يدعم العربي بشكل طبيعي
-            textAlign: TextAlign.right, // محاذاة لليمين
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.right,
             decoration: InputDecoration(
               labelText: 'اسم العميل',
               prefixIcon: const Icon(Icons.person, color: Color(0xFF8B5FBF)),
+              suffixIcon:
+                  _isCheckingName
+                      ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                      : _nameError != null
+                      ? const Icon(Icons.error, color: Colors.red)
+                      : null,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: Color(0xFFE1D4F7)),
@@ -111,9 +218,11 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
                   width: 2,
                 ),
               ),
+              errorText: _nameError,
             ),
+            onChanged: (value) => _checkNameAvailability(),
             validator: (value) {
-              if (value == null || value.isEmpty) {
+              if (value == null || value.trim().isEmpty) {
                 return 'يرجى إدخال اسم العميل';
               }
               return null;
@@ -126,7 +235,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
           TextFormField(
             controller: _phoneController,
             keyboardType: TextInputType.phone,
-            textDirection: TextDirection.ltr, // الأرقام محاذاة لليسار
+            textDirection: TextDirection.ltr,
             textAlign: TextAlign.left,
             decoration: InputDecoration(
               labelText: 'رقم الهاتف',
@@ -164,7 +273,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
         // زر الإلغاء
         Expanded(
           child: OutlinedButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: _isSaving ? null : () => Navigator.pop(context),
             style: OutlinedButton.styleFrom(
               foregroundColor: const Color(0xFF6A3093),
               side: const BorderSide(color: Color(0xFF6A3093)),
@@ -182,7 +291,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
         // زر الحفظ
         Expanded(
           child: ElevatedButton(
-            onPressed: _saveCustomer,
+            onPressed: _isSaving || _isCheckingName ? null : _saveCustomer,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF6A3093),
               foregroundColor: Colors.white,
@@ -191,29 +300,20 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
               ),
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
-            child: Text(widget.customer == null ? 'إضافة' : 'تحديث'),
+            child:
+                _isSaving
+                    ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                    : Text(widget.customer == null ? 'إضافة' : 'تحديث'),
           ),
         ),
       ],
     );
-  }
-
-  void _saveCustomer() {
-    if (_formKey.currentState!.validate()) {
-      final customer = Customer(
-        name: _nameController.text.trim(),
-        phone: _phoneController.text.trim(),
-      );
-
-      widget.onSave(customer);
-      Navigator.pop(context);
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _phoneController.dispose();
-    super.dispose();
   }
 }

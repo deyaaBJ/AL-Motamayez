@@ -1,4 +1,4 @@
-name: shopmate
+name: motamayez
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -28,25 +28,32 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  pdf: ^3.10.2
+  printing: ^5.11.1
   sqflite: ^2.2.7+1
   sqflite_common_ffi: ^2.2.1
   path: ^1.8.4
+  esc_pos_utils_plus: ^2.0.3
+  flutter_launcher_icons: any
 
   path_provider: ^2.1.3
   intl: ^0.19.0
   provider: ^6.1.2
   window_size: ^0.1.0
   fl_chart: ^0.65.0
-
-  archive: ^3.3.0
+  http: ^1.6.0
+  google_fonts: ^6.1.0
+  open_filex: ^4.2.1 
+  cron: ^0.3.0
+  window_manager: ^0.3.3
+  shared_preferences: ^2.2.2
+  archive: ^3.4.10
   
  
   
   # لتخزين الـ token
-  shared_preferences: ^2.2.0
   
-  # للطلبات HTTP
-  http: ^0.13.6  # أضف هذا
+  
 
 
 
@@ -59,19 +66,21 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  file_picker: ^10.3.8
+  flutter:
+    sdk: flutter
 
 dev_dependencies:
-  flutter_launcher_icons: 0.14.4
-
   flutter_test:
     sdk: flutter
+  flutter_lints: ^5.0.0
+
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -110,17 +119,26 @@ flutter:
   
   
   fonts:
-    - family: Poppins
-      fonts:
-        - asset: fonts/Poppins-Regular.ttf
-        - asset: fonts/Poppins-Bold.ttf
-          weight: 700
+  - family: Poppins
+    fonts:
+      - asset: fonts/Poppins-Regular.ttf
+      - asset: fonts/Poppins-Bold.ttf
+        weight: 700
 
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
-  #
+  - family: Cairo
+    fonts:
+      - asset: fonts/Cairo-Regular.ttf
+
+  - family: Amiri
+    fonts:
+      - asset: fonts/Amiri-Regular.ttf
+      - asset: fonts/Amiri-Bold.ttf
+        weight: 700
+      - asset: fonts/Amiri-Italic.ttf
+        style: italic
+      - asset: fonts/Amiri-BoldItalic.ttf
+        weight: 700
+        style: italic
+
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package

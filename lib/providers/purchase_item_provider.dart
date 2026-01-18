@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
+import 'dart:developer';
 
 class PurchaseItemProvider with ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
@@ -45,15 +46,19 @@ class PurchaseItemProvider with ChangeNotifier {
 
       // حساب متوسط التكلفة الجديد
       final newCost =
-          totalQty > 0 ? (totalOldCost + totalNewCost) / totalQty : costPrice;
+          totalQty > 0
+              ? ((totalOldCost + totalNewCost) / totalQty).toStringAsFixed(
+                2,
+              ) // خانتين بعد الفاصلة
+              : costPrice.toStringAsFixed(2);
 
-      // 4️⃣ تحديث المنتج - زيادة المخزون وتحديث التكلفة
+      // تحويله لـ double قبل التحديث
+      final newCostDouble = double.parse(newCost);
+
+      // تحديث المنتج
       await txn.update(
         'products',
-        {
-          'quantity': oldQty + quantity, // زيادة الكمية
-          'cost_price': newCost, // تحديث متوسط التكلفة
-        },
+        {'quantity': oldQty + quantity, 'cost_price': newCostDouble},
         where: 'id = ?',
         whereArgs: [productId],
       );
@@ -72,7 +77,7 @@ class PurchaseItemProvider with ChangeNotifier {
         whereArgs: [purchaseId],
       );
     } catch (e) {
-      print('Error getting purchase items: $e');
+      log('Error getting purchase items: $e');
       return [];
     }
   }
@@ -134,7 +139,7 @@ class PurchaseItemProvider with ChangeNotifier {
         [purchaseId],
       );
     } catch (e) {
-      print('Error getting purchase items with products: $e');
+      log('Error getting purchase items with products: $e');
       return [];
     }
   }

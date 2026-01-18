@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:shopmate/models/cart_item.dart';
-import 'package:shopmate/models/product.dart';
-import 'package:shopmate/models/product_unit.dart';
-import 'package:shopmate/models/sale.dart';
-import 'package:shopmate/models/sale_item.dart';
-import 'package:shopmate/utils/unit_translator.dart';
+import 'package:motamayez/models/cart_item.dart';
+import 'package:motamayez/models/product.dart';
+import 'package:motamayez/models/product_unit.dart';
+import 'package:motamayez/models/sale.dart';
+import 'package:motamayez/models/sale_item.dart';
+import 'package:motamayez/utils/unit_translator.dart';
 import 'package:sqflite/sqflite.dart';
 import '../db/db_helper.dart';
+import 'dart:developer';
 
 class ProductProvider with ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
@@ -117,7 +118,7 @@ class ProductProvider with ChangeNotifier {
       notifyListeners();
       return newProducts;
     } catch (e) {
-      print('Error loading products: $e');
+      log('Error loading products: $e');
       return [];
     }
   }
@@ -139,7 +140,7 @@ class ProductProvider with ChangeNotifier {
 
       return result.map(Product.fromMap).toList();
     } catch (e) {
-      print('Error searching products: $e');
+      log('Error searching products: $e');
       return [];
     }
   }
@@ -157,7 +158,7 @@ class ProductProvider with ChangeNotifier {
 
       return result.map((map) => Product.fromMap(map)).toList();
     } catch (e) {
-      print('Error searching by barcode: $e');
+      log('Error searching by barcode: $e');
       return [];
     }
   }
@@ -175,7 +176,7 @@ class ProductProvider with ChangeNotifier {
 
       return result.map((map) => ProductUnit.fromMap(map)).toList();
     } catch (e) {
-      print('Error searching unit by barcode: $e');
+      log('Error searching unit by barcode: $e');
       return [];
     }
   }
@@ -201,7 +202,7 @@ class ProductProvider with ChangeNotifier {
       final units = result.map((map) => ProductUnit.fromMap(map)).toList();
       return _removeDuplicateUnits(units);
     } catch (e) {
-      print('Error getting product units: $e');
+      log('Error getting product units: $e');
       return [];
     }
   }
@@ -239,20 +240,71 @@ class ProductProvider with ChangeNotifier {
   Future<void> addProduct(Product product) async {
     final db = await _dbHelper.db;
 
+    // حماية القيم من NaN
+    final safeQuantity = product.quantity.isNaN ? 0.0 : product.quantity;
+    final safeCostPrice = product.costPrice.isNaN ? 0.0 : product.costPrice;
+    final safePrice = product.price.isNaN ? 0.0 : product.price;
+
+    // نحدد إذا المنتج عنده باركود
+    final hasBarcode = product.barcode != null && product.barcode!.isNotEmpty;
+
+    if (hasBarcode) {
+      // تحقق إذا المنتج موجود مسبقًا حسب الباركود
+      final existing = await db.query(
+        'products',
+        where: 'barcode = ?',
+        whereArgs: [product.barcode],
+      );
+
+      if (existing.isNotEmpty) {
+        // المنتج موجود مسبقًا → تحديثه
+        final oldProduct = existing.first;
+        final oldQuantity = (oldProduct['quantity'] as num?)?.toDouble() ?? 0.0;
+        final oldCostPrice =
+            (oldProduct['cost_price'] as num?)?.toDouble() ?? 0.0;
+
+        final newQuantity = oldQuantity + safeQuantity;
+
+        double newCostPrice;
+        if (newQuantity == 0) {
+          newCostPrice = 0.0;
+        } else {
+          newCostPrice =
+              ((oldQuantity * oldCostPrice) + (safeQuantity * safeCostPrice)) /
+              newQuantity;
+        }
+
+        final newCostPriceFixed = double.parse(newCostPrice.toStringAsFixed(2));
+
+        await db.update(
+          'products',
+          {
+            'quantity': newQuantity,
+            'cost_price': newCostPriceFixed,
+            'price': safePrice,
+          },
+          where: 'id = ?',
+          whereArgs: [oldProduct['id']],
+        );
+        return; // خلصنا التحديث
+      }
+    }
+
+    // إضافة منتج جديد سواء عنده باركود أو لا
     final productMap = {
       'name': product.name,
-      'barcode': product.barcode,
+      'barcode': hasBarcode ? product.barcode : null,
       'base_unit': product.baseUnit,
-      'price': product.price,
-      'quantity': product.quantity,
-      'cost_price': product.costPrice,
+      'price': safePrice,
+      'quantity': safeQuantity,
+      'cost_price': safeCostPrice,
+      'added_date': product.addedDate,
     };
 
-    final id = await db.insert('products', productMap);
+    await db.insert('products', productMap);
 
     // إعادة تحميل البيانات
     await loadProducts(reset: true);
-
     notifyListeners();
   }
 
@@ -311,7 +363,7 @@ class ProductProvider with ChangeNotifier {
 
     if (userRole == 'tax') {
       showForTax = 1;
-      print('🎯 مستخدم ضريبي - الفاتورة مضمنة بالضرائب');
+      log('🎯 مستخدم ضريبي - الفاتورة مضمنة بالضرائب');
     } else {
       final settings = await db.query('settings', limit: 1);
       if (settings.isNotEmpty) {
@@ -326,7 +378,7 @@ class ProductProvider with ChangeNotifier {
       } else {
         showForTax = 0;
       }
-      print('🎯 إعداد افتراضي - showForTax: $showForTax');
+      log('🎯 إعداد افتراضي - showForTax: $showForTax');
     }
 
     // التحقق من الكميات قبل بدء المعاملة
@@ -385,7 +437,7 @@ class ProductProvider with ChangeNotifier {
       // 2️⃣ إضافة العناصر المرتبطة في sale_items
       for (var item in cartItems) {
         final product = item.product;
-        final double costPrice = product.costPrice ?? 0.0;
+        final double costPrice = product.costPrice;
 
         // استخدام سعر الوحدة المختارة إذا كانت موجودة
         double actualPrice = item.unitPrice;
@@ -441,7 +493,7 @@ class ProductProvider with ChangeNotifier {
           [quantityToDeduct, product.id],
         );
 
-        print(
+        log(
           '📦 تم خصم ${quantityToDeduct.toStringAsFixed(2)} ${product.baseUnit} من منتج ${product.name}',
         );
       }
@@ -454,10 +506,10 @@ class ProductProvider with ChangeNotifier {
         whereArgs: [saleId],
       );
 
-      print('💰 إجمالي الربح في الفاتورة: $totalProfit');
+      log('💰 إجمالي الربح في الفاتورة: $totalProfit');
     });
 
-    print('✅ تم إضافة الفاتورة بنجاح - showForTax: $showForTax');
+    log('✅ تم إضافة الفاتورة بنجاح - showForTax: $showForTax');
     notifyListeners();
   }
 
@@ -480,7 +532,7 @@ class ProductProvider with ChangeNotifier {
       final product = Product.fromMap(result.first);
       return product;
     } catch (e) {
-      print('Error getting product by ID: $e');
+      log('Error getting product by ID: $e');
       return null;
     }
   }
@@ -496,7 +548,7 @@ class ProductProvider with ChangeNotifier {
       );
       return result.map((map) => Product.fromMap(map)).toList();
     } catch (e) {
-      print('Error searching products by name: $e');
+      log('Error searching products by name: $e');
       return [];
     }
   }
@@ -512,7 +564,7 @@ class ProductProvider with ChangeNotifier {
       );
       return result.map((map) => ProductUnit.fromMap(map)).toList();
     } catch (e) {
-      print('Error searching product units by name: $e');
+      log('Error searching product units by name: $e');
       return [];
     }
   }
@@ -528,7 +580,7 @@ class ProductProvider with ChangeNotifier {
 
       return maps.map((map) => SaleItem.fromMap(map)).toList();
     } catch (e) {
-      print('Error getting sale items: $e');
+      log('Error getting sale items: $e');
       return [];
     }
   }
@@ -617,7 +669,7 @@ class ProductProvider with ChangeNotifier {
         if (item.quantity == 0) continue;
 
         final product = item.product;
-        final double costPrice = product.costPrice ?? 0.0;
+        final double costPrice = product.costPrice;
         double actualPrice = item.selectedUnit?.sellPrice ?? product.price;
         int? unitId = item.selectedUnit?.id;
 
@@ -696,7 +748,7 @@ class ProductProvider with ChangeNotifier {
   // الدوال المساعدة التي تعمل مع Database فقط (ليس Transaction)
   Future<int> _determineShowForTax(String userRole, Database db) async {
     if (userRole == 'tax') {
-      print('🎯 مستخدم ضريبي - الفاتورة مضمنة بالضرائب');
+      log('🎯 مستخدم ضريبي - الفاتورة مضمنة بالضرائب');
       return 1;
     } else {
       final settings = await db.query('settings', limit: 1);

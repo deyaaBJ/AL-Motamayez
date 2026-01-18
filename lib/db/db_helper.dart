@@ -1,7 +1,7 @@
-import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'dart:developer';
 
 class DBHelper {
   static Database? _db;
@@ -23,7 +23,7 @@ class DBHelper {
     String folderPath = join(Directory.current.path, 'data');
     Directory(folderPath).createSync(recursive: true);
 
-    String path = join(folderPath, 'shopmate.db');
+    String path = join(folderPath, 'motamayez.db');
 
     Database database = await openDatabase(
       path,
@@ -108,9 +108,9 @@ class DBHelper {
         'CREATE INDEX IF NOT EXISTS idx_supplier_transactions_date ON supplier_transactions (date)',
       );
 
-      print('✅ تم إنشاء الفهارس بنجاح!');
+      log('✅ تم إنشاء الفهارس بنجاح!');
     } catch (e) {
-      print('❌ خطأ في إنشاء الفهارس: $e');
+      log('❌ خطأ في إنشاء الفهارس: $e');
     }
   }
 
@@ -167,7 +167,7 @@ class DBHelper {
       WHERE sale_id NOT IN (SELECT id FROM sales_archive);
     ''');
     } catch (e) {
-      print('❌ خطأ في أرشفة الفواتير: $e');
+      log('❌ خطأ في أرشفة الفواتير: $e');
     }
   }
 
@@ -199,16 +199,28 @@ class DBHelper {
       );
     ''');
 
+    await db.execute('''
+      CREATE TABLE expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,            -- كهرباء، ماء، صيانة...
+      amount REAL NOT NULL,
+      date TEXT NOT NULL,
+      payment_type TEXT,             -- cash / transfer / check
+      note TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+        ''');
+
     // جدول المستخدمين
     await db.execute('''
-      CREATE TABLE users(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        role TEXT NOT NULL,
-        google_drive_token TEXT
-      );
+    CREATE TABLE users(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      role TEXT NOT NULL,
+      phone TEXT
+      )
     ''');
 
     // إضافة مستخدمين افتراضيين
@@ -406,7 +418,11 @@ class DBHelper {
         lowStockThreshold INTEGER,
         marketName TEXT,
         defaultTaxSetting INTEGER NOT NULL DEFAULT 0,
-        currency TEXT
+        currency TEXT,
+        printerPort INTEGER,
+        printerIp TEXT,
+        paperSize TEXT,
+        numberOfCopies INTEGER DEFAULT 1
       );
     ''');
 
@@ -415,12 +431,14 @@ class DBHelper {
       'marketName': null,
       'defaultTaxSetting': 0,
       'currency': 'ILS',
+      'printerPort': '9100',
+      'printerIp': null,
+      'paperSize': '58mm',
+      'numberOfCopies': 1,
     });
 
     // إنشاء الفهارس بعد إنشاء الجداول
     await _createIndexes(db);
-
-    print('✅ تم إنشاء الجداول والفهارس بنجاح!');
   }
 
   // دالة مساعدة للتحقق من وجود فهرس

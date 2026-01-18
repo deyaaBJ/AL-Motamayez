@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:motamayez/providers/settings_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/components/base_layout.dart';
-import 'package:shopmate/providers/purchase_invoice_provider.dart';
-import 'package:shopmate/screens/purchase_invoice_details_page.dart';
+import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/providers/purchase_invoice_provider.dart';
+import 'package:motamayez/screens/purchase_invoice_details_page.dart';
+import 'dart:developer';
 
 class PurchaseInvoicesListPage extends StatefulWidget {
   const PurchaseInvoicesListPage({super.key});
@@ -25,7 +27,9 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
 
   // دالة لتنسيق العملة
   String _formatCurrency(double amount) {
-    return '${amount.toStringAsFixed(2)} د.إ';
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
+    return '${amount.toStringAsFixed(2)} $currencyName';
   }
 
   // دالة لتنسيق التاريخ
@@ -47,29 +51,19 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
   @override
   void initState() {
     super.initState();
-    _resetSearch();
+
+    // تأجيل إعادة تعيين البحث حتى تكتمل عملية البناء
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _resetSearch();
+      }
+    });
 
     // إعداد listener للتمرير
     _scrollController.addListener(_scrollListener);
 
     // إعداد listener لحقل البحث
     _searchController.addListener(_onSearchChanged);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    // الحصول على Provider من context
-    final provider = Provider.of<PurchaseInvoiceProvider>(
-      context,
-      listen: false,
-    );
-
-    // تحميل الفواتير أول مرة فقط إذا لم تكن محملة
-    if (provider.invoices.isEmpty && !provider.isLoading) {
-      _loadInvoices(provider);
-    }
   }
 
   @override
@@ -80,6 +74,26 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // تأجيل تحميل الفواتير حتى تكتمل عملية البناء
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final provider = Provider.of<PurchaseInvoiceProvider>(
+        context,
+        listen: false,
+      );
+
+      // تحميل الفواتير أول مرة فقط إذا لم تكن محملة
+      if (provider.invoices.isEmpty && !provider.isLoading) {
+        _loadInvoices(provider);
+      }
+    });
   }
 
   void _scrollListener() {
@@ -129,7 +143,7 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
       await provider.refreshInvoices();
     } catch (e) {
       if (mounted) {
-        print('خطأ في تحميل الفواتير: $e');
+        log('خطأ في تحميل الفواتير: $e');
         _showSnackBar('خطأ في تحميل الفواتير: ${e.toString()}', Colors.red);
       }
     }
@@ -140,7 +154,7 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
 
     // إذا كان نفس البحث السابق، تخطي
     if (query == _lastSearchQuery) {
-      print('⏭️ نفس البحث السابق، تخطي');
+      log('⏭️ نفس البحث السابق، تخطي');
       return;
     }
 
@@ -151,13 +165,13 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
       listen: false,
     );
 
-    print('🚀 تنفيذ البحث: "$query"');
+    log('🚀 تنفيذ البحث: "$query"');
 
     try {
       await provider.searchInvoices(query);
     } catch (e) {
       if (mounted) {
-        print('❌ خطأ في البحث: $e');
+        log('❌ خطأ في البحث: $e');
         _showSnackBar('خطأ في البحث: ${e.toString()}', Colors.red);
       }
     }
@@ -168,7 +182,7 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
       await provider.loadMoreInvoices();
     } catch (e) {
       if (mounted) {
-        print('خطأ في تحميل المزيد: $e');
+        log('خطأ في تحميل المزيد: $e');
         _showSnackBar('خطأ في تحميل المزيد: ${e.toString()}', Colors.red);
       }
     }
@@ -180,13 +194,18 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
     _lastSearchQuery = '';
     setState(() => _searchQuery = '');
 
-    final provider = Provider.of<PurchaseInvoiceProvider>(
-      context,
-      listen: false,
-    );
+    // تأجيل التنفيذ حتى تكتمل عملية البناء
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
 
-    // إعادة تعيين البحث
-    await provider.resetSearch();
+      final provider = Provider.of<PurchaseInvoiceProvider>(
+        context,
+        listen: false,
+      );
+
+      // إعادة تعيين البحث
+      await provider.resetSearch();
+    });
   }
 
   void _showSnackBar(String message, Color color) {
@@ -267,14 +286,6 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
                   backgroundColor: Colors.grey.shade100,
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.bug_report),
-                onPressed: _debugData,
-                tooltip: 'فحص البيانات',
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.orange.shade100,
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -339,20 +350,24 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
 
   // دالة لفحص البيانات
   Future<void> _debugData() async {
-    final provider = Provider.of<PurchaseInvoiceProvider>(
-      context,
-      listen: false,
-    );
+    // تأجيل التنفيذ حتى تكتمل عملية البناء
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final provider = Provider.of<PurchaseInvoiceProvider>(
+        context,
+        listen: false,
+      );
 
-    await provider.testSearch('1');
-    await Future.delayed(const Duration(seconds: 1));
+      log('\n1. البحث برقم "1":');
+      await provider.testSearch('1');
+      await Future.delayed(const Duration(seconds: 1));
 
-    print('\n2. البحث باسم "مورد":');
-    await provider.testSearch('مورد');
-    await Future.delayed(const Duration(seconds: 1));
+      log('\n2. البحث باسم "مورد":');
+      await provider.testSearch('مورد');
+      await Future.delayed(const Duration(seconds: 1));
 
-    print('\n3. إعادة تحميل الكل:');
-    await provider.refreshInvoices();
+      log('\n3. إعادة تحميل الكل:');
+      await provider.refreshInvoices();
+    });
   }
 
   Widget _buildHeaderCell(String text) {
@@ -820,7 +835,7 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: BaseLayout(
-        currentPage: 'فواتير الشراء',
+        currentPage: 'الفواتير',
         showAppBar: false,
         child: Scaffold(
           body: Consumer<PurchaseInvoiceProvider>(
@@ -833,17 +848,20 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
               );
             },
           ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/purchase-invoice');
-            },
-            backgroundColor: Colors.blue,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(50),
+          floatingActionButton: Hero(
+            tag: 'purchase_invoices_fab',
+            child: FloatingActionButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/purchase-invoice');
+              },
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(50),
+              ),
+              elevation: 4,
+              child: const Icon(Icons.add, size: 28),
             ),
-            elevation: 4,
-            child: const Icon(Icons.add, size: 28),
           ),
         ),
       ),

@@ -1,11 +1,11 @@
 // widgets/sale_details_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/helpers/helpers.dart';
-import 'package:shopmate/models/customer.dart';
-import 'package:shopmate/providers/auth_provider.dart';
-import 'package:shopmate/providers/settings_provider.dart';
-import 'package:shopmate/widgets/customer_selection_dialog.dart';
+import 'package:motamayez/helpers/helpers.dart';
+import 'package:motamayez/models/customer.dart';
+import 'package:motamayez/providers/auth_provider.dart';
+import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/widgets/customer_selection_dialog.dart';
 import '../models/sale.dart';
 import '../providers/sales_provider.dart';
 
@@ -528,7 +528,7 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
                 ),
               ),
               // Items
-              ...items.map((item) => _buildProductRow(item)).toList(),
+              ...items.map((item) => _buildProductRow(item)),
             ],
           ),
         ),
@@ -538,7 +538,6 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
 
   Widget _buildProductRow(Map<String, dynamic> item) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final currencyName = settings.currencyName;
 
     final productName = item['product_name'] ?? 'منتج';
     final quantity = item['quantity'] as double;
@@ -607,7 +606,6 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
 
   Widget _buildFinancialSummary(Sale sale) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final currencyName = settings.currencyName;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -627,7 +625,8 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
           _buildSummaryRow(
             label: 'إجمالي الربح',
             value:
-                '${sale.totalProfit.toStringAsFixed(0)} ${settings.currencyName}',
+                '${sale.totalProfit.toStringAsFixed(2)} ${settings.currencyName}',
+
             valueColor: Colors.green[700]!,
           ),
         ],

@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/components/base_layout.dart';
-import 'package:shopmate/components/posPageCompoments/custom_app_bar.dart';
-import 'package:shopmate/components/posPageCompoments/search_section.dart';
-import 'package:shopmate/helpers/helpers.dart';
-import 'package:shopmate/models/cart_item.dart';
-import 'package:shopmate/models/customer.dart';
-import 'package:shopmate/models/product.dart';
-import 'package:shopmate/models/product_unit.dart';
-import 'package:shopmate/models/sale.dart';
-import 'package:shopmate/models/sale_item.dart';
-import 'package:shopmate/providers/DebtProvider.dart';
-import 'package:shopmate/providers/product_provider.dart';
-import 'package:shopmate/providers/customer_provider.dart';
-import 'package:shopmate/providers/auth_provider.dart';
-import 'package:shopmate/widgets/cart_item_widget.dart';
-import 'package:shopmate/widgets/table_header_widget.dart';
-import 'package:shopmate/widgets/customer_form_dialog.dart';
+import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/components/posPageCompoments/search_section.dart';
+import 'package:motamayez/helpers/helpers.dart';
+import 'package:motamayez/models/cart_item.dart';
+import 'package:motamayez/models/customer.dart';
+import 'package:motamayez/models/product.dart';
+import 'package:motamayez/models/product_unit.dart';
+import 'package:motamayez/models/sale.dart';
+import 'package:motamayez/models/sale_item.dart';
+import 'package:motamayez/providers/DebtProvider.dart';
+import 'package:motamayez/providers/product_provider.dart';
+import 'package:motamayez/providers/customer_provider.dart';
+import 'package:motamayez/providers/auth_provider.dart';
+import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/services/thermal_receipt_printer.dart';
+import 'package:motamayez/widgets/cart_item_widget.dart';
+import 'package:motamayez/widgets/table_header_widget.dart';
+import 'package:motamayez/widgets/customer_form_dialog.dart';
+import 'dart:developer';
 
 class PosScreen extends StatefulWidget {
   final Sale? existingSale;
@@ -35,10 +37,14 @@ class _PosScreenState extends State<PosScreen>
 
   final TextEditingController _searchController = TextEditingController();
   final List<CartItem> _cartItems = [];
-  double _totalAmount = 0.0;
+  double _totalAmount = 0.0; // مجموع العناصر
+  double _finalAmount = 0.0; // المجموع النهائي بعد التعديل
+  bool _isTotalModified = false; // هل تم تعديل المجموع؟
+  final TextEditingController _totalEditorController = TextEditingController();
+
   List<dynamic> _searchResults = [];
   bool _showSearchResults = false;
-  FocusNode _searchFocusNode = FocusNode();
+  final FocusNode _searchFocusNode = FocusNode();
   String _searchType = 'product';
   bool _isSearching = false;
   final ProductProvider _provider = ProductProvider();
@@ -62,7 +68,6 @@ class _PosScreenState extends State<PosScreen>
   void didUpdateWidget(covariant PosScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // منع إعادة التحميل إذا تغيرت الـ widget
     if (oldWidget.existingSale?.id != widget.existingSale?.id &&
         widget.existingSale != null &&
         !_isSaleLoaded) {
@@ -74,12 +79,10 @@ class _PosScreenState extends State<PosScreen>
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _totalEditorController.dispose();
     super.dispose();
   }
 
-  // دالة محسنة لتحميل الفاتورة الموجودة
-  // دالة محسنة لتحميل الفاتورة الموجودة
-  // دالة محسنة لتحميل الفاتورة الموجودة
   Future<void> _loadExistingSale(Sale sale) async {
     if (_isLoading || _isSaleLoaded) return;
 
@@ -88,31 +91,25 @@ class _PosScreenState extends State<PosScreen>
     try {
       _originalSale = sale;
 
-      // جلب عناصر الفاتورة من قاعدة البيانات
       final List<SaleItem> saleItems = await _provider.getSaleItems(sale.id);
 
-      print('🔄 جاري تحميل ${saleItems.length} عنصر من الفاتورة #${sale.id}');
+      log('🔄 جاري تحميل ${saleItems.length} عنصر من الفاتورة #${sale.id}');
 
-      // مسح القائمة الحالية أولاً
       _cartItems.clear();
 
       for (final saleItem in saleItems) {
         try {
-          // جلب بيانات المنتج
           final product = await _provider.getProductById(saleItem.productId);
           if (product != null) {
-            // جلب جميع الوحدات المتاحة
             List<ProductUnit> units = [];
             if (product.id != null) {
               units = await _provider.getProductUnits(product.id!);
               units = _removeDuplicateUnits(units);
             }
 
-            // تحديد الوحدة المختارة من saleItem
             ProductUnit? selectedUnit;
 
             if (saleItem.unitId != null && units.isNotEmpty) {
-              // البحث عن الوحدة المطابقة بالـ ID
               for (final unit in units) {
                 if (unit.id == saleItem.unitId) {
                   selectedUnit = unit;
@@ -120,25 +117,18 @@ class _PosScreenState extends State<PosScreen>
                 }
               }
             }
-            // إذا كان unitId هو null، فهذا يعني الوحدة الأساسية
 
-            // إنشاء CartItem من SaleItem
             final cartItem = CartItem(
               product: product,
               quantity: saleItem.quantity,
               availableUnits: units,
-              selectedUnit: selectedUnit, // سيكون null للوحدة الأساسية
+              selectedUnit: selectedUnit,
             );
 
             _cartItems.add(cartItem);
-            print(
-              '✅ تم إضافة ${product.name} بكمية ${cartItem.quantity} | الوحدة: ${selectedUnit?.unitName ?? "أساسية"}',
-            );
-          } else {
-            print('⚠️ المنتج غير موجود: ${saleItem.productId}');
           }
         } catch (e) {
-          print('❌ خطأ في تحميل عنصر الفاتورة: $e');
+          log('❌ خطأ في تحميل عنصر الفاتورة: $e');
         }
       }
 
@@ -147,27 +137,10 @@ class _PosScreenState extends State<PosScreen>
           _calculateTotal();
           _isSaleLoaded = true;
         });
-
-        if (_cartItems.isEmpty) {
-          showAppToast(
-            context,
-            'لم يتم العثور على عناصر في الفاتورة',
-            ToastType.warning,
-          );
-        } else {
-          showAppToast(
-            context,
-            'تم تحميل ${_cartItems.length} عنصر من الفاتورة',
-            ToastType.success,
-          );
-        }
       }
     } catch (e) {
       _isSaleLoaded = false;
-      print('❌ خطأ في تحميل الفاتورة: $e');
-      if (mounted) {
-        showAppToast(context, 'خطأ في تحميل الفاتورة: $e', ToastType.error);
-      }
+      log('❌ خطأ في تحميل الفاتورة: $e');
     } finally {
       _isLoading = false;
     }
@@ -176,28 +149,29 @@ class _PosScreenState extends State<PosScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final settings = Provider.of<SettingsProvider>(context);
 
     return Directionality(
-      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      textDirection: TextDirection.rtl,
       child: BaseLayout(
-        currentPage: '', // اسم الصفحة للسايدبار
+        currentPage: '',
         showAppBar: true,
         title: 'نقاط البيع',
         actions: [
           IconButton(
             onPressed: () {
-              // أي عملية تحديث أو إعادة تحميل
+              setState(() {
+                _calculateTotal();
+              });
             },
             icon: const Icon(Icons.refresh),
           ),
         ],
-        floatingActionButton: null, // أو ضع FAB إذا احتجت
+        floatingActionButton: null,
         child: Column(
           children: [
-            // عرض معلومات الوضع الحالي
             if (widget.isEditMode) _buildModeBanner(),
 
-            // قسم البحث
             SearchSection(
               searchController: _searchController,
               searchFocusNode: _searchFocusNode,
@@ -218,21 +192,17 @@ class _PosScreenState extends State<PosScreen>
               },
             ),
 
-            // نتائج البحث
             if (_showSearchResults) _buildSearchResults(),
 
-            // جدول العربة أو المبيعات
             Expanded(child: _buildCartTable()),
 
-            // إجمالي المبيعات والأزرار
-            _buildTotalAndButtons(),
+            _buildTotalAndButtons(settings),
           ],
         ),
       ),
     );
   }
 
-  // بانر يوضح وضع التعديل أو الإرجاع
   Widget _buildModeBanner() {
     return Container(
       width: double.infinity,
@@ -241,11 +211,11 @@ class _PosScreenState extends State<PosScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.edit, color: Colors.blue, size: 20),
+          const Icon(Icons.edit, color: Colors.blue, size: 20),
           const SizedBox(width: 8),
           Text(
             'وضع التعديل - الفاتورة #${_originalSale?.id}',
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
               color: Colors.blue,
@@ -375,7 +345,7 @@ class _PosScreenState extends State<PosScreen>
             style: const TextStyle(fontSize: 10),
           ),
           Text(
-            'سعر: ₪${product.price.toStringAsFixed(2)} | مخزون: ${product.quantity}',
+            'سعر: ${_getCurrency()}${product.price.toStringAsFixed(2)} | مخزون: ${product.quantity}',
             style: const TextStyle(fontSize: 10),
           ),
         ],
@@ -443,7 +413,7 @@ class _PosScreenState extends State<PosScreen>
                 style: const TextStyle(fontSize: 10),
               ),
               Text(
-                'سعر الوحدة: ₪${unit.sellPrice.toStringAsFixed(2)}',
+                'سعر الوحدة: ${_getCurrency()}${unit.sellPrice.toStringAsFixed(2)}',
                 style: const TextStyle(fontSize: 10),
               ),
             ],
@@ -476,7 +446,11 @@ class _PosScreenState extends State<PosScreen>
     );
   }
 
-  // الدوال المحسنة للبحث والإضافة
+  String _getCurrency() {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    return settings.currencyName;
+  }
+
   Future<void> _performSearch(String query) async {
     if (_isSearching || query.isEmpty) return;
 
@@ -488,57 +462,60 @@ class _PosScreenState extends State<PosScreen>
       final results = <dynamic>[];
       final trimmedQuery = query.trim();
 
-      // 🔥 أولاً: البحث في الوحدات عن طريق الباركود
-      final unitsByBarcode = await _provider.searchProductUnitsByBarcode(
-        trimmedQuery,
-      );
-      for (final unit in unitsByBarcode) {
-        final product = await _provider.getProductById(unit.productId);
-        if (product != null) {
-          results.add(unit);
-        }
-      }
+      // تحديد إذا البحث أرقام (باركود) أو نص (اسم)
+      final isBarcodeSearch = double.tryParse(trimmedQuery) != null;
 
-      // 🔥 ثانياً: البحث في المنتجات عن طريق الباركود
-      final productsByBarcode = await _provider.searchProductsByBarcode(
-        trimmedQuery,
-      );
-      for (final product in productsByBarcode) {
-        // التحقق من عدم تكرار المنتج إذا كانت وحدته مضافة
-        final isUnitAlreadyAdded = results.any(
-          (item) => item is ProductUnit && item.productId == product.id,
+      // 1️⃣ البحث بالـ units المرتبطة بالباركود
+      if (isBarcodeSearch) {
+        final unitsByBarcode = await _provider.searchProductUnitsByBarcode(
+          trimmedQuery,
         );
+        for (final unit in unitsByBarcode) {
+          final product = await _provider.getProductById(unit.productId);
+          if (product != null) {
+            results.add(unit);
+          }
+        }
 
-        if (!isUnitAlreadyAdded) {
-          results.add(product);
+        final productsByBarcode = await _provider.searchProductsByBarcode(
+          trimmedQuery,
+        );
+        for (final product in productsByBarcode) {
+          final isUnitAlreadyAdded = results.any(
+            (item) => item is ProductUnit && item.productId == product.id,
+          );
+          if (!isUnitAlreadyAdded) {
+            results.add(product);
+          }
         }
       }
 
-      // 🔥 ثالثاً: إذا كنا في وضع التعديل، نبحث عن المنتجات المضافة بالفعل
+      // 2️⃣ التحقق من العناصر الموجودة في الكارت
       if (widget.isEditMode && _cartItems.isNotEmpty) {
         for (final cartItem in _cartItems) {
-          if (cartItem.product.name.contains(trimmedQuery) ||
-              cartItem.product.barcode.contains(trimmedQuery)) {
-            // إضافة المنتج مع وحدته الحالية
+          final product = cartItem.product;
+
+          if ((!isBarcodeSearch && product.name.contains(trimmedQuery)) ||
+              (isBarcodeSearch &&
+                  product.barcode != null &&
+                  product.barcode!.contains(trimmedQuery))) {
             if (!results.any(
               (item) =>
-                  (item is Product && item.id == cartItem.product.id) ||
-                  (item is ProductUnit &&
-                      item.productId == cartItem.product.id),
+                  (item is Product && item.id == product.id) ||
+                  (item is ProductUnit && item.productId == product.id),
             )) {
-              // 🔥 نضيف الوحدة المختارة إذا كانت موجودة
               if (cartItem.selectedUnit != null) {
                 results.add(cartItem.selectedUnit!);
               } else {
-                results.add(cartItem.product);
+                results.add(product);
               }
             }
           }
         }
       }
 
-      // 🔥 رابعاً: البحث في المنتجات عن طريق الاسم
-      if (results.isEmpty && _searchType == 'product') {
+      // 3️⃣ البحث بالاسم لو النتائج فارغة أو إذا البحث نص
+      if ((!isBarcodeSearch || results.isEmpty) && _searchType == 'product') {
         final productsByName = await _provider.searchProductsByName(
           trimmedQuery,
         );
@@ -554,24 +531,19 @@ class _PosScreenState extends State<PosScreen>
       }
 
       if (!mounted) return;
+
       setState(() {
         _searchResults = results;
         _showSearchResults = results.isNotEmpty;
         _isSearching = false;
       });
     } catch (e) {
-      print('Error performing search: $e');
+      log('Error performing search: $e');
       if (!mounted) return;
       setState(() {
         _isSearching = false;
       });
     }
-  }
-
-  // دالة مساعدة للتحقق مما إذا كان النص رقميًا (باركود)
-  bool isNumeric(String s) {
-    if (s.isEmpty) return false;
-    return double.tryParse(s) != null;
   }
 
   void _handleEnterPressed(String query) async {
@@ -583,7 +555,6 @@ class _PosScreenState extends State<PosScreen>
       final firstResult = _searchResults.first;
 
       if (firstResult is ProductUnit) {
-        // إذا كان الباركود لوحدة
         final unit = firstResult;
         final product = await _provider.getProductById(unit.productId);
         if (product != null) {
@@ -591,16 +562,12 @@ class _PosScreenState extends State<PosScreen>
           _clearSearchAfterAction();
         }
       } else if (firstResult is Product) {
-        // إذا كان الباركود لمنتج
-
-        // 🔥 في وضع التعديل، نتحقق إذا كان المنتج موجودًا بالفعل في السلة
         if (widget.isEditMode) {
           final existingItemIndex = _cartItems.indexWhere(
             (item) => item.product.id == firstResult.id,
           );
 
           if (existingItemIndex != -1) {
-            // إذا كان موجودًا، نزيد الكمية
             _updateQuantity(_cartItems[existingItemIndex], 1);
             _clearSearchAfterAction();
             return;
@@ -623,7 +590,7 @@ class _PosScreenState extends State<PosScreen>
   }
 
   void _addProductFromSearch(Product product) {
-    if (product.quantity == 1) {
+    if (product.quantity <= 0) {
       _showOutOfStockDialog(product.name);
       return;
     }
@@ -637,24 +604,20 @@ class _PosScreenState extends State<PosScreen>
       return;
     }
 
-    // 🔥 الحل: جلب جميع وحدات المنتج أولاً
     List<ProductUnit> allUnits = [];
     if (product.id != null) {
       allUnits = await _provider.getProductUnits(product.id!);
       allUnits = _removeDuplicateUnits(allUnits);
     }
 
-    // البحث عن العنصر الموجود في السلة (بنفس المنتج ونفس الوحدة)
     final existingItemIndex = _cartItems.indexWhere(
       (item) =>
           item.product.id == product.id && item.selectedUnit?.id == unit.id,
     );
 
     if (existingItemIndex != -1) {
-      // زيادة الكمية إذا كان موجودًا
       _updateQuantity(_cartItems[existingItemIndex], 1);
     } else {
-      // البحث عن الوحدة المطابقة في قائمة جميع الوحدات
       ProductUnit? matchingUnit;
       for (var u in allUnits) {
         if (u.id == unit.id) {
@@ -663,7 +626,6 @@ class _PosScreenState extends State<PosScreen>
         }
       }
 
-      // إذا لم نجد الوحدة في القائمة، نستخدم الوحدة التي جاءت من البحث
       matchingUnit ??= unit;
 
       setState(() {
@@ -671,8 +633,8 @@ class _PosScreenState extends State<PosScreen>
           CartItem(
             product: product,
             quantity: 1,
-            availableUnits: allUnits, // 🔥 هنا نضع جميع الوحدات
-            selectedUnit: matchingUnit, // 🔥 ونختار الوحدة المحددة
+            availableUnits: allUnits,
+            selectedUnit: matchingUnit,
           ),
         );
         _calculateTotal();
@@ -694,68 +656,15 @@ class _PosScreenState extends State<PosScreen>
     });
   }
 
-  Future<void> _addUnitToCartDirectly(ProductUnit unit, Product product) async {
-    try {
-      final units = await _provider.getProductUnits(product.id!);
-      final distinctUnits = _removeDuplicateUnits(units);
-
-      final existingItemIndex = _cartItems.indexWhere(
-        (item) => item.product.barcode == product.barcode,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        if (existingItemIndex != -1) {
-          _cartItems[existingItemIndex].selectedUnit = unit;
-        } else {
-          _cartItems.add(
-            CartItem(
-              product: product,
-              quantity: 1,
-              availableUnits: distinctUnits,
-              selectedUnit: unit,
-            ),
-          );
-        }
-        _calculateTotal();
-      });
-
-      if (!mounted) return;
-      showAppToast(
-        context,
-        'تم إضافة ${product.name} (${unit.unitName}) إلى السله',
-        ToastType.success,
-      );
-    } catch (e) {
-      print('Error adding unit to cart: $e');
-      if (!mounted) return;
-      showAppToast(context, 'خطأ: $e', ToastType.error);
-    }
-  }
-
-  // دالة مساعدة لإزالة التكرار من قائمة الوحدات
-  List<ProductUnit> _removeDuplicateUnits(List<ProductUnit> units) {
-    final seen = <int>{};
-    return units.where((unit) {
-      if (unit.id == null) return false;
-      if (seen.contains(unit.id)) return false;
-      seen.add(unit.id!);
-      return true;
-    }).toList();
-  }
-
   Future<void> _addProductToCartDirectly(Product product) async {
     try {
-      // جلب جميع الوحدات للمنتج
       List<ProductUnit> allUnits = [];
       if (product.id != null) {
         allUnits = await _provider.getProductUnits(product.id!);
         allUnits = _removeDuplicateUnits(allUnits);
       }
 
-      // 🔥 في وضع التعديل، نتحقق من طريقة الإضافة
       if (widget.isEditMode && _originalSale != null) {
-        // نحاول البحث عن الوحدة المستخدمة في الفاتورة الأصلية
         final saleItems = await _provider.getSaleItems(_originalSale!.id);
         SaleItem? existingSaleItem;
         try {
@@ -763,13 +672,12 @@ class _PosScreenState extends State<PosScreen>
             (item) => item.productId == product.id,
           );
         } catch (e) {
-          existingSaleItem = null; // لم يتم العثور
+          existingSaleItem = null;
         }
 
         ProductUnit? selectedUnit;
 
         if (existingSaleItem != null && existingSaleItem.unitId != null) {
-          // البحث عن الوحدة الأصلية
           for (final unit in allUnits) {
             if (unit.id == existingSaleItem.unitId) {
               selectedUnit = unit;
@@ -778,7 +686,6 @@ class _PosScreenState extends State<PosScreen>
           }
         }
 
-        // البحث عن العنصر الموجود
         final existingItemIndex = _cartItems.indexWhere(
           (item) =>
               item.product.id == product.id &&
@@ -795,14 +702,13 @@ class _PosScreenState extends State<PosScreen>
                 product: product,
                 quantity: 1,
                 availableUnits: allUnits,
-                selectedUnit: selectedUnit, // 🔥 نستخدم الوحدة الأصلية إن وجدت
+                selectedUnit: selectedUnit,
               ),
             );
           }
           _calculateTotal();
         });
       } else {
-        // 🔥 الوضع العادي
         final existingItemIndex = _cartItems.indexWhere(
           (item) => item.product.id == product.id && item.selectedUnit == null,
         );
@@ -817,7 +723,7 @@ class _PosScreenState extends State<PosScreen>
                 product: product,
                 quantity: 1,
                 availableUnits: allUnits,
-                selectedUnit: null, // الوحدة الأساسية
+                selectedUnit: null,
               ),
             );
           }
@@ -832,10 +738,20 @@ class _PosScreenState extends State<PosScreen>
         ToastType.success,
       );
     } catch (e) {
-      print('Error adding product to cart: $e');
+      log('Error adding product to cart: $e');
       if (!mounted) return;
       showAppToast(context, 'خطأ: $e', ToastType.error);
     }
+  }
+
+  List<ProductUnit> _removeDuplicateUnits(List<ProductUnit> units) {
+    final seen = <int>{};
+    return units.where((unit) {
+      if (unit.id == null) return false;
+      if (seen.contains(unit.id)) return false;
+      seen.add(unit.id!);
+      return true;
+    }).toList();
   }
 
   Widget _buildCartTable() {
@@ -863,22 +779,19 @@ class _PosScreenState extends State<PosScreen>
           child: Column(
             children: [
               const TableHeaderWidget(),
-              ..._cartItems
-                  .asMap()
-                  .entries
-                  .map(
-                    (entry) => CartItemWidget(
-                      key: ValueKey(
-                        'cart_item_${entry.key}_${entry.value.product.barcode}',
-                      ),
-                      item: entry.value,
-                      onQuantityChange:
-                          (item, change) => _updateQuantity(item, change),
-                      onRemove: _removeFromCart,
-                      onUnitChange: _updateSelectedUnit,
-                    ),
-                  )
-                  .toList(),
+              ..._cartItems.asMap().entries.map(
+                (entry) => CartItemWidget(
+                  key: ValueKey(
+                    'cart_item_${entry.key}_${entry.value.product.barcode}',
+                  ),
+                  item: entry.value,
+                  onQuantityChange:
+                      (item, change) => _updateQuantity(item, change),
+                  onRemove: _removeFromCart,
+                  onUnitChange: _updateSelectedUnit,
+                  onPriceChange: _updateItemPrice,
+                ),
+              ),
             ],
           ),
         ),
@@ -886,9 +799,7 @@ class _PosScreenState extends State<PosScreen>
     );
   }
 
-  Widget _buildTotalAndButtons() {
-    final isNegativeTotal = _totalAmount < 0;
-
+  Widget _buildTotalAndButtons(SettingsProvider settings) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -903,48 +814,96 @@ class _PosScreenState extends State<PosScreen>
       ),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-            decoration: BoxDecoration(
-              color:
-                  isNegativeTotal
-                      ? Colors.orange.withOpacity(0.1)
-                      : const Color(0xFFF8F5FF),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
+          // عرض المجموع النهائي مع إمكانية التعديل
+          GestureDetector(
+            onTap: () => _showTotalEditor(context, settings),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
                 color:
-                    isNegativeTotal ? Colors.orange : const Color(0xFFE1D4F7),
+                    _isTotalModified
+                        ? const Color(0xFFFFF8E1)
+                        : const Color(0xFFF8F5FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color:
+                      _isTotalModified
+                          ? Colors.orange
+                          : const Color(0xFFE1D4F7),
+                ),
+              ),
+              child: Column(
+                children: [
+                  if (_isTotalModified)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'مجموع العناصر:',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        Text(
+                          '${settings.currencyName} ${_totalAmount.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (_isTotalModified) const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _isTotalModified
+                            ? 'المجموع النهائي:'
+                            : 'المجموع الكلي:',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            '${settings.currencyName} ${_finalAmount.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color:
+                                  _isTotalModified
+                                      ? Colors.orange[800]
+                                      : const Color(0xFF8B5FBF),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.edit,
+                            size: 18,
+                            color: Color(0xFF6A3093),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  if (_isTotalModified)
+                    const Text(
+                      '(معدل)',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                ],
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'المجموع الكلي:',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color:
-                        isNegativeTotal
-                            ? Colors.orange
-                            : const Color(0xFF6A3093),
-                  ),
-                ),
-                Text(
-                  '₪${_totalAmount.abs().toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color:
-                        isNegativeTotal
-                            ? Colors.orange
-                            : const Color(0xFF8B5FBF),
-                  ),
-                ),
-              ],
-            ),
           ),
+
           const SizedBox(height: 16),
+
           Row(
             children: [
               if (widget.isEditMode) ...[
@@ -960,10 +919,10 @@ class _PosScreenState extends State<PosScreen>
               ],
               Expanded(
                 child: _buildActionButton(
-                  'طباعة',
-                  Icons.receipt,
-                  const Color(0xFF8B5FBF),
-                  _printInvoice,
+                  'البيع وطباعة الفاتورة',
+                  Icons.check_circle,
+                  const Color.fromARGB(255, 102, 76, 175),
+                  _openReceiptPreview, // هنا التغيير
                 ),
               ),
               if (!widget.isEditMode) ...[
@@ -1034,13 +993,162 @@ class _PosScreenState extends State<PosScreen>
     );
   }
 
+  // دالة لعرض محرر المجموع الكلي
+  void _showTotalEditor(BuildContext context, SettingsProvider settings) {
+    _totalEditorController.text = _finalAmount.toStringAsFixed(2);
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.edit, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('تعديل مجموع الفاتورة'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'مجموع العناصر: ${settings.currencyName} ${_totalAmount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _totalEditorController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'المجموع الجديد',
+                    suffixText: settings.currencyName,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.restore, size: 16),
+                        label: const Text('مجموع العناصر'),
+                        onPressed: () {
+                          _totalEditorController.text = _totalAmount
+                              .toStringAsFixed(2);
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.money_off, size: 16),
+                        label: const Text('مجاني'),
+                        onPressed: () {
+                          _totalEditorController.text = '0';
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final String value = _totalEditorController.text.trim();
+                  if (value.isNotEmpty) {
+                    double? newTotal = double.tryParse(value);
+                    if (newTotal != null && newTotal >= 0) {
+                      setState(() {
+                        _finalAmount = newTotal;
+                        _isTotalModified = (newTotal != _totalAmount);
+                      });
+                      Navigator.pop(context);
+
+                      if (newTotal == 0) {
+                        showAppToast(
+                          context,
+                          'تم تعيين الفاتورة إلى 0 (مجانية)',
+                          ToastType.success,
+                        );
+                      } else if (newTotal != _totalAmount) {
+                        showAppToast(
+                          context,
+                          'تم تعديل مجموع الفاتورة بنجاح',
+                          ToastType.success,
+                        );
+                      }
+                    } else {
+                      showAppToast(
+                        context,
+                        'الرجاء إدخال رقم صالح',
+                        ToastType.error,
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6A3093),
+                ),
+                child: const Text(
+                  'حفظ التغيير',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _calculateTotal() {
+    _totalAmount = _cartItems.fold(0.0, (sum, item) {
+      // ← التعديل الأهم هنا
+      double price =
+          item.customPrice ??
+          (item.selectedUnit?.sellPrice ?? item.product.price);
+
+      return sum + (price * item.quantity);
+    });
+
+    // إذا لم يتم تعديل المجموع النهائي يدويًا، يساوي مجموع العناصر
+    if (!_isTotalModified) {
+      _finalAmount = _totalAmount;
+    }
+
+    // مهم: إعادة رسم الشاشة بعد الحساب
+    if (mounted) setState(() {});
+  }
+
+  // Update total when price changes
+
   void _updateQuantity(CartItem item, double change) {
     if (!mounted) return;
     setState(() {
       item.quantity += change;
-      if (item.quantity == 0) {
+      if (item.quantity <= 0) {
         _cartItems.remove(item);
       }
+      _calculateTotal();
+    });
+  }
+
+  void _updateItemPrice(CartItem item, double? newPrice) {
+    if (!mounted) return;
+    setState(() {
+      item.setCustomPrice(newPrice);
       _calculateTotal();
     });
   }
@@ -1058,13 +1166,6 @@ class _PosScreenState extends State<PosScreen>
     setState(() {
       _cartItems.remove(item);
       _calculateTotal();
-    });
-  }
-
-  void _calculateTotal() {
-    _totalAmount = _cartItems.fold(0.0, (sum, item) {
-      double price = item.selectedUnit?.sellPrice ?? item.product.price;
-      return sum + (price * item.quantity);
     });
   }
 
@@ -1091,68 +1192,77 @@ class _PosScreenState extends State<PosScreen>
     );
   }
 
-  Future<void> _printInvoice() async =>
-      await _processSaleWithValidation(printInvoice: true);
+  Future<void> _openReceiptPreview() async {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final admins = await auth.getUsersByRole('admin');
+    final phone = admins.isNotEmpty ? admins.first['phone'] : null;
 
-  Future<void> _processSaleWithValidation({
-    bool printInvoice = false,
-    bool isDebtSale = false,
-  }) async {
-    _showSaleConfirmationDialog(printInvoice, isDebtSale);
-  }
+    if (_cartItems.isEmpty) {
+      showAppToast(context, 'السلة فارغة', ToastType.warning);
+      return;
+    }
 
-  void _showSaleConfirmationDialog(bool printInvoice, bool isDebtSale) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('تأكيد البيع'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('المجموع: ₪${_totalAmount.abs().toStringAsFixed(2)}'),
-                if (isDebtSale) const Text('نوع البيع: بيع مؤجل'),
-                if (printInvoice) const Text('سيتم طباعة الفاتورة'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('إلغاء'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _finalizeSale(printInvoice, isDebtSale);
-                },
-                child: Text('تأكيد البيع'),
-              ),
-            ],
-          ),
-    );
-  }
+    final printerIp = settings.printerIp;
+    if (printerIp == null || printerIp.isEmpty) {
+      showAppToast(
+        context,
+        'يرجى إعداد طابعة الفواتير في الإعدادات',
+        ToastType.warning,
+      );
+      return;
+    }
 
-  void _finalizeSale(bool printInvoice, bool isDebtSale) {
-    _clearCart();
-    showAppToast(
-      context,
-      'تم إتمام البيع ${isDebtSale ? 'المؤجل ' : ''}بنجاح',
-      ToastType.success,
-    );
+    try {
+      // احصل على اسم المتجر من الإعدادات أو استخدم اسم افتراضي
+      final marketName = settings.marketName ?? 'متجري';
+
+      // احصل على رقم الفاتورة إذا كان في وضع التعديل
+      int? receiptNumber;
+      if (widget.isEditMode && _originalSale != null) {
+        receiptNumber = _originalSale!.id;
+      }
+
+      await ThermalReceiptPrinter.printReceipt(
+        cartItems: _cartItems,
+        marketName: marketName,
+        adminPhone: phone,
+        totalAmount: _totalAmount,
+        finalAmount: _finalAmount,
+        isTotalModified: _isTotalModified,
+        dateTime: DateTime.now(),
+        receiptNumber: receiptNumber,
+        currency: settings.currencyName,
+        paperSize: settings.paperSize ?? '58mm',
+        printerIp: printerIp,
+        printerPort: settings.printerPort ?? 9100,
+      );
+
+      showAppToast(context, 'تم إرسال الفاتورة إلى الطابعة', ToastType.success);
+      _completeSale();
+    } catch (e) {
+      log('خطأ في الطباعة: $e');
+      showAppToast(
+        context,
+        'فشل في الطباعة: ${e.toString().replaceAll("Exception: ", "")}',
+        ToastType.error,
+      );
+    }
   }
 
   void _clearCart() {
     setState(() {
       _cartItems.clear();
       _totalAmount = 0.0;
+      _finalAmount = 0.0;
+      _isTotalModified = false;
+      _totalEditorController.clear();
     });
   }
 
-  // دالة جديدة للإرجاع أو التعديل
   Future<void> _completeReturnOrEdit() async {
     if (_cartItems.isEmpty) {
       showAppToast(context, 'السلة فارغة', ToastType.warning);
-
       return;
     }
 
@@ -1164,14 +1274,13 @@ class _PosScreenState extends State<PosScreen>
         await productProvider.updateSale(
           originalSale: _originalSale!,
           cartItems: _cartItems,
-          totalAmount: _totalAmount,
+          totalAmount: _finalAmount,
           userRole: auth.role ?? 'user',
         );
       }
 
       if (mounted) {
         showAppToast(context, 'تم تحديث الفاتورة بنجاح', ToastType.success);
-
         Navigator.pop(context);
       }
     } catch (e) {
@@ -1184,7 +1293,6 @@ class _PosScreenState extends State<PosScreen>
   void _completeSale() async {
     if (_cartItems.isEmpty) {
       showAppToast(context, 'السلة فارغة', ToastType.warning);
-
       return;
     }
 
@@ -1194,7 +1302,7 @@ class _PosScreenState extends State<PosScreen>
     try {
       await productProvider.addSale(
         cartItems: _cartItems,
-        totalAmount: _totalAmount,
+        totalAmount: _finalAmount,
         paymentType: 'cash',
         customerId: null,
         userRole: auth.role ?? 'user',
@@ -1202,7 +1310,6 @@ class _PosScreenState extends State<PosScreen>
 
       if (mounted) {
         showAppToast(context, 'تم إتمام البيع بنجاح', ToastType.success);
-
         _clearCart();
       }
     } catch (e) {
@@ -1227,22 +1334,16 @@ class _PosScreenState extends State<PosScreen>
 
     final customerProvider = context.read<CustomerProvider>();
 
-    // 1. أعِد تعيين الحالة أولاً
-    customerProvider.resetCustomers();
-
-    // 2. احمل العملاء من البداية
+    customerProvider.clearSearch();
     await customerProvider.fetchCustomers(reset: true);
 
     if (!mounted) return;
 
-    // 3. افتح الـ dialog مع التحقق من البيانات
     showDialog(
       context: context,
       builder: (context) => _buildCustomerSelectionDialog(),
     );
   }
-
-  // أضف هذه الدالة في CustomerProvider
 
   Widget _buildCustomerSelectionDialog() {
     return Consumer<CustomerProvider>(
@@ -1250,6 +1351,9 @@ class _PosScreenState extends State<PosScreen>
         final customers = customerProvider.displayedCustomers;
         final isLoading = customerProvider.isLoading;
         final hasMore = customerProvider.hasMore;
+
+        // متغير لمنع التحميل المتكرر
+        bool _isLoadingMore = false;
 
         return Dialog(
           shape: RoundedRectangleBorder(
@@ -1262,7 +1366,6 @@ class _PosScreenState extends State<PosScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ... العنوان
                 Row(
                   children: [
                     Container(
@@ -1286,54 +1389,108 @@ class _PosScreenState extends State<PosScreen>
                 ),
                 const SizedBox(height: 20),
 
-                // قائمة العملاء مع التحميل التدريجي
                 Expanded(
                   child: NotificationListener<ScrollNotification>(
                     onNotification: (notification) {
-                      if (notification is ScrollEndNotification &&
-                          notification.metrics.pixels ==
-                              notification.metrics.maxScrollExtent &&
-                          hasMore &&
-                          !isLoading) {
-                        // تحميل المزيد
-                        customerProvider.loadMoreCustomers();
+                      // استخدم ScrollUpdateNotification بدل ScrollEndNotification
+                      if (notification is ScrollUpdateNotification) {
+                        // تحقق إذا وصلنا لـ 90% من نهاية السكرول
+                        if (notification.metrics.pixels >=
+                                notification.metrics.maxScrollExtent * 0.9 &&
+                            hasMore &&
+                            !isLoading &&
+                            !_isLoadingMore) {
+                          _isLoadingMore = true;
+
+                          // تحميل المزيد
+                          customerProvider.loadMoreCustomers().then((_) {
+                            // إعادة تعيين بعد تأخير قصير
+                            Future.delayed(
+                              const Duration(milliseconds: 300),
+                              () {
+                                _isLoadingMore = false;
+                              },
+                            );
+                          });
+                        }
                       }
                       return false;
                     },
                     child:
-                        customers.isEmpty
+                        customers.isEmpty && !isLoading
                             ? const Center(
                               child: Text(
                                 'لا توجد عملاء',
                                 style: TextStyle(color: Colors.grey),
                               ),
                             )
-                            : ListView.builder(
-                              itemCount: customers.length + (hasMore ? 1 : 0),
-                              itemBuilder: (context, index) {
-                                if (index == customers.length) {
-                                  return const Padding(
-                                    padding: EdgeInsets.all(16),
+                            : Column(
+                              children: [
+                                Expanded(
+                                  child: ListView.builder(
+                                    // نضيف loader إذا كان في hasMore
+                                    itemCount:
+                                        customers.length +
+                                        (hasMore && customers.isNotEmpty
+                                            ? 1
+                                            : 0),
+                                    itemBuilder: (context, index) {
+                                      // إذا وصلنا لنهاية القائمة
+                                      if (index == customers.length) {
+                                        // نعرض loader فقط إذا كان في hasMore ولم يكن في تحميل
+                                        if (hasMore && !_isLoadingMore) {
+                                          return const Padding(
+                                            padding: EdgeInsets.all(16),
+                                            child: Center(
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            ),
+                                          );
+                                        } else if (_isLoadingMore) {
+                                          // إذا كان في تحميل، نعرض loader مختلف أو نختفي
+                                          return const SizedBox.shrink();
+                                        } else {
+                                          return const SizedBox.shrink();
+                                        }
+                                      }
+
+                                      final customer = customers[index];
+                                      return Material(
+                                        color: Colors.transparent,
+                                        child: ListTile(
+                                          leading: const Icon(
+                                            Icons.person,
+                                            color: Color(0xFF8B5FBF),
+                                          ),
+                                          title: Text(customer.name),
+                                          subtitle: Text(
+                                            customer.phone ?? 'بدون رقم',
+                                          ),
+                                          onTap: () {
+                                            Navigator.pop(context);
+                                            // إغلاق الديلوج أولاً ثم الانتقال
+                                            Future.delayed(
+                                              const Duration(milliseconds: 100),
+                                              () {
+                                                _finalizeSaleWithCustomer(
+                                                  customer,
+                                                );
+                                              },
+                                            );
+                                          },
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                                if (isLoading && customers.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.all(20),
                                     child: Center(
                                       child: CircularProgressIndicator(),
                                     ),
-                                  );
-                                }
-
-                                final customer = customers[index];
-                                return ListTile(
-                                  leading: const Icon(
-                                    Icons.person,
-                                    color: Color(0xFF8B5FBF),
                                   ),
-                                  title: Text(customer.name),
-                                  subtitle: Text(customer.phone ?? 'بدون رقم'),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    _finalizeSaleWithCustomer(customer);
-                                  },
-                                );
-                              },
+                              ],
                             ),
                   ),
                 ),
@@ -1342,7 +1499,6 @@ class _PosScreenState extends State<PosScreen>
                 const Divider(),
                 const SizedBox(height: 12),
 
-                // الأزرار
                 Row(
                   children: [
                     Expanded(
@@ -1397,9 +1553,6 @@ class _PosScreenState extends State<PosScreen>
             onSave: (customer) async {
               try {
                 await customerProvider.addCustomer(customer);
-                // if (mounted) {
-                //   _finalizeSaleWithCustomer(customer);
-                // }
               } catch (e) {
                 if (mounted) {
                   showAppToast(
@@ -1417,22 +1570,20 @@ class _PosScreenState extends State<PosScreen>
   Future<void> _finalizeSaleWithCustomer(Customer customer) async {
     final auth = context.read<AuthProvider>();
     final productProvider = context.read<ProductProvider>();
-    final debtProvider =
-        context.read<DebtProvider>(); // 🔹 استدعاء DebtProvider
+    final debtProvider = context.read<DebtProvider>();
 
     try {
-      // 1️⃣ إضافة الفاتورة الآجلة
       await productProvider.addSale(
         cartItems: _cartItems,
-        totalAmount: _totalAmount,
-        paymentType: 'credit', // فاتورة آجلة
+        totalAmount: _finalAmount,
+        paymentType: 'credit',
         customerId: customer.id,
         userRole: auth.role ?? 'user',
       );
 
       await debtProvider.addCreditSale(
         customerId: customer.id!,
-        amount: _totalAmount,
+        amount: _finalAmount,
         note: 'فاتورة #',
       );
 
@@ -1453,7 +1604,9 @@ class _PosScreenState extends State<PosScreen>
               .replaceAll("Bad state: ", "")
               .trim();
 
-      // showAppToast(context, 'خطأ: $errorMessage', ToastType.error);
+      if (mounted) {
+        showAppToast(context, 'خطأ: $errorMessage', ToastType.error);
+      }
     }
   }
 }

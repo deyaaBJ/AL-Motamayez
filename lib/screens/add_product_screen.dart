@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:shopmate/components/base_layout.dart';
-import 'package:shopmate/helpers/helpers.dart';
-import 'package:shopmate/models/product.dart';
-import 'package:shopmate/models/product_unit.dart';
-import 'package:shopmate/providers/product_provider.dart';
-import 'package:shopmate/widgets/TextField.dart';
-import 'package:shopmate/widgets/existing_product_message.dart';
-import 'package:shopmate/widgets/qr_scan_section.dart';
+import 'package:flutter/services.dart';
+import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/helpers/helpers.dart';
+import 'package:motamayez/models/product.dart';
+import 'package:motamayez/models/product_unit.dart';
+import 'package:motamayez/providers/product_provider.dart';
+import 'package:motamayez/widgets/TextField.dart';
+import 'package:motamayez/widgets/existing_product_message.dart';
+import 'package:motamayez/widgets/qr_scan_section.dart';
+import 'dart:developer';
 
 class AddProductScreen extends StatefulWidget {
   final int? productId; // تغيير من productBarcode إلى productId
@@ -48,6 +50,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
     if (widget.productId != null) {
       _loadProductById(widget.productId!);
     }
+
+    // إضافة listener لمراقبة تغييرات QR Controller
+    _qrController.addListener(() {
+      // عندما يتم مسح QR Controller، يتم مسح Barcode Controller أيضاً
+      if (_qrController.text.isEmpty && _isNewProduct) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_barcodeController.text.isNotEmpty) {
+            _barcodeController.clear();
+            // لا حاجة لإعادة تعيين كل النموذج، فقط تنظيف الباركود
+          }
+        });
+      }
+    });
   }
 
   // دالة جديدة لتحميل المنتج بواسطة ID
@@ -77,6 +92,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
               _existingProduct!.quantity.toString();
 
           _barcodeController.text = _existingProduct!.barcode ?? '';
+
           _selectedUnit = _existingProduct!.baseUnit;
 
           // تحميل الوحدات الإضافية للمنتج الموجود
@@ -91,7 +107,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       setState(() {
         _isLoading = false;
       });
-      print('Error loading product by ID: $e');
+      log('Error loading product by ID: $e');
       showAppToast(context, 'خطأ في تحميل المنتج: $e', ToastType.error);
     }
   }
@@ -296,6 +312,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       controller: _barcodeController,
       label: 'الباركود',
       prefixIcon: Icons.qr_code,
+      readOnly: _isNewProduct ? true : false,
     );
   }
 
@@ -409,15 +426,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
               if (value == null || value.isEmpty) {
                 return 'يرجى إدخال الكمية';
               }
-              if (double.tryParse(value) == null) {
-                return 'يرجى إدخال كمية صحيحة';
-              }
-              final qty = double.tryParse(value) ?? 0;
-              if (qty < 0) {
-                return 'الكمية لا يمكن أن تكون سالبة';
-              }
+              final qty = double.tryParse(value);
+              if (qty == null) return 'يرجى إدخال كمية صحيحة';
+              if (qty < 0) return 'الكمية لا يمكن أن تكون سالبة';
               return null;
             },
+            inputFormatters: [
+              // هذا يسمح فقط بالأرقام والفواصل العشرية
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+            ],
           ),
         ] else ...[
           CustomTextField(
@@ -429,15 +446,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
               if (value == null || value.isEmpty) {
                 return 'يرجى إدخال الكمية';
               }
-              if (double.tryParse(value) == null) {
-                return 'يرجى إدخال كمية صحيحة';
-              }
-              final qty = double.tryParse(value) ?? 0;
-              if (qty <= 0) {
-                return 'الكمية يجب أن تكون أكبر من صفر';
-              }
+              final qty = double.tryParse(value);
+              if (qty == null) return 'يرجى إدخال كمية صحيحة';
+              if (qty < 0) return 'الكمية لا يمكن أن تكون سالبة';
               return null;
             },
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+            ],
           ),
         ],
       ],
@@ -678,6 +694,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }
 
   Future<void> _checkProduct(String qrCode) async {
+    // إذا كان الباركود فارغاً، لا تبحث
+    if (qrCode.trim().isEmpty) {
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -719,7 +740,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
       setState(() {
         _isLoading = false;
       });
-      print('Error searching product: $e');
+      log('Error searching product: $e');
+      showAppToast(context, 'خطأ في البحث عن المنتج: $e', ToastType.error);
     }
   }
 
@@ -751,7 +773,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         }
       });
     } catch (e) {
-      print('Error loading product units: $e');
+      log('Error loading product units: $e');
     }
   }
 
@@ -803,14 +825,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
           quantity: finalQuantity,
           costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
         );
+        print('Adding new product: $product');
 
         await _provider.addProduct(product);
 
         // محاولة الحصول على الـ ID من خلال البحث بالباركود
         try {
           final results = await _provider.searchProductsByBarcode(
-            product.barcode,
+            product.barcode ?? '',
           );
+          if (product.barcode == null || product.barcode!.isEmpty) {
+            results.clear();
+          }
           if (results.isNotEmpty) {
             final newProductId = results.first.id;
 
@@ -820,7 +846,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
             }
           }
         } catch (e) {
-          print('Warning: Could not get product ID: $e');
+          log('Warning: Could not get product ID: $e');
         }
       } else {
         // ✅ تحديث المنتج الموجود - مع إضافة ID
@@ -873,7 +899,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       try {
         existingUnits = await _provider.getProductUnits(productId);
       } catch (e) {
-        print('خطأ في جلب الوحدات الحالية: $e');
+        log('خطأ في جلب الوحدات الحالية: $e');
       }
 
       // معالجة كل وحدة في الواجهة
@@ -888,21 +914,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
         final sellPrice =
             double.tryParse(controller.sellPriceController.text) ?? 0.0;
 
-        print('معالجة الوحدة: $unitName, ID: $unitId');
+        log('معالجة الوحدة: $unitName, ID: $unitId');
 
         // التحقق من صحة البيانات
         if (unitName.isEmpty) {
-          print('تحذير: اسم الوحدة فارغ، تخطي');
+          log('تحذير: اسم الوحدة فارغ، تخطي');
           continue;
         }
 
         if (containQty <= 0) {
-          print('تحذير: كمية الوحدة غير صحيحة: $containQty');
+          log('تحذير: كمية الوحدة غير صحيحة: $containQty');
           continue;
         }
 
         if (sellPrice <= 0) {
-          print('تحذير: سعر الوحدة غير صحيح: $sellPrice');
+          log('تحذير: سعر الوحدة غير صحيح: $sellPrice');
           continue;
         }
 
@@ -919,24 +945,24 @@ class _AddProductScreenState extends State<AddProductScreen> {
         try {
           if (unitId == -1) {
             // وحدة جديدة
-            print('إضافة وحدة جديدة: $unitName');
+            log('إضافة وحدة جديدة: $unitName');
             await _provider.addProductUnit(unit);
           } else {
             // تحديث وحدة موجودة
-            print('تحديث وحدة موجودة: $unitName (ID: $unitId)');
+            log('تحديث وحدة موجودة: $unitName (ID: $unitId)');
             await _provider.updateProductUnit(unit);
           }
         } catch (e) {
-          print('خطأ في حفظ الوحدة $unitName: $e');
+          log('خطأ في حفظ الوحدة $unitName: $e');
         }
       }
 
       // حذف الوحدات التي تم إزالتها من الواجهة
       await _deleteRemovedUnits(productId, existingUnits);
 
-      print('تم حفظ الوحدات بنجاح للمنتج: $productId');
+      log('تم حفظ الوحدات بنجاح للمنتج: $productId');
     } catch (e) {
-      print('خطأ كبير في حفظ الوحدات: $e');
+      log('خطأ كبير في حفظ الوحدات: $e');
       rethrow;
     }
   }
@@ -953,22 +979,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
               .where((name) => name.isNotEmpty)
               .toList();
 
-      print('أسماء الوحدات في الواجهة: $currentUnitNames');
-      print(
+      log('أسماء الوحدات في الواجهة: $currentUnitNames');
+      log(
         'الوحدات الموجودة في قاعدة البيانات: ${existingUnits.map((u) => u.unitName).toList()}',
       );
 
       // البحث عن الوحدات التي يجب حذفها
       for (final existingUnit in existingUnits) {
         if (!currentUnitNames.contains(existingUnit.unitName)) {
-          print(
-            'حذف الوحدة: ${existingUnit.unitName} (ID: ${existingUnit.id})',
-          );
+          log('حذف الوحدة: ${existingUnit.unitName} (ID: ${existingUnit.id})');
           await _provider.deleteProductUnit(existingUnit.id!);
         }
       }
     } catch (e) {
-      print('خطأ في حذف الوحدات: $e');
+      log('خطأ في حذف الوحدات: $e');
     }
   }
 

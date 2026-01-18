@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:motamayez/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/providers/auth_provider.dart';
-import 'package:shopmate/providers/settings_provider.dart';
-import 'package:shopmate/widgets/sidebar.dart';
+import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/widgets/sidebar.dart';
 
 class BaseLayout extends StatefulWidget {
   final Widget child;
@@ -37,6 +37,8 @@ class _BaseLayoutState extends State<BaseLayout> {
   }
 
   void _handlePageChange(String page) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
     switch (page) {
       case 'home':
         Navigator.pushNamed(context, '/home');
@@ -53,7 +55,7 @@ class _BaseLayoutState extends State<BaseLayout> {
       case 'العملاء':
         Navigator.pushNamed(context, '/customer');
         break;
-      case 'المشتريات':
+      case 'فاتورة شراء':
         Navigator.pushNamed(context, '/purchaseInvoice');
         break;
       case 'الفواتير':
@@ -62,11 +64,19 @@ class _BaseLayoutState extends State<BaseLayout> {
       case 'الموردين':
         Navigator.pushNamed(context, '/suppliers');
         break;
+      case 'المصاريف':
+        Navigator.pushNamed(context, '/expenses');
+        break;
       case 'settings':
         Navigator.pushNamed(context, '/settings');
         break;
       case 'logout':
-        Navigator.pushNamed(context, '/login');
+        // ✅ هنا ننفذ logout قبل التنقل
+        authProvider.logout();
+        Navigator.pushReplacementNamed(
+          context,
+          '/login',
+        ); // pushReplacement لتجنب العودة للصفحة السابقة
         break;
     }
   }
@@ -78,6 +88,7 @@ class _BaseLayoutState extends State<BaseLayout> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.grey.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 2),
@@ -88,7 +99,7 @@ class _BaseLayoutState extends State<BaseLayout> {
         children: [
           Expanded(
             child: Text(
-              widget.title ?? 'ShopMate',
+              widget.title ?? 'المتميز',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -104,26 +115,27 @@ class _BaseLayoutState extends State<BaseLayout> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F5FF),
-      body: Row(
-        children: [
-          Sidebar(
-            currentPage: widget.currentPage,
-            onPageChange: _handlePageChange,
-          ),
-
-          Expanded(
-            child: Column(
-              children: [
-                if (widget.showAppBar) _buildAppBar(),
-                Expanded(child: widget.child),
-              ],
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8F5FF),
+        body: Row(
+          children: [
+            Sidebar(
+              currentPage: widget.currentPage,
+              onPageChange: _handlePageChange,
             ),
-          ),
-        ],
+            Expanded(
+              child: Column(
+                children: [
+                  if (widget.showAppBar) _buildAppBar(),
+                  Expanded(child: widget.child),
+                ],
+              ),
+            ),
+          ],
+        ),
+        floatingActionButton: widget.floatingActionButton,
       ),
-      floatingActionButton: widget.floatingActionButton, // أضف هذا السطر
     );
   }
 }

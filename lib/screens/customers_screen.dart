@@ -1,20 +1,20 @@
-// في CustomersScreen.dart - النسخة المعدلة
 import 'dart:async';
+import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/components/base_layout.dart';
-import 'package:shopmate/helpers/helpers.dart';
-import 'package:shopmate/models/customer.dart';
-import 'package:shopmate/providers/DebtProvider.dart';
-import 'package:shopmate/providers/customer_provider.dart';
-import 'package:shopmate/providers/settings_provider.dart';
-import 'package:shopmate/screens/CustomerDetailsScreen.dart';
-import 'package:shopmate/widgets/customer_form_dialog.dart';
-import 'package:shopmate/widgets/quick_payment_dialog.dart';
+import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/helpers/helpers.dart';
+import 'package:motamayez/models/customer.dart';
+import 'package:motamayez/providers/DebtProvider.dart';
+import 'package:motamayez/providers/customer_provider.dart';
+import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/screens/CustomerDetailsScreen.dart';
+import 'package:motamayez/widgets/customer_form_dialog.dart';
+import 'package:motamayez/widgets/quick_payment_dialog.dart';
 
 class CustomersScreen extends StatefulWidget {
-  const CustomersScreen({Key? key}) : super(key: key);
+  const CustomersScreen({super.key});
 
   @override
   State<CustomersScreen> createState() => _CustomersScreenState();
@@ -25,7 +25,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _showScrollToTop = false;
   final Map<int, double> _customerDebts = {};
-  bool _debtsLoaded = false;
   bool _isProcessingAction = false;
 
   // للترتيب في الجدول
@@ -35,58 +34,72 @@ class _CustomersScreenState extends State<CustomersScreen> {
   // لتتبع الصف المحدد
   int? _selectedRowIndex;
 
-  // لتتبع حالة البحث
-  bool _isSearching = false;
   Timer? _searchDebounceTimer;
+
+  bool _initialDataLoaded = false;
+  bool _isDisposed = false;
 
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
     _scrollController.addListener(_scrollListener);
     _searchController.addListener(_onSearchChanged);
+
+    // تحميل البيانات بعد تأخير قصير
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isDisposed) {
+        _loadInitialData();
+      }
+    });
+  }
+
+  Future<void> _loadInitialData() async {
+    if (_initialDataLoaded || _isDisposed) return;
+
+    try {
+      final provider = context.read<CustomerProvider>();
+
+      // تحميل البيانات الأولية
+      await provider.fetchCustomers(reset: true);
+      _initialDataLoaded = true;
+
+      // تحميل الديون فوراً
+      if (mounted) {
+        await _loadAllCustomerDebts();
+      }
+    } catch (e) {
+      log('خطأ في تحميل البيانات الأولية: $e');
+    }
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _searchDebounceTimer?.cancel();
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadInitialData() async {
-    try {
-      final provider = Provider.of<CustomerProvider>(context, listen: false);
-      await provider.fetchCustomers(reset: true);
+  Future<void> _loadAllCustomerDebts() async {
+    final provider = context.read<CustomerProvider>();
+    final customers = provider.displayedCustomers;
 
-      // تحميل الديون في الخلفية
-      _loadCustomerDebtsInBackground();
-    } catch (e) {
-      print('خطأ في تحميل البيانات الأولية: $e');
-    }
-  }
-
-  Future<void> _loadCustomerDebtsInBackground() async {
-    final customers =
-        Provider.of<CustomerProvider>(context, listen: false).customers;
     if (customers.isEmpty) return;
 
-    final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+    final debtProvider = context.read<DebtProvider>();
 
-    // تحميل الديون بشكل متوازي
-    final futures = <Future>[];
+    // مسح الديون القديمة
+    _customerDebts.clear();
+
+    // تحميل ديون جميع العملاء
     for (final customer in customers) {
-      if (customer.id != null && !_customerDebts.containsKey(customer.id)) {
-        futures.add(_loadSingleCustomerDebt(customer.id!, debtProvider));
+      if (customer.id != null) {
+        await _loadSingleCustomerDebt(customer.id!, debtProvider);
       }
     }
 
-    if (futures.isNotEmpty) {
-      await Future.wait(futures);
-      _debtsLoaded = true;
-      if (mounted) setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadSingleCustomerDebt(
@@ -97,31 +110,32 @@ class _CustomersScreenState extends State<CustomersScreen> {
       final debt = await debtProvider.getTotalDebtByCustomerId(customerId);
       _customerDebts[customerId] = debt;
     } catch (e) {
-      print('خطأ في تحميل دين العميل $customerId: $e');
+      log('خطأ في تحميل دين العميل $customerId: $e');
       _customerDebts[customerId] = 0.0;
     }
   }
 
+  // تحديث جميع البيانات
   void _refreshAllData() {
-    _searchController.clear();
-    _selectedRowIndex = null;
-    _customerDebts.clear();
-    _debtsLoaded = false;
-    _isSearching = false;
+    final provider = context.read<CustomerProvider>();
 
+    // إلغاء البحث
+    provider.cancelSearch();
+    _searchController.clear();
+
+    // إعادة تحميل البيانات
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
-        final provider = Provider.of<CustomerProvider>(context, listen: false);
-        await provider.refreshCustomers();
-
-        await _loadCustomerDebtsInBackground();
+        _initialDataLoaded = false;
+        await _loadInitialData();
 
         if (mounted) {
-          setState(() {});
           showAppToast(context, 'تم تحديث البيانات بنجاح', ToastType.success);
         }
       } catch (e) {
-        showAppToast(context, 'خطأ في تحديث البيانات: $e', ToastType.error);
+        if (mounted) {
+          showAppToast(context, 'خطأ في تحديث البيانات: $e', ToastType.error);
+        }
       }
     });
   }
@@ -157,19 +171,22 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Future<void> _loadMoreCustomers() async {
-    final provider = Provider.of<CustomerProvider>(context, listen: false);
+    final provider = context.read<CustomerProvider>();
 
     if (!provider.isLoading && provider.hasMore) {
+      log('تحميل المزيد من العملاء...');
+
       await provider.loadMoreCustomers();
 
       // تحميل ديون العملاء الجدد
+      final customers = provider.displayedCustomers;
       final newCustomers =
-          provider.customers
+          customers
               .where((c) => c.id != null && !_customerDebts.containsKey(c.id))
               .toList();
 
       if (newCustomers.isNotEmpty) {
-        final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+        final debtProvider = context.read<DebtProvider>();
         for (final customer in newCustomers) {
           await _loadSingleCustomerDebt(customer.id!, debtProvider);
         }
@@ -180,10 +197,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _onSearchChanged() {
-    // إلغاء المؤقت السابق إذا كان موجوداً
     _searchDebounceTimer?.cancel();
-
-    // إنشاء مؤقت جديد للبحث بعد تأخير
     _searchDebounceTimer = Timer(const Duration(milliseconds: 500), () {
       _performSearch();
     });
@@ -191,47 +205,35 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   void _performSearch() async {
     final query = _searchController.text.trim();
+    final provider = context.read<CustomerProvider>();
 
     if (query.isEmpty) {
-      setState(() {
-        _isSearching = false;
-      });
-
-      final provider = Provider.of<CustomerProvider>(context, listen: false);
       provider.cancelSearch();
-
-      // تحميل الديون للعملاء المحملين
-      _loadCustomerDebtsInBackground();
-
+      await _loadAllCustomerDebts();
       return;
     }
 
-    setState(() {
-      _isSearching = true;
-    });
-
     try {
-      final provider = Provider.of<CustomerProvider>(context, listen: false);
+      log('بدء البحث في الواجهة عن: "$query"');
       await provider.searchCustomers(query);
-
-      // تحميل ديون العملاء الناتجين عن البحث
-      final searchResults = provider.filteredCustomers;
-      final debtProvider = Provider.of<DebtProvider>(context, listen: false);
-
-      for (final customer in searchResults) {
-        if (customer.id != null && !_customerDebts.containsKey(customer.id)) {
-          await _loadSingleCustomerDebt(customer.id!, debtProvider);
-        }
-      }
+      await _loadAllCustomerDebts();
 
       if (mounted) setState(() {});
+
+      if (provider.displayedCustomers.isEmpty && mounted) {
+        showAppToast(
+          context,
+          'لم يتم العثور على نتائج لـ "$query"',
+          ToastType.warning,
+        );
+      }
     } catch (e) {
-      print('خطأ في البحث: $e');
+      log('خطأ في البحث: $e');
+      if (mounted) {
+        showAppToast(context, 'خطأ في البحث: ${e.toString()}', ToastType.error);
+      }
     }
   }
-
-  // ... باقي الدوال (_addNewCustomer, _editCustomer, _deleteCustomer, etc.)
-  // تبقى كما هي مع تعديل بسيط في _addNewCustomer:
 
   void _addNewCustomer() {
     if (_isProcessingAction) return;
@@ -242,28 +244,23 @@ class _CustomersScreenState extends State<CustomersScreen> {
       builder:
           (context) => CustomerFormDialog(
             onSave: (customer) async {
-              _isProcessingAction = false;
               try {
-                final provider = Provider.of<CustomerProvider>(
-                  context,
-                  listen: false,
-                );
-                await provider.addCustomer(customer);
+                final provider = context.read<CustomerProvider>();
+                final newCustomer = await provider.addCustomer(customer);
 
-                // إضافة رصيد صفري للعميل الجديد
-                if (customer.id != null) {
-                  _customerDebts[customer.id!] = 0.0;
+                if (mounted) {
+                  setState(() {
+                    if (newCustomer.id != null) {
+                      _customerDebts[newCustomer.id!] = 0.0;
+                    }
+                  });
+
+                  showAppToast(
+                    context,
+                    'تم إضافة العميل ${newCustomer.name}',
+                    ToastType.success,
+                  );
                 }
-
-                if (!mounted) return;
-                showAppToast(
-                  context,
-                  'تم إضافة العميل ${customer.name}',
-                  ToastType.success,
-                );
-
-                // تحديث القائمة
-                if (mounted) setState(() {});
               } catch (e) {
                 if (mounted) {
                   showAppToast(
@@ -272,11 +269,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     ToastType.error,
                   );
                 }
+              } finally {
+                _isProcessingAction = false;
               }
             },
           ),
     ).then((_) {
-      _isProcessingAction = false;
+      if (!_isDisposed) {
+        _isProcessingAction = false;
+      }
     });
   }
 
@@ -342,8 +343,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     ),
                   ),
                   const Spacer(),
-                  // مؤشر البحث
-                  if (_isSearching)
+                  if (provider.isSearching && provider.isLoading)
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -380,7 +380,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        hintText: 'ابحث بالاسم أو رقم الهاتف...',
+                        hintText: 'ابحث بالاسم...',
                         prefixIcon: const Icon(Icons.person_search),
                         suffixIcon:
                             _searchController.text.isNotEmpty
@@ -413,7 +413,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // زر إعادة التحميل
                   Tooltip(
                     message: 'إعادة تحميل',
                     child: Container(
@@ -435,12 +434,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   ),
                 ],
               ),
-              // معلومات البحث
-              if (_isSearching && _searchController.text.isNotEmpty)
+              if (provider.isSearching && _searchController.text.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'جاري البحث في جميع قاعدة البيانات عن "${_searchController.text}"',
+                    'جاري البحث عن "${_searchController.text}"',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.blue[700],
@@ -458,8 +456,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget _buildStatsSection() {
     return Consumer<CustomerProvider>(
       builder: (context, provider, child) {
-        final customers =
-            _isSearching ? provider.filteredCustomers : provider.customers;
+        final customers = provider.displayedCustomers;
         final totalCustomers = customers.length;
         final totalDebt = customers.fold(
           0.0,
@@ -500,7 +497,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               _buildStatItem(
                 icon: Icons.group,
                 color: const Color(0xFF6A3093),
-                label: _isSearching ? 'النتائج' : 'إجمالي العملاء',
+                label: provider.isSearching ? 'النتائج' : 'إجمالي العملاء',
                 value: totalCustomers.toString(),
               ),
               _buildStatItem(
@@ -561,12 +558,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget _buildCustomersTable() {
     return Consumer<CustomerProvider>(
       builder: (context, provider, child) {
-        final customers =
-            _isSearching ? provider.filteredCustomers : provider.customers;
+        final customers = provider.displayedCustomers;
         final sortedCustomers = _getSortedCustomers(customers);
 
+        final shouldShowLoadMore = provider.hasMore && !provider.isLoading;
+
         if (sortedCustomers.isEmpty && !provider.isLoading) {
-          return _buildEmptyState();
+          return _buildEmptyState(provider.isSearching);
         }
 
         return Container(
@@ -632,17 +630,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
               // محتوى الجدول
               Expanded(
                 child: ListView.builder(
+                  key: const ValueKey('customers_screen_list'),
                   controller: _scrollController,
                   itemCount:
                       sortedCustomers.length +
                       (provider.isLoading ? 1 : 0) +
-                      (provider.hasMore && !provider.isLoading ? 1 : 0),
+                      (shouldShowLoadMore ? 1 : 0),
                   itemBuilder: (context, index) {
-                    // مؤشر التحميل في النهاية
                     if (index == sortedCustomers.length) {
                       if (provider.isLoading) {
                         return _buildLoadingIndicator();
-                      } else if (provider.hasMore && !_isSearching) {
+                      } else if (shouldShowLoadMore) {
                         return _buildLoadMoreButton();
                       } else {
                         return const SizedBox.shrink();
@@ -722,7 +720,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool isSearching) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -739,7 +737,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _isSearching
+            isSearching
                 ? 'لم يتم العثور على نتائج للبحث'
                 : 'ابدأ بإضافة عميل جديد',
             style: TextStyle(fontSize: 14, color: Colors.grey[600]),
@@ -750,15 +748,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Widget _buildTableRow(Customer customer, int index) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = context.read<SettingsProvider>();
     final currencyName = settings.currencyName;
-    final debt = _customerDebts[customer.id!] ?? 0.0;
+
+    double debt = _customerDebts[customer.id!] ?? 0.0;
     final hasDebt = debt > 0;
     final hasCredit = debt < 0;
     final isEven = index.isEven;
     final isSelected = _selectedRowIndex == index;
-
-    final isDebtLoaded = _customerDebts.containsKey(customer.id!);
 
     return GestureDetector(
       onTap: () {
@@ -784,7 +781,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
         ),
         child: Row(
           children: [
-            // العميل (3/12)
             Expanded(
               flex: 3,
               child: Container(
@@ -830,30 +826,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          if (!isDebtLoaded)
-                            Row(
-                              children: [
-                                Container(
-                                  width: 10,
-                                  height: 10,
-                                  margin: const EdgeInsets.only(left: 4),
-                                  child: const CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Color(0xFF6A3093),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'جارٍ التحميل...',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey[500],
-                                  ),
-                                ),
-                              ],
-                            ),
                         ],
                       ),
                     ),
@@ -861,8 +833,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 ),
               ),
             ),
-
-            // رقم الهاتف (2/12)
             Expanded(
               flex: 2,
               child: Container(
@@ -892,8 +862,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 ),
               ),
             ),
-
-            // الرصيد (2/12)
             Expanded(
               flex: 2,
               child: Container(
@@ -903,82 +871,61 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 ),
                 child: Row(
                   children: [
-                    if (isDebtLoaded) ...[
-                      Icon(
-                        hasDebt
-                            ? Icons.arrow_upward
-                            : hasCredit
-                            ? Icons.arrow_downward
-                            : Icons.check_circle,
-                        size: 16,
-                        color:
-                            hasDebt
-                                ? Colors.red
-                                : hasCredit
-                                ? Colors.green
-                                : Colors.grey,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${debt.abs().toStringAsFixed(2)} $currencyName',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    hasDebt
-                                        ? Colors.red
-                                        : hasCredit
-                                        ? Colors.green
-                                        : Colors.grey,
-                              ),
+                    Icon(
+                      hasDebt
+                          ? Icons.arrow_upward
+                          : hasCredit
+                          ? Icons.arrow_downward
+                          : Icons.check_circle,
+                      size: 16,
+                      color:
+                          hasDebt
+                              ? Colors.red
+                              : hasCredit
+                              ? Colors.green
+                              : Colors.grey,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${debt.abs().toStringAsFixed(2)} $currencyName',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color:
+                                  hasDebt
+                                      ? Colors.red
+                                      : hasCredit
+                                      ? Colors.green
+                                      : Colors.grey,
                             ),
-                            Text(
-                              hasDebt
-                                  ? 'دين'
-                                  : hasCredit
-                                  ? 'رصيد'
-                                  : 'متوازن',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color:
-                                    hasDebt
-                                        ? Colors.red.withOpacity(0.8)
-                                        : hasCredit
-                                        ? Colors.green.withOpacity(0.8)
-                                        : Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ] else ...[
-                      // عرض مؤشر تحميل
-                      Container(
-                        width: 20,
-                        height: 20,
-                        child: const CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Color(0xFF6A3093),
                           ),
-                        ),
+                          Text(
+                            hasDebt
+                                ? 'دين'
+                                : hasCredit
+                                ? 'رصيد'
+                                : 'متوازن',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color:
+                                  hasDebt
+                                      ? Colors.red.withOpacity(0.8)
+                                      : hasCredit
+                                      ? Colors.green.withOpacity(0.8)
+                                      : Colors.grey,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '...',
-                        style: TextStyle(fontSize: 13, color: Colors.grey[500]),
-                      ),
-                    ],
+                    ),
                   ],
                 ),
               ),
             ),
-
-            // الإجراءات (2/12)
             Expanded(
               flex: 2,
               child: Container(
@@ -986,7 +933,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // عرض التفاصيل
                     _buildActionButton(
                       icon: Icons.visibility,
                       color: Colors.blue,
@@ -994,8 +940,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       onPressed: () => _viewCustomerDetails(customer),
                     ),
                     const SizedBox(width: 4),
-
-                    // تعديل
                     _buildActionButton(
                       icon: Icons.edit,
                       color: Colors.orange,
@@ -1003,9 +947,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       onPressed: () => _editCustomer(customer),
                     ),
                     const SizedBox(width: 4),
-
-                    // دفعة سريعة (فقط إذا كان هناك دين)
-                    if (hasDebt && isDebtLoaded) ...[
+                    if (hasDebt) ...[
                       _buildActionButton(
                         icon: Icons.payment,
                         color: Colors.green,
@@ -1014,9 +956,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       ),
                       const SizedBox(width: 4),
                     ],
-
-                    // صرف رصيد (فقط إذا كان هناك رصيد)
-                    if (hasCredit && isDebtLoaded) ...[
+                    if (hasCredit) ...[
                       _buildActionButton(
                         icon: Icons.credit_score,
                         color: Colors.purple,
@@ -1026,16 +966,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       ),
                       const SizedBox(width: 4),
                     ],
-
-                    // حذف (فقط إذا كان متوازن)
-                    if (debt == 0 && isDebtLoaded)
+                    if (debt == 0)
                       _buildActionButton(
                         icon: Icons.delete,
                         color: Colors.red,
                         tooltip: 'حذف العميل',
                         onPressed: () => _deleteCustomer(customer),
                       )
-                    else if (isDebtLoaded && debt != 0)
+                    else
                       Tooltip(
                         message:
                             debt > 0
@@ -1068,7 +1006,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
-  // دالة بناء زر الإجراء
   Widget _buildActionButton({
     required IconData icon,
     required Color color,
@@ -1094,33 +1031,28 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
-  // دالة عرض تفاصيل العميل
   void _viewCustomerDetails(Customer customer) {
     if (_isProcessingAction) return;
 
     final currentDebt = _customerDebts[customer.id!] ?? 0.0;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (context) => CustomerDetailsScreen(
-                customer: customer,
-                initialBalance: currentDebt,
-              ),
-        ),
-      ).then((value) {
-        // عند العودة، تحديث البيانات
-        _refreshCustomerDebt(customer.id!);
-      });
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) => CustomerDetailsScreen(
+              customer: customer,
+              initialBalance: currentDebt,
+            ),
+      ),
+    ).then((value) {
+      _refreshCustomerDebt(customer.id!);
     });
   }
 
-  // دالة تحديث دين عميل محدد
   Future<void> _refreshCustomerDebt(int customerId) async {
     try {
-      final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+      final debtProvider = context.read<DebtProvider>();
       final updatedDebt = await debtProvider.getTotalDebtByCustomerId(
         customerId,
       );
@@ -1130,11 +1062,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
         setState(() {});
       }
     } catch (e) {
-      print('خطأ في تحديث دين العميل $customerId: $e');
+      log('خطأ في تحديث دين العميل $customerId: $e');
     }
   }
 
-  // دالة تعديل العميل
   void _editCustomer(Customer customer) {
     if (_isProcessingAction) return;
     _isProcessingAction = true;
@@ -1147,20 +1078,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
             onSave: (updatedCustomer) async {
               _isProcessingAction = false;
               try {
-                final provider = Provider.of<CustomerProvider>(
-                  context,
-                  listen: false,
-                );
+                final provider = context.read<CustomerProvider>();
                 await provider.updateCustomer(updatedCustomer);
 
-                if (!mounted) return;
-                showAppToast(
-                  context,
-                  'تم تحديث العميل ${updatedCustomer.name}',
-                  ToastType.success,
-                );
-
-                if (mounted) setState(() {});
+                if (mounted) {
+                  showAppToast(
+                    context,
+                    'تم تحديث العميل ${updatedCustomer.name}',
+                    ToastType.success,
+                  );
+                  setState(() {});
+                }
               } catch (e) {
                 if (mounted) {
                   showAppToast(
@@ -1177,21 +1105,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
     });
   }
 
-  // دالة حذف العميل
   Future<void> _deleteCustomer(Customer customer) async {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = context.read<SettingsProvider>();
     final currencyName = settings.currencyName;
     if (_isProcessingAction) return;
     _isProcessingAction = true;
 
     try {
-      // التحقق من رصيد العميل أولاً
-      final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+      final debtProvider = context.read<DebtProvider>();
       final customerBalance = await debtProvider.getTotalDebtByCustomerId(
         customer.id!,
       );
 
-      // إذا كان هناك رصيد (موجب أو سالب) لا نسمح بالحذف
       if (customerBalance != 0) {
         final balanceType = customerBalance > 0 ? 'دين' : 'رصيد';
         final balanceText = customerBalance.abs().toStringAsFixed(2);
@@ -1208,7 +1133,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
         return;
       }
 
-      // تأكيد الحذف
       final confirmed = await showDialog<bool>(
         context: context,
         builder:
@@ -1230,10 +1154,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       );
 
       if (confirmed == true) {
-        await Provider.of<CustomerProvider>(
-          context,
-          listen: false,
-        ).deleteCustomer(customer.id!);
+        await context.read<CustomerProvider>().deleteCustomer(customer.id!);
 
         _customerDebts.remove(customer.id!);
 
@@ -1243,11 +1164,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             '✅ تم حذف العميل ${customer.name}',
             ToastType.success,
           );
-          final provider = Provider.of<CustomerProvider>(
-            context,
-            listen: false,
-          );
-          if (mounted) setState(() {});
+          setState(() {});
         }
       }
     } catch (e) {
@@ -1263,14 +1180,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }
   }
 
-  // دالة صرف رصيد
   void _showCreditPaymentDialog(Customer customer, double currentBalance) {
     QuickPaymentDialog.showWithdrawal(
       context: context,
       customer: customer,
       currentBalance: currentBalance,
       onWithdrawal: (customer, amount, note) async {
-        final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+        final debtProvider = context.read<DebtProvider>();
 
         try {
           await debtProvider.addWithdrawal(
@@ -1279,7 +1195,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
             note: note,
           );
 
-          // تحديث الدين في القائمة
           final updatedDebt = await debtProvider.getTotalDebtByCustomerId(
             customer.id!,
           );
@@ -1298,14 +1213,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
-  // دالة تسديد دفعة
   void _showPaymentDialog(Customer customer, double currentDebt) {
     QuickPaymentDialog.showPayment(
       context: context,
       customer: customer,
       currentDebt: currentDebt,
       onPayment: (customer, amount, note) async {
-        final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+        final debtProvider = context.read<DebtProvider>();
 
         try {
           await debtProvider.addPayment(
@@ -1314,7 +1228,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
             note: note,
           );
 
-          // تحديث الدين في القائمة
           final updatedDebt = await debtProvider.getTotalDebtByCustomerId(
             customer.id!,
           );
@@ -1340,48 +1253,32 @@ class _CustomersScreenState extends State<CustomersScreen> {
       child: BaseLayout(
         currentPage: 'العملاء',
         showAppBar: false,
-        floatingActionButton: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            if (_showScrollToTop)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: FloatingActionButton(
-                  backgroundColor: const Color(0xFF6A3093),
-                  mini: true,
-                  onPressed: () {
-                    _scrollController.animateTo(
-                      0,
-                      duration: const Duration(milliseconds: 500),
-                      curve: Curves.easeInOut,
-                    );
-                  },
-                  child: const Icon(Icons.arrow_upward, color: Colors.white),
-                ),
-              ),
-            FloatingActionButton(
-              onPressed: _addNewCustomer,
-              backgroundColor: const Color(0xFF6A3093),
-              child: const Icon(
-                Icons.person_add_alt_1,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
-          ],
+        floatingActionButton: FloatingActionButton(
+          heroTag: 'add_customer_fab', // علامة فريدة للزر العائم
+          onPressed: _addNewCustomer,
+          backgroundColor: const Color(0xFF6A3093),
+          child: const Icon(
+            Icons.person_add_alt_1,
+            color: Colors.white,
+            size: 28,
+          ),
         ),
         child: Column(
           children: [
             _buildHeaderSection(),
             _buildStatsSection(),
             const SizedBox(height: 8),
-            Text(
-              _isSearching ? 'نتائج البحث' : 'قائمة العملاء',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
-              ),
+            Consumer<CustomerProvider>(
+              builder: (context, provider, child) {
+                return Text(
+                  provider.isSearching ? 'نتائج البحث' : 'قائمة العملاء',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[700],
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 8),
             Expanded(child: _buildCustomersTable()),

@@ -1,8 +1,10 @@
 import 'dart:async' show Timer;
+import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopmate/components/base_layout.dart';
+import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/models/supplier_model.dart';
 import '../providers/supplier_provider.dart';
 import 'add_supplier_page.dart';
 import 'supplier_account_statement_page.dart';
@@ -57,7 +59,7 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
         listen: false,
       ).loadSuppliers();
     } catch (e) {
-      print('خطأ في تحميل الموردين: $e');
+      log('خطأ في تحميل الموردين: $e');
     } finally {
       if (mounted) {
         setState(() => _initialLoad = false);
@@ -109,7 +111,6 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
 
     final isWeOweSupplier = balance > 0;
     final isSupplierOwesUs = balance < 0;
-    final isNoDebt = balance == 0;
 
     String getStatusText() {
       if (isWeOweSupplier) {
@@ -175,7 +176,7 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // صف العنوان والرصيد
+            // صف العنوان والرصيد مع زر التعديل
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,13 +185,51 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        supplierName,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              supplierName,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                            ),
+                          ),
+                          // زر التعديل الصغير في الزاوية
+                          IconButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) => AddEditSupplierPage(
+                                        supplier: SupplierModel(
+                                          id: supplierId,
+                                          name: supplierName,
+                                          phone: phone ?? '',
+                                          address: address ?? '',
+                                          notes: notes ?? '',
+                                          balance: balance,
+                                        ),
+                                      ),
+                                ),
+                              ).then((_) => _refreshSuppliers());
+                            },
+                            icon: Icon(
+                              Icons.edit,
+                              size: 20,
+                              color: Colors.blue.shade700,
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(
+                              minWidth: 40,
+                              minHeight: 40,
+                            ),
+                            tooltip: 'تعديل المورد',
+                          ),
+                        ],
                       ),
                       if (phone != null && phone.isNotEmpty)
                         Padding(
@@ -440,7 +479,7 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const AddSupplierPage(),
+                        builder: (context) => const AddEditSupplierPage(),
                       ),
                     ).then((_) => _refreshSuppliers());
                   },
@@ -608,7 +647,7 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const AddSupplierPage(),
+                    builder: (context) => const AddEditSupplierPage(),
                   ),
                 ).then((_) => _refreshSuppliers());
               },

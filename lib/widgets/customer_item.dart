@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shopmate/models/customer.dart';
+import 'package:motamayez/models/customer.dart';
 
 class CustomerItem extends StatelessWidget {
   final Customer customer;

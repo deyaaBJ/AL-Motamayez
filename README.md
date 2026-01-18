@@ -1,6 +1,6 @@
-# 🚀 ShopMate POS
+# 🚀 Motamayez POS System
 
-**ShopMate POS** is a full-featured Point of Sale (POS) system built with **Flutter** and **Dart**, designed for efficient sales and inventory management with barcode scanning support.
+**Motamayez POS System** is a full-featured Point of Sale (POS) system built with **Flutter** and **Dart**, designed for efficient sales and inventory management with barcode scanning support.
 
 ---
 
