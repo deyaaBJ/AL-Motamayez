@@ -48,6 +48,7 @@ dependencies:
   window_manager: ^0.3.3
   shared_preferences: ^2.2.2
   archive: ^3.4.10
+  uuid: ^4.0.1
   
  
   
