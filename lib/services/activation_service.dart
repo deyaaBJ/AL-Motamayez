@@ -13,6 +13,21 @@ import 'package:motamayez/constant/constant.dart';
 import 'package:motamayez/db/db_helper.dart';
 import 'package:motamayez/services/encryption_service.dart';
 
+class ActivationException implements Exception {
+  final String message;
+  final String? storedSignature;
+  final String? expectedSignature;
+
+  ActivationException(
+    this.message, {
+    this.storedSignature,
+    this.expectedSignature,
+  });
+
+  @override
+  String toString() => message;
+}
+
 class ActivationService {
   final DBHelper _dbHelper = DBHelper();
 
@@ -71,7 +86,8 @@ class ActivationService {
         await db.execute('''
           CREATE TABLE activation (
             id INTEGER PRIMARY KEY,
-            signature TEXT
+            signature TEXT,
+            activation_code TEXT
           )
         ''');
       }
@@ -102,6 +118,21 @@ class ActivationService {
     }
   }
 
+  /// حفظ كود التفعيل
+  Future<void> _saveActivationCode(String code) async {
+    try {
+      final db = await _dbHelper.db;
+      await db.update('activation', {'activation_code': code}, where: 'id = 1');
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('activation_code', code);
+
+      print('💾 Saved activation code: $code');
+    } catch (e) {
+      print('❌ Error saving activation code: $e');
+    }
+  }
+
   /// قراءة التوقيع وفك التشفير
   Future<String?> _getStoredSignature() async {
     try {
@@ -123,7 +154,9 @@ class ActivationService {
       final result = await db.query('activation', limit: 1);
 
       if (result.isNotEmpty) {
-        final encrypted = result.first['signature'] as String;
+        final encrypted = result.first['signature'] as String?;
+        if (encrypted == null) return null;
+
         print('💾 Signature from SQLite: $encrypted');
         final decrypted = EncryptionService.decrypt(encrypted);
         print('🔓 Decrypted signature: $decrypted');
@@ -152,6 +185,24 @@ class ActivationService {
       return null;
     } catch (e) {
       print('❌ Error reading signature: $e');
+      return null;
+    }
+  }
+
+  /// الحصول على كود التفعيل المخزن
+  Future<String?> getStoredActivationCode() async {
+    try {
+      final db = await _dbHelper.db;
+      final result = await db.query('activation', limit: 1);
+
+      if (result.isNotEmpty && result.first.containsKey('activation_code')) {
+        return result.first['activation_code'] as String?;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('activation_code');
+    } catch (e) {
+      print('❌ Error getting activation code: $e');
       return null;
     }
   }
@@ -187,6 +238,7 @@ class ActivationService {
         // توليد وحفظ التوقيع
         final signature = _generateSignature(deviceId);
         await _saveSignature(signature);
+        await _saveActivationCode(activationCode);
 
         // التحقق من الحفظ
         final stored = await _getStoredSignature();
@@ -212,7 +264,7 @@ class ActivationService {
     }
   }
 
-  /// فحص التفعيل
+  /// فحص التفعيل مع رمي استثناء عند خطأ
   Future<bool> isActivated() async {
     try {
       print('🔍 Checking activation status...');
@@ -233,18 +285,37 @@ class ActivationService {
 
       if (storedSignature != expectedSignature) {
         print('❌ Signatures do not match');
-        return false;
+        throw ActivationException(
+          'التوقيع غير صحيح - لا تملك صلاحية الدخول',
+          storedSignature: storedSignature,
+          expectedSignature: expectedSignature,
+        );
       }
 
       print('✅ Activation is valid');
       return true;
     } catch (e) {
       print('❌ Error checking activation: $e');
+      rethrow;
+    }
+  }
+
+  /// فحص التفعيل بدون رمي استثناء
+  Future<bool> checkActivationSilently() async {
+    try {
+      final storedSignature = await _getStoredSignature();
+      if (storedSignature == null) return false;
+
+      final deviceId = await getDeviceId();
+      final expectedSignature = _generateSignature(deviceId);
+
+      return storedSignature == expectedSignature;
+    } catch (e) {
       return false;
     }
   }
 
-  /// إلغاء التفعيل
+  /// إلغاء التفعيل وحذف التوقيع
   Future<void> clearActivation() async {
     try {
       final db = await _dbHelper.db;
@@ -252,11 +323,38 @@ class ActivationService {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('activation_signature');
+      await prefs.remove('activation_code');
       await prefs.remove('device_id');
 
       print('🧹 Activation data cleared');
     } catch (e) {
       print('❌ Error clearing activation: $e');
+    }
+  }
+
+  /// الحصول على معلومات التفعيل
+  Future<Map<String, dynamic>> getActivationInfo() async {
+    try {
+      final db = await _dbHelper.db;
+      final result = await db.query('activation', limit: 1);
+
+      final prefs = await SharedPreferences.getInstance();
+      final deviceId = prefs.getString('device_id') ?? 'غير موجود';
+      final activationCode = prefs.getString('activation_code');
+
+      final storedSignature = await _getStoredSignature();
+      final expectedSignature = _generateSignature(deviceId);
+
+      return {
+        'device_id': deviceId,
+        'activation_code': activationCode,
+        'stored_signature': storedSignature,
+        'expected_signature': expectedSignature,
+        'is_valid': storedSignature == expectedSignature,
+        'has_activation': result.isNotEmpty,
+      };
+    } catch (e) {
+      return {'error': e.toString()};
     }
   }
 

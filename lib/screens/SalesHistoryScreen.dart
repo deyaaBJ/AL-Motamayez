@@ -1352,7 +1352,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                           ),
                         ),
                         Text(
-                          '${sale.totalAmount.toStringAsFixed(0)} ${settingsProvider.currencyName}',
+                          '${sale.totalAmount.toStringAsFixed(2)} ${settingsProvider.currencyName}',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.green[700],
@@ -1832,7 +1832,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     cells.add(
       DataCell(
         Text(
-          '${sale.totalAmount.toStringAsFixed(0)} ${settingsProvider.currencyName}',
+          '${sale.totalAmount.toStringAsFixed(2)} ${settingsProvider.currencyName}',
           style: TextStyle(
             fontSize: 14,
             color: Colors.green[700],
@@ -2801,7 +2801,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                 Text('هل أنت متأكد من رغبتك في حذف الفاتورة رقم ${sale.id}؟'),
                 const SizedBox(height: 8),
                 Text(
-                  'المبلغ: ${sale.totalAmount.toStringAsFixed(0)} ${settings.currencyName}',
+                  'المبلغ: ${sale.totalAmount.toStringAsFixed(2)} ${settings.currencyName}',
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 4),

@@ -585,13 +585,13 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
           ),
           Expanded(
             child: Text(
-              '${price.toStringAsFixed(0)} ${settings.currencyName}',
+              '${price.toStringAsFixed(2)} ${settings.currencyName}',
               textAlign: TextAlign.center,
             ),
           ),
           Expanded(
             child: Text(
-              '${subtotal.toStringAsFixed(0)} ${settings.currencyName}',
+              '${subtotal.toStringAsFixed(2)} ${settings.currencyName}',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Colors.blue,
@@ -618,7 +618,7 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
           _buildSummaryRow(
             label: 'المبلغ الإجمالي',
             value:
-                '${sale.totalAmount.toStringAsFixed(0)} ${settings.currencyName}',
+                '${sale.totalAmount.toStringAsFixed(2)} ${settings.currencyName}',
             valueColor: Colors.blue[700]!,
           ),
           const SizedBox(height: 12),

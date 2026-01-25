@@ -631,7 +631,7 @@ class _PurchaseInvoiceDetailsPageState
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              quantity.toStringAsFixed(0),
+                              quantity.toStringAsFixed(2),
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,

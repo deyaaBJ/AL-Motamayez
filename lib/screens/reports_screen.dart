@@ -452,7 +452,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           // المجموعة 1: المبيعات الأساسية
           _buildStatCard(
             'إجمالي المبيعات',
-            '${provider.totalSalesAmount.toStringAsFixed(0)} $currencyName',
+            '${provider.totalSalesAmount.toStringAsFixed(2)} $currencyName',
             Icons.shopping_cart,
             Colors.blue,
             '${provider.salesCount} فاتورة',
@@ -460,14 +460,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
           _buildStatCard(
             'المبيعات النقدية',
-            '${provider.cashSalesAmount.toStringAsFixed(0)} $currencyName',
+            '${provider.cashSalesAmount.toStringAsFixed(2)} $currencyName',
             Icons.money,
             Colors.green,
             'المدفوعات نقداً',
           ),
           _buildStatCard(
             'المبيعات الآجلة',
-            '${provider.creditSalesAmount.toStringAsFixed(0)} $currencyName',
+            '${provider.creditSalesAmount.toStringAsFixed(2)} $currencyName',
             Icons.credit_card,
             Colors.orange,
             'المبيعات الآجلة',
@@ -476,14 +476,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
           // المجموعة 2: الأرباح
           _buildStatCard(
             'إجمالي الأرباح',
-            '${provider.totalProfit.toStringAsFixed(0)} $currencyName',
+            '${provider.totalProfit.toStringAsFixed(2)} $currencyName',
             Icons.attach_money,
             Colors.green,
-            '${provider.profitPercentage.toStringAsFixed(1)}% من المبيعات',
+            '${provider.profitPercentage.toStringAsFixed(2)}% من المبيعات',
           ),
           _buildStatCard(
             'الأرباح النقدية',
-            '${provider.totalCashProfit.toStringAsFixed(0)} $currencyName',
+            '${provider.totalCashProfit.toStringAsFixed(2)} $currencyName',
             Icons.monetization_on,
             Colors.green.shade700,
             'أرباح المبيعات النقدية فقط',
@@ -492,7 +492,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           // المجموعة 3: المصاريف
           _buildStatCard(
             'إجمالي المصاريف',
-            '${provider.totalExpensesAll.toStringAsFixed(0)} $currencyName',
+            '${provider.totalExpensesAll.toStringAsFixed(2)} $currencyName',
             Icons.money_off,
             Colors.red.shade700,
             'كل المصاريف (نقدية وغير نقدية)',
@@ -501,14 +501,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
           // المجموعة 4: صافي الربح
           _buildStatCard(
             'صافي الربح',
-            '${provider.netProfit.toStringAsFixed(0)} $currencyName',
+            '${provider.netProfit.toStringAsFixed(2)} $currencyName',
             Icons.trending_up,
             provider.netProfit >= 0 ? Colors.green : Colors.red,
             'إجمالي الأرباح - المصاريف النقدية',
           ),
           _buildStatCard(
             'صافي الربح الكاش',
-            '${provider.netCashProfit.toStringAsFixed(0)} $currencyName',
+            '${provider.netCashProfit.toStringAsFixed(2)} $currencyName',
             Icons.account_balance_wallet,
             provider.netCashProfit >= 0 ? Colors.green : Colors.red,
             'الأرباح النقدية - المصاريف النقدية',
@@ -740,7 +740,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              hasData ? '${sales.toStringAsFixed(0)} $currencyName' : '-',
+              hasData ? '${sales.toStringAsFixed(2)} $currencyName' : '-',
               style: TextStyle(
                 color: hasData ? Colors.blue[700] : Colors.grey,
                 fontWeight: hasData ? FontWeight.w600 : FontWeight.normal,
@@ -753,7 +753,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              hasData ? '+${profit.toStringAsFixed(0)} $currencyName' : '-',
+              hasData ? '+${profit.toStringAsFixed(2)} $currencyName' : '-',
               style: TextStyle(
                 color: hasData ? Colors.green[700] : Colors.grey,
                 fontWeight: hasData ? FontWeight.w600 : FontWeight.normal,
@@ -790,7 +790,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              '${totalSales.toStringAsFixed(0)} $currencyName',
+              '${totalSales.toStringAsFixed(2)} $currencyName',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.green,
@@ -850,22 +850,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
             const SizedBox(height: 16),
             _buildStatRow(
               'المبيعات النقدية',
-              '${provider.cashSalesAmount.toStringAsFixed(0)} $currencyName',
+              '${provider.cashSalesAmount.toStringAsFixed(2)} $currencyName',
               Colors.green,
             ),
             _buildStatRow(
               'المبيعات الآجلة',
-              '${provider.creditSalesAmount.toStringAsFixed(0)} $currencyName',
+              '${provider.creditSalesAmount.toStringAsFixed(2)} $currencyName',
               Colors.orange,
             ),
             _buildStatRow(
               'المصاريف النقدية',
-              '${provider.totalCashExpenses.toStringAsFixed(0)} $currencyName',
+              '${provider.totalCashExpenses.toStringAsFixed(2)} $currencyName',
               Colors.red,
             ),
             _buildStatRow(
               'صافي الربح',
-              '${provider.netProfit.toStringAsFixed(0)} $currencyName',
+              '${provider.netProfit.toStringAsFixed(2)} $currencyName',
               provider.netProfit >= 0 ? Colors.green : Colors.red,
             ),
             _buildStatRow(
@@ -1061,7 +1061,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
                     // الإيرادات
                     Text(
-                      '${revenue.toStringAsFixed(0)} $currencyName',
+                      '${revenue.toStringAsFixed(2)} $currencyName',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -1170,7 +1170,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ),
                 ),
                 Text(
-                  '${amount.toStringAsFixed(0)} $currencyName',
+                  '${amount.toStringAsFixed(2)} $currencyName',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],

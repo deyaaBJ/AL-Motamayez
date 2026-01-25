@@ -127,22 +127,6 @@ class _ActivationPageState extends State<ActivationPage> {
                               : const Text('تفعيل'),
                     ),
                   ),
-
-                  const SizedBox(height: 10),
-
-                  TextButton(
-                    onPressed:
-                        _loading
-                            ? null
-                            : () async {
-                              final service = ActivationService();
-                              await service.checkDatabase();
-                            },
-                    child: const Text(
-                      'فحص قاعدة البيانات',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
                 ],
               ),
             ),
