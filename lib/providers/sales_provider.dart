@@ -963,22 +963,22 @@ class SalesProvider extends ChangeNotifier {
 
     var saleResult = await db.rawQuery(
       '''
-      SELECT s.*, c.name as customer_name, c.phone as customer_phone
-      FROM sales s 
-      LEFT JOIN customers c ON s.customer_id = c.id 
-      WHERE s.id = ?
-      ''',
+    SELECT s.*, c.name as customer_name, c.phone as customer_phone
+    FROM sales s 
+    LEFT JOIN customers c ON s.customer_id = c.id 
+    WHERE s.id = ?
+    ''',
       [saleId],
     );
 
     if (saleResult.isEmpty) {
       saleResult = await db.rawQuery(
         '''
-        SELECT s.*, c.name as customer_name, c.phone as customer_phone
-        FROM sales_archive s 
-        LEFT JOIN customers c ON s.customer_id = c.id 
-        WHERE s.id = ?
-        ''',
+      SELECT s.*, c.name as customer_name, c.phone as customer_phone
+      FROM sales_archive s 
+      LEFT JOIN customers c ON s.customer_id = c.id 
+      WHERE s.id = ?
+      ''',
         [saleId],
       );
       useArchive = true;
@@ -990,19 +990,48 @@ class SalesProvider extends ChangeNotifier {
 
     String itemsTable = useArchive ? 'sale_items_archive' : 'sale_items';
 
+    // استعلام محسن لدعم الخدمات والمنتجات
     final itemsResult = await db.rawQuery(
       '''
-      SELECT 
-        si.*, 
-        p.name as product_name,
-        p.base_unit as product_base_unit,
-        pu.unit_name as custom_unit_name,
-        pu.contain_qty as unit_contain_qty
-      FROM $itemsTable si 
-      JOIN products p ON si.product_id = p.id 
-      LEFT JOIN product_units pu ON si.unit_id = pu.id
-      WHERE si.sale_id = ?
-      ''',
+    SELECT 
+      si.*, 
+      -- اسم المنتج (للمنتجات فقط) أو اسم الخدمة
+      COALESCE(
+        p.name, 
+        si.custom_unit_name, 
+        'غير معروف'
+      ) as item_name,
+      -- نوع المنتج: product أو service
+      CASE 
+        WHEN si.unit_type = 'service' THEN 'service'
+        ELSE 'product'
+      END as item_type,
+      -- الوحدة الأساسية للمنتج (للمنتجات فقط)
+      p.base_unit as product_base_unit,
+      -- اسم الوحدة المخصصة (إذا كانت موجودة)
+      pu.unit_name as custom_unit_name,
+      pu.contain_qty as unit_contain_qty,
+      -- سعر التكلفة
+      CASE 
+        WHEN si.unit_type = 'service' THEN 0.0
+        ELSE p.cost_price 
+      END as product_cost_price,
+      -- معلومات إضافية للخدمات
+      CASE 
+        WHEN si.unit_type = 'service' THEN 1
+        ELSE 0
+      END as is_service
+    FROM $itemsTable si 
+    LEFT JOIN products p ON si.product_id = p.id 
+    LEFT JOIN product_units pu ON si.unit_id = pu.id
+    WHERE si.sale_id = ?
+    ORDER BY 
+      CASE 
+        WHEN si.unit_type = 'service' THEN 1
+        ELSE 0
+      END,
+      si.id
+    ''',
       [saleId],
     );
 

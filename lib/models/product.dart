@@ -7,6 +7,7 @@ class Product {
   double quantity;
   double costPrice;
   String? addedDate;
+  bool hasExpiry;
 
   Product({
     this.id,
@@ -17,6 +18,7 @@ class Product {
     required this.quantity,
     required this.costPrice,
     this.addedDate,
+    this.hasExpiry = false,
   });
 
   // Convert a Product object into a Map
@@ -30,6 +32,7 @@ class Product {
       'quantity': quantity,
       'cost_price': costPrice,
       'added_date': addedDate,
+      'has_expiry': hasExpiry ? 1 : 0,
     };
   }
 
@@ -44,6 +47,7 @@ class Product {
       quantity: map['quantity']?.toDouble() ?? 0.0,
       costPrice: map['cost_price']?.toDouble() ?? 0.0,
       addedDate: map['added_date'],
+      hasExpiry: map['has_expiry'] == 1,
     );
   }
 }

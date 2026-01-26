@@ -744,7 +744,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'تفاصيل العميل',
-        showAppBar: true,
         title: widget.customer.name,
         actions: [
           IconButton(

@@ -1252,7 +1252,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'العملاء',
-        showAppBar: false,
         floatingActionButton: FloatingActionButton(
           heroTag: 'add_customer_fab', // علامة فريدة للزر العائم
           onPressed: _addNewCustomer,

@@ -2,37 +2,44 @@ import 'package:motamayez/models/product.dart';
 import 'package:motamayez/models/product_unit.dart';
 
 class CartItem {
-  final Product product;
+  final Product? product;
+  final bool isService;
+  final String? serviceName;
   double quantity;
   final List<ProductUnit> availableUnits;
   ProductUnit? selectedUnit;
-  double? customPrice; // السعر المعدل للفاتورة فقط
+  double? customPrice;
 
-  CartItem({
+  CartItem.product({
     required this.product,
     required this.quantity,
     this.availableUnits = const [],
     this.selectedUnit,
     this.customPrice,
-  });
+  }) : isService = false,
+       serviceName = null;
 
-  // السعر المستخدم (إما المعدل أو الأصلي)
+  CartItem.service({required this.serviceName, required double price})
+    : isService = true,
+      product = null,
+      quantity = 1,
+      availableUnits = const [],
+      selectedUnit = null,
+      customPrice = price;
+
   double get unitPrice =>
-      customPrice ?? (selectedUnit?.sellPrice ?? product.price);
+      customPrice ??
+      (isService ? 0 : (selectedUnit?.sellPrice ?? product!.price));
 
-  // السعر الإجمالي
   double get totalPrice => unitPrice * quantity;
 
-  String get unitName => selectedUnit?.unitName ?? product.baseUnit;
+  String get itemName => isService ? serviceName! : product!.name;
 
-  // تعيين سعر معدل
+  String get unitName =>
+      isService ? 'خدمة' : (selectedUnit?.unitName ?? product!.baseUnit);
+
+  // أضف هذه الدالة لتعديل السعر
   void setCustomPrice(double? price) {
     customPrice = price;
   }
-
-  // التحقق إذا كان السعر معدلاً
-  bool get isPriceModified => customPrice != null;
-
-  // السعر الأصلي
-  double get originalPrice => selectedUnit?.sellPrice ?? product.price;
 }

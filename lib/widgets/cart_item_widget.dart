@@ -31,9 +31,6 @@ class _CartItemWidgetState extends State<CartItemWidget> {
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context);
 
-    // التحقق إذا كان السعر معدلاً
-    final bool isPriceModified = _isPriceModified();
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(10),
@@ -50,11 +47,11 @@ class _CartItemWidgetState extends State<CartItemWidget> {
       ),
       child: Row(
         children: [
-          // اسم المنتج
+          // اسم العنصر (منتج أو خدمة)
           Expanded(
             flex: 1,
             child: Text(
-              widget.item.product.name,
+              widget.item.itemName,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -62,59 +59,25 @@ class _CartItemWidgetState extends State<CartItemWidget> {
             ),
           ),
 
-          // اختيار الوحدة
-          Expanded(flex: 2, child: _buildUnitDropdown()),
+          // عرض نوع الوحدة (منتج أو خدمة)
+          Expanded(flex: 2, child: _buildUnitOrServiceDisplay()),
 
           // السعر (قابل للنقر لتعديله)
-          Expanded(
-            flex: 1,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click, // 👈 كيرسر يد
-              child: GestureDetector(
-                onTap: () => _showPriceEditor(context, settings),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    '${settings.currencyName} ${widget.item.unitPrice.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color:
-                          isPriceModified
-                              ? Colors.orange[800]
-                              : const Color(0xFF8B5FBF),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            ),
-          ),
+          Expanded(flex: 1, child: _buildPriceDisplay(context, settings)),
 
-          // الكمية
-          Expanded(flex: 2, child: _buildQuantityControls()),
+          // الكمية (للمنتجات فقط - للخدمات ثابتة = 1)
+          Expanded(
+            flex: widget.item.isService ? 1 : 2,
+            child:
+                widget.item.isService
+                    ? _buildServiceQuantityDisplay()
+                    : _buildQuantityControls(),
+          ),
 
           // المجموع
-          Expanded(
-            flex: 1,
-            child: Text(
-              '${settings.currencyName} ${widget.item.totalPrice.toStringAsFixed(2)}',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color:
-                    isPriceModified
-                        ? Colors.orange[800]
-                        : const Color(0xFF6A3093),
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
+          Expanded(flex: 1, child: _buildTotalDisplay(settings)),
 
-          // الأزرار
+          // زر الحذف
           Expanded(
             flex: 1,
             child: Row(
@@ -132,20 +95,163 @@ class _CartItemWidgetState extends State<CartItemWidget> {
     );
   }
 
-  // دالة للتحقق إذا كان السعر معدلاً
+  // دالة لعرض نوع الوحدة أو الخدمة
+  Widget _buildUnitOrServiceDisplay() {
+    if (widget.item.isService) {
+      return Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0F7FF),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF2196F3)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.design_services,
+              size: 16,
+              color: Color(0xFF2196F3),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'خدمة',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF2196F3),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // للمنتجات: عرض قائمة الوحدات
+    return _buildUnitDropdown();
+  }
+
+  // دالة لعرض السعر
+  Widget _buildPriceDisplay(BuildContext context, SettingsProvider settings) {
+    final bool isPriceModified = _isPriceModified();
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => _showPriceEditor(context, settings),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(6)),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '${settings.currencyName} ${widget.item.unitPrice.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color:
+                      widget.item.isService
+                          ? const Color(0xFF2196F3)
+                          : (isPriceModified
+                              ? Colors.orange[800]
+                              : const Color(0xFF8B5FBF)),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (widget.item.isService)
+                const Text(
+                  'سعر الخدمة',
+                  style: TextStyle(fontSize: 10, color: Colors.grey),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // دالة لعرض المجموع
+  Widget _buildTotalDisplay(SettingsProvider settings) {
+    final bool isPriceModified = _isPriceModified();
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          '${settings.currencyName} ${widget.item.totalPrice.toStringAsFixed(2)}',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color:
+                widget.item.isService
+                    ? const Color(0xFF2196F3)
+                    : (isPriceModified
+                        ? Colors.orange[800]
+                        : const Color(0xFF6A3093)),
+          ),
+          textAlign: TextAlign.center,
+        ),
+        if (widget.item.isService)
+          const Text(
+            'المجموع',
+            style: TextStyle(fontSize: 10, color: Colors.grey),
+          ),
+      ],
+    );
+  }
+
+  // دالة لعرض كمية الخدمة (ثابتة = 1)
+  Widget _buildServiceQuantityDisplay() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F7FF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF2196F3)),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.onetwothree, size: 20, color: Color(0xFF2196F3)),
+          const SizedBox(height: 4),
+          const Text(
+            '1',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2196F3),
+            ),
+          ),
+          const Text(
+            'كمية الخدمة',
+            style: TextStyle(fontSize: 10, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // دالة للتحقق إذا كان السعر معدلاً (للمنتجات فقط)
   bool _isPriceModified() {
+    if (widget.item.isService) {
+      return false; // الخدمات لا يوجد لها سعر أصلي للتعديل
+    }
     if (widget.item.selectedUnit != null) {
       return widget.item.unitPrice != widget.item.selectedUnit!.sellPrice;
     }
-    return widget.item.unitPrice != widget.item.product.price;
+    return widget.item.unitPrice != widget.item.product!.price;
   }
 
-  // دالة للحصول على السعر الأصلي
+  // دالة للحصول على السعر الأصلي (للمنتجات فقط)
   double _getOriginalPrice() {
+    if (widget.item.isService) {
+      return widget.item.unitPrice; // للخدمات، السعر الحالي هو السعر الوحيد
+    }
     if (widget.item.selectedUnit != null) {
       return widget.item.selectedUnit!.sellPrice;
     }
-    return widget.item.product.price;
+    return widget.item.product!.price;
   }
 
   // دالة لعرض محرر السعر
@@ -159,18 +265,22 @@ class _CartItemWidgetState extends State<CartItemWidget> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.edit, color: Colors.blue),
-                SizedBox(width: 8),
-                Text('تعديل سعر المنتج'),
+                const Icon(Icons.edit, color: Colors.blue),
+                const SizedBox(width: 8),
+                Text(
+                  widget.item.isService
+                      ? 'تعديل سعر الخدمة'
+                      : 'تعديل سعر المنتج',
+                ),
               ],
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  widget.item.product.name,
+                  widget.item.itemName,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -179,10 +289,16 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'السعر الأصلي: ${settings.currencyName} ${originalPrice.toStringAsFixed(2)}',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                ),
+                if (!widget.item.isService)
+                  Text(
+                    'السعر الأصلي: ${settings.currencyName} ${originalPrice.toStringAsFixed(2)}',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                if (widget.item.isService)
+                  const Text(
+                    'الخدمة: يمكن تعديل سعرها فقط',
+                    style: TextStyle(color: Colors.blue, fontSize: 12),
+                  ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: controller,
@@ -196,7 +312,8 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                   ],
                   decoration: InputDecoration(
-                    labelText: 'السعر الجديد',
+                    labelText:
+                        widget.item.isService ? 'سعر الخدمة' : 'السعر الجديد',
                     hintText: '0.00',
                     suffixText: settings.currencyName,
                     border: OutlineInputBorder(
@@ -215,15 +332,16 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Expanded(
-                      child: TextButton.icon(
-                        icon: const Icon(Icons.restore, size: 16),
-                        label: const Text('السعر الأصلي'),
-                        onPressed: () {
-                          controller.text = originalPrice.toStringAsFixed(2);
-                        },
+                    if (!widget.item.isService)
+                      Expanded(
+                        child: TextButton.icon(
+                          icon: const Icon(Icons.restore, size: 16),
+                          label: const Text('السعر الأصلي'),
+                          onPressed: () {
+                            controller.text = originalPrice.toStringAsFixed(2);
+                          },
+                        ),
                       ),
-                    ),
                     Expanded(
                       child: TextButton.icon(
                         icon: const Icon(Icons.money_off, size: 16),
@@ -257,10 +375,17 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                           'تم تعيين السعر إلى 0 (مجاني)',
                           ToastType.warning,
                         );
-                      } else if (newPrice != originalPrice) {
+                      } else if (!widget.item.isService &&
+                          newPrice != originalPrice) {
                         showAppToast(
                           context,
                           'تم تعديل السعر بنجاح',
+                          ToastType.success,
+                        );
+                      } else if (widget.item.isService) {
+                        showAppToast(
+                          context,
+                          'تم تعديل سعر الخدمة بنجاح',
                           ToastType.success,
                         );
                       }
@@ -274,11 +399,14 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                   }
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6A3093),
+                  backgroundColor:
+                      widget.item.isService
+                          ? const Color(0xFF2196F3)
+                          : const Color(0xFF6A3093),
                 ),
-                child: const Text(
-                  'حفظ التغيير',
-                  style: TextStyle(
+                child: Text(
+                  widget.item.isService ? 'حفظ سعر الخدمة' : 'حفظ التغيير',
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -302,7 +430,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                _getBaseUnitDisplayName(widget.item.product.baseUnit),
+                _getBaseUnitDisplayName(widget.item.product!.baseUnit),
                 style: const TextStyle(fontSize: 12),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -329,7 +457,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    '${unit.unitName} (${unit.containQty.toStringAsFixed(2)} ${_getBaseUnitDisplayName(widget.item.product.baseUnit)})',
+                    '${unit.unitName} (${unit.containQty.toStringAsFixed(2)} ${_getBaseUnitDisplayName(widget.item.product!.baseUnit)})',
                     style: const TextStyle(fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -357,7 +485,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
             const Icon(Icons.barcode_reader, size: 16, color: Colors.grey),
             const SizedBox(width: 6),
             Text(
-              _getBaseUnitDisplayName(widget.item.product.baseUnit),
+              _getBaseUnitDisplayName(widget.item.product!.baseUnit),
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
@@ -399,9 +527,9 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                       child: Text(
                         isBaseUnit
                             ? _getBaseUnitDisplayName(
-                              widget.item.product.baseUnit,
+                              widget.item.product!.baseUnit,
                             )
-                            : '${unit!.unitName} (${unit.containQty.toStringAsFixed(2)} ${_getBaseUnitDisplayName(widget.item.product.baseUnit)})',
+                            : '${unit!.unitName} (${unit.containQty.toStringAsFixed(2)} ${_getBaseUnitDisplayName(widget.item.product!.baseUnit)})',
                         style: const TextStyle(fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -592,10 +720,13 @@ class _CartItemWidgetState extends State<CartItemWidget> {
 
   // دالة للحصول على اللاحقة المناسبة للكمية
   String _getQuantitySuffix() {
+    if (widget.item.isService) {
+      return 'خدمة';
+    }
     if (widget.item.selectedUnit != null) {
       return widget.item.selectedUnit!.unitName;
     } else {
-      return _getBaseUnitDisplayName(widget.item.product.baseUnit);
+      return _getBaseUnitDisplayName(widget.item.product!.baseUnit);
     }
   }
 

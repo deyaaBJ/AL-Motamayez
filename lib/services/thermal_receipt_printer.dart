@@ -119,7 +119,7 @@ class ThermalReceiptPrinter {
     // ---------------- ITEMS ----------------
     for (final item in cartItems) {
       String unit = _translateUnit(item.unitName);
-      String productName = item.product.name;
+      String productName = item.product!.name;
 
       // قص الاسم حسب الورق
       if (productName.length > maxNameLength) {

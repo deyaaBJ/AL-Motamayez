@@ -1,24 +1,32 @@
 class SaleItem {
   final int id;
   final int saleId;
-  final int productId;
+
+  final String itemType; // product | service
+
+  final int? productId;
   final int? unitId;
+
   final double quantity;
   final String unitType;
   final String? customUnitName;
+
   final double price;
   final double costPrice;
   final double subtotal;
   final double profit;
-  final String productName;
-  final String productBaseUnit;
+
+  final String itemName; // اسم المنتج أو اسم الخدمة
+  final String? productBaseUnit;
+
   final String? unitName;
   final double? unitContainQty;
 
   SaleItem({
     required this.id,
     required this.saleId,
-    required this.productId,
+    required this.itemType,
+    this.productId,
     this.unitId,
     required this.quantity,
     required this.unitType,
@@ -27,8 +35,8 @@ class SaleItem {
     required this.costPrice,
     required this.subtotal,
     required this.profit,
-    required this.productName,
-    required this.productBaseUnit,
+    required this.itemName,
+    this.productBaseUnit,
     this.unitName,
     this.unitContainQty,
   });
@@ -37,24 +45,29 @@ class SaleItem {
     return SaleItem(
       id: map['id'],
       saleId: map['sale_id'],
+      itemType: map['item_type'] ?? 'product',
       productId: map['product_id'],
       unitId: map['unit_id'],
-      quantity: map['quantity']?.toDouble() ?? 0.0,
+      quantity: map['quantity']?.toDouble() ?? 1.0,
       unitType: map['unit_type'] ?? 'piece',
       customUnitName: map['custom_unit_name'],
       price: map['price']?.toDouble() ?? 0.0,
       costPrice: map['cost_price']?.toDouble() ?? 0.0,
       subtotal: map['subtotal']?.toDouble() ?? 0.0,
       profit: map['profit']?.toDouble() ?? 0.0,
-      productName: map['product_name'] ?? '',
-      productBaseUnit: map['product_base_unit'] ?? 'piece',
-      unitName: map['custom_unit_name'],
+
+      // ⬇️ المهم
+      itemName: map['item_name'] ?? map['product_name'] ?? 'خدمة',
+      productBaseUnit: map['product_base_unit'],
+      unitName: map['unit_name'],
       unitContainQty: map['unit_contain_qty']?.toDouble(),
     );
   }
 
-  // دالة مساعدة للحصول على اسم الوحدة المعروضة
+  /// اسم الوحدة المعروض
   String get displayUnit {
+    if (itemType == 'service') return 'خدمة';
+
     switch (unitType) {
       case 'piece':
         return 'قطعة';
@@ -67,8 +80,10 @@ class SaleItem {
     }
   }
 
-  // دالة مساعدة للحصول على الكمية المعروضة
+  /// الكمية المعروضة
   String get displayQuantity {
+    if (itemType == 'service') return '1';
+
     if (unitType == 'kg') {
       return quantity % 1 == 0
           ? quantity.toInt().toString()

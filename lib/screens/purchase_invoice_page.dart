@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/product.dart';
@@ -9,6 +10,7 @@ import '../providers/supplier_provider.dart';
 import '../providers/purchase_invoice_provider.dart';
 import '../providers/purchase_item_provider.dart';
 import '../providers/product_provider.dart';
+import '../providers/product_batch_provider.dart'; // تأكد من إنشاء هذا الـProvider
 import '../utils/formatters.dart';
 
 class PurchaseInvoicePage extends StatefulWidget {
@@ -24,12 +26,12 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   final TextEditingController _costController = TextEditingController();
   final TextEditingController _searchProductController =
       TextEditingController();
-  final TextEditingController _discountController =
-      TextEditingController(); // المتحكم الجديد للخصم
+  final TextEditingController _discountController = TextEditingController();
 
   // المتغيرات المحلية فقط
   int? _selectedProductId;
   int? _invoiceId;
+  DateTime? _expiryDate; // أضف هذا لتخزين تاريخ الانتهاء
   bool _isLoading = false;
   bool _isInitialLoading = true;
   bool _isSearching = false;
@@ -115,7 +117,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     _costController.dispose();
     _searchProductController.removeListener(_performSearch);
     _searchProductController.dispose();
-    _discountController.dispose(); // التخلص من المتحكم الجديد
+    _discountController.dispose();
     super.dispose();
   }
 
@@ -123,11 +125,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: BaseLayout(
-        currentPage: 'فاتورة شراء',
-        showAppBar: false,
-        child: _buildMainContent(),
-      ),
+      child: BaseLayout(currentPage: 'فاتورة شراء', child: _buildMainContent()),
     );
   }
 
@@ -500,6 +498,11 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
               ],
             ),
 
+            const SizedBox(height: 16),
+
+            // قسم تاريخ الانتهاء - يظهر فقط للمنتجات التي لها صلاحية
+            if (_selectedProductId != null) _buildExpiryDateSection(),
+
             const SizedBox(height: 20),
 
             SizedBox(
@@ -529,6 +532,99 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         ),
       ),
     );
+  }
+
+  Widget _buildExpiryDateSection() {
+    // البحث عن المنتج المحدد
+    final productProvider = context.read<ProductProvider>();
+    Product? selectedProduct;
+
+    try {
+      selectedProduct = productProvider.products.firstWhere(
+        (p) => p.id == _selectedProductId,
+      );
+    } catch (e) {
+      selectedProduct = null;
+    }
+
+    // إذا كان المنتج له صلاحية، اعرض خيار تاريخ الانتهاء
+    if (selectedProduct != null && selectedProduct.hasExpiry) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'تاريخ الانتهاء',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () async {
+              final selectedDate = await showDatePicker(
+                context: context,
+                initialDate: DateTime.now().add(const Duration(days: 365)),
+                firstDate: DateTime.now(),
+                lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
+                helpText: 'اختر تاريخ الانتهاء',
+                confirmText: 'تأكيد',
+                cancelText: 'إلغاء',
+                builder: (context, child) {
+                  return Theme(
+                    data: Theme.of(context).copyWith(
+                      colorScheme: const ColorScheme.light(
+                        primary: Colors.blue,
+                        onPrimary: Colors.white,
+                        surface: Colors.white,
+                        onSurface: Colors.black,
+                      ),
+                      dialogBackgroundColor: Colors.white,
+                    ),
+                    child: child!,
+                  );
+                },
+              );
+
+              if (selectedDate != null) {
+                setState(() {
+                  _expiryDate = selectedDate;
+                });
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade400),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _expiryDate != null
+                        ? DateFormat('yyyy-MM-dd').format(_expiryDate!)
+                        : 'انقر لتحديد تاريخ الانتهاء',
+                    style: TextStyle(
+                      color: _expiryDate != null ? Colors.black : Colors.grey,
+                    ),
+                  ),
+                  const Icon(Icons.calendar_today, color: Colors.blue),
+                ],
+              ),
+            ),
+          ),
+          if (_expiryDate != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                'سيتم إضافة المنتج بتاريخ انتهاء: ${DateFormat('yyyy-MM-dd').format(_expiryDate!)}',
+                style: const TextStyle(color: Colors.green, fontSize: 12),
+              ),
+            ),
+        ],
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   Widget _buildProductSearchResults() {
@@ -587,15 +683,31 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
           color: isSelected ? Colors.blue.shade50 : null,
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: isSelected ? Colors.blue : Colors.grey.shade200,
+              backgroundColor:
+                  product.hasExpiry
+                      ? Colors.orange.shade100
+                      : (isSelected ? Colors.blue : Colors.grey.shade200),
               child: Icon(
                 Icons.inventory,
-                color: isSelected ? Colors.white : Colors.grey,
+                color:
+                    product.hasExpiry
+                        ? Colors.orange
+                        : (isSelected ? Colors.white : Colors.grey),
               ),
             ),
             title: Text(product.name),
-            subtitle: Text(
-              'المخزون: ${product.quantity} ${getUnitArabic(product.baseUnit)}',
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'المخزون: ${product.quantity} ${getUnitArabic(product.baseUnit)}',
+                ),
+                if (product.hasExpiry)
+                  const Text(
+                    '📅 له صلاحية',
+                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                  ),
+              ],
             ),
             trailing: Icon(
               isSelected ? Icons.check_circle : Icons.add_circle,
@@ -606,6 +718,10 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 _selectedProductId = product.id;
                 _costController.text = product.costPrice.toStringAsFixed(2);
                 _qtyController.text = '1';
+                // إعادة تعيين تاريخ الانتهاء فقط إذا كان المنتج الجديد له صلاحية
+                if (!product.hasExpiry) {
+                  _expiryDate = null;
+                }
               });
             },
           ),
@@ -734,6 +850,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     final quantity = (item['quantity'] as num).toDouble();
                     final costPrice = (item['cost_price'] as num).toDouble();
                     final subtotal = quantity * costPrice;
+                    final hasExpiry = item['has_expiry'] as bool? ?? false;
+                    final expiryDate = item['expiry_date_formatted'] as String?;
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
@@ -747,7 +865,20 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                           Expanded(
                             child: Padding(
                               padding: const EdgeInsets.all(12),
-                              child: Text(productName),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(productName),
+                                  if (hasExpiry && expiryDate != null)
+                                    Text(
+                                      'ينتهي: $expiryDate',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.orange,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -784,7 +915,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
                   const SizedBox(height: 20),
 
-                  // الملخص - القسم الذي تم إصلاحه
+                  // الملخص
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -1016,11 +1147,19 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       return;
     }
 
-    final qty = double.tryParse(_qtyController.text);
-    final cost = double.tryParse(_costController.text);
+    final qtyText = _qtyController.text.trim();
+    final costText = _costController.text.trim();
+
+    if (qtyText.isEmpty || costText.isEmpty) {
+      _showError('يرجى إدخال الكمية والسعر');
+      return;
+    }
+
+    final qty = double.tryParse(qtyText);
+    final cost = double.tryParse(costText);
 
     if (qty == null || cost == null || qty <= 0 || cost <= 0) {
-      _showError('يرجى إدخال قيم صحيحة');
+      _showError('يرجى إدخال قيم صحيحة للكمية والسعر');
       return;
     }
 
@@ -1031,31 +1170,67 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       final productProvider = context.read<ProductProvider>();
       final product = productProvider.products.firstWhere(
         (p) => p.id == _selectedProductId,
-        orElse: () => throw Exception('المنتج غير موجود'),
+        orElse: () => throw Exception('المنتج غير موجود في القائمة'),
       );
 
-      // إضافة العنصر إلى الـProvider
-      final newItem = {
-        'product_id': _selectedProductId!,
-        'product_name': product.name,
-        'quantity': qty,
-        'cost_price': cost,
-        'subtotal': qty * cost,
-      };
+      // التحقق إذا كان المنتج له صلاحية
+      if (product.hasExpiry) {
+        // التحقق من إدخال تاريخ الانتهاء
+        if (_expiryDate == null) {
+          _showError('يجب تحديد تاريخ الانتهاء لهذا المنتج');
+          setState(() => _isLoading = false);
+          return;
+        }
 
-      invoiceProvider.addTempItem(newItem);
+        // التحقق من أن تاريخ الانتهاء ليس في الماضي
+        if (_expiryDate!.isBefore(DateTime.now())) {
+          _showError('تاريخ الانتهاء لا يمكن أن يكون في الماضي');
+          setState(() => _isLoading = false);
+          return;
+        }
 
-      // تفريغ الحقول
-      _qtyController.clear();
-      _costController.clear();
-      _selectedProductId = null;
-      _searchProductController.clear();
+        // إضافة العنصر مع معلومات تاريخ الانتهاء
+        final newItem = {
+          'product_id': product.id!,
+          'product_name': product.name,
+          'quantity': qty,
+          'cost_price': cost,
+          'subtotal': qty * cost,
+          'has_expiry': true,
+          'expiry_date': _expiryDate!.toIso8601String(),
+          'expiry_date_formatted': DateFormat(
+            'yyyy-MM-dd',
+          ).format(_expiryDate!),
+        };
 
-      _showSuccess('تم إضافة المنتج بنجاح');
+        invoiceProvider.addTempItem(newItem);
+
+        _showSuccess(
+          'تم إضافة "${product.name}" مع تاريخ انتهاء: ${DateFormat('yyyy-MM-dd').format(_expiryDate!)}',
+        );
+      } else {
+        // المنتج بدون صلاحية
+        final newItem = {
+          'product_id': product.id!,
+          'product_name': product.name,
+          'quantity': qty,
+          'cost_price': cost,
+          'subtotal': qty * cost,
+          'has_expiry': false,
+        };
+
+        invoiceProvider.addTempItem(newItem);
+        _showSuccess('تم إضافة "${product.name}" بنجاح');
+      }
+
+      // تفريغ الحقول وإعادة التعيين
+      _resetFormFields();
     } catch (e) {
-      _showError('حدث خطأ: $e');
+      _showError('حدث خطأ أثناء إضافة المنتج: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -1097,32 +1272,85 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       return;
     }
 
+    // التحقق من تاريخ الانتهاء للمنتجات التي لها صلاحية (جديد)
+    for (final item in invoiceItems) {
+      final hasExpiry = item['has_expiry'] as bool;
+
+      if (hasExpiry) {
+        final expiryDateStr = item['expiry_date'] as String?;
+        final productName = item['product_name'] as String;
+
+        if (expiryDateStr == null || expiryDateStr.isEmpty) {
+          _showError('يجب تحديد تاريخ الانتهاء لـ "$productName"');
+          return;
+        }
+
+        final expiryDate = DateTime.tryParse(expiryDateStr);
+        if (expiryDate != null && expiryDate.isBefore(DateTime.now())) {
+          _showError('تاريخ انتهاء "$productName" في الماضي');
+          return;
+        }
+      }
+    }
+
     setState(() => _isLoading = true);
 
     try {
       final purchaseInvoiceProvider = context.read<PurchaseInvoiceProvider>();
       final purchaseItemProvider = context.read<PurchaseItemProvider>();
+      final productBatchProvider = context.read<ProductBatchProvider>();
 
-      // 🔹 نرسل المبلغ النهائي (بعد الخصم)
+      // 🔹 1. إنشاء الفاتورة الرئيسية (كما كان)
       _invoiceId = await purchaseInvoiceProvider.addPurchaseInvoice(
         supplierId: invoiceProvider.tempSelectedSupplierId!,
-        totalCost: invoiceProvider.tempInvoiceFinalTotal, // ← المبلغ بعد الخصم
+        totalCost: invoiceProvider.tempInvoiceFinalTotal,
         paymentType: invoiceProvider.tempPaymentType ?? 'cash',
         note: invoiceProvider.tempNote,
         paidAmount: 0.0,
       );
 
-      // إضافة العناصر
+      // 🔹 2. حفظ عناصر الفاتورة والدفعات
+      int batchCount = 0;
+
       for (final item in invoiceItems) {
+        final productId = item['product_id'] as int;
+        final quantity = (item['quantity'] as num).toDouble();
+        final costPrice = (item['cost_price'] as num).toDouble();
+        final hasExpiry = item['has_expiry'] as bool;
+
+        // 2.1 إضافة عنصر الشراء (كما كان)
         await purchaseItemProvider.addPurchaseItem(
           purchaseId: _invoiceId!,
-          productId: item['product_id'] as int,
-          quantity: (item['quantity'] as num).toDouble(),
-          costPrice: (item['cost_price'] as num).toDouble(),
+          productId: productId,
+          quantity: quantity,
+          costPrice: costPrice,
         );
+
+        // 2.2 إذا كان له صلاحية، إضافة الدفعة (جديد)
+        if (hasExpiry) {
+          final expiryDateStr = item['expiry_date'] as String;
+
+          await productBatchProvider.addProductBatch(
+            productId: productId,
+            purchaseItemId: null, // أو purchaseItemId إذا عدلت addPurchaseItem
+            quantity: quantity,
+            remainingQuantity: quantity,
+            costPrice: costPrice,
+            expiryDate: expiryDateStr.split('T')[0], // تنسيق YYYY-MM-DD
+            productionDate: null,
+          );
+
+          batchCount++;
+        }
       }
 
-      _showSuccess('تم حفظ الفاتورة بنجاح رقم #$_invoiceId');
+      // 🔹 3. عرض رسالة النجاح
+      String successMessage = 'تم حفظ الفاتورة بنجاح رقم #$_invoiceId';
+      if (batchCount > 0) {
+        successMessage += '\nتم حفظ $batchCount دفعة للمنتجات ذات الصلاحية';
+      }
+
+      _showSuccess(successMessage);
       _clearInvoice();
     } catch (e) {
       _showError('خطأ في حفظ الفاتورة: $e');
@@ -1132,20 +1360,23 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   void _clearInvoice() {
-    // مسح الفاتورة من الـProvider فقط
+    // مسح الفاتورة من الـProvider
     final invoiceProvider = context.read<PurchaseInvoiceProvider>();
     invoiceProvider.clearTempInvoice();
 
+    // مسح جميع الحقول المحلية
     setState(() {
       _invoiceId = null;
       _selectedProductId = null;
+      _expiryDate = null;
       _searchProductController.clear();
       _searchResults.clear();
     });
 
+    // مسح المتحكمات
     _qtyController.clear();
     _costController.clear();
-    _discountController.clear(); // مسح حقل الخصم أيضاً
+    _discountController.clear();
   }
 
   void _showError(String message) {
@@ -1179,5 +1410,19 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       default:
         return unit;
     }
+  }
+
+  // دالة مساعدة لتفريغ الحقول
+  void _resetFormFields() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _qtyController.clear();
+      _costController.clear();
+      _selectedProductId = null;
+      _expiryDate = null;
+      _searchProductController.clear();
+      setState(() {
+        _searchResults.clear();
+      });
+    });
   }
 }

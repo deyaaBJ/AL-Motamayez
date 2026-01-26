@@ -381,9 +381,17 @@ class ProductProvider with ChangeNotifier {
       log('🎯 إعداد افتراضي - showForTax: $showForTax');
     }
 
-    // التحقق من الكميات قبل بدء المعاملة
+    // التحقق من الكميات قبل بدء المعاملة (للمنتجات فقط، ليس للخدمات)
     for (var item in cartItems) {
+      // تخطي الخدمات (ليس لها مخزون)
+      if (item.isService) {
+        continue;
+      }
+
       final product = item.product;
+      if (product == null) {
+        throw Exception('المنتج غير موجود');
+      }
 
       // جلب الكمية الحالية من قاعدة البيانات كـ REAL
       final List<Map<String, dynamic>> result = await db.query(
@@ -436,66 +444,98 @@ class ProductProvider with ChangeNotifier {
 
       // 2️⃣ إضافة العناصر المرتبطة في sale_items
       for (var item in cartItems) {
-        final product = item.product;
-        final double costPrice = product.costPrice;
+        if (item.isService) {
+          // معالجة الخدمة
+          final double actualPrice = item.unitPrice;
+          final double subtotal = item.totalPrice;
+          final double profit = 0.0; // الخدمات ليس لها ربح
 
-        // استخدام سعر الوحدة المختارة إذا كانت موجودة
-        double actualPrice = item.unitPrice;
-        int? unitId = item.selectedUnit?.id;
+          totalProfit += profit;
 
-        // تحديد نوع الوحدة واسمها
-        String unitType;
-        String? customUnitName;
+          // إدراج الخدمة في sale_items
+          await txn.insert('sale_items', {
+            'sale_id': saleId,
+            'product_id': null, // الخدمات ليس لها product_id
+            'unit_id': null,
+            'quantity': item.quantity,
+            'unit_type': 'service', // نوع خاص للخدمات
+            'custom_unit_name': item.serviceName, // اسم الخدمة
+            'price': actualPrice,
+            'cost_price': 0.0, // الخدمات ليس لها تكلفة
+            'subtotal': subtotal,
+            'profit': profit, // ربح = 0
+          });
 
-        if (item.selectedUnit != null) {
-          // إذا كانت وحدة مخصصة
-          unitType = 'custom';
-          customUnitName = item.selectedUnit!.unitName;
+          log(
+            '✅ تم إضافة خدمة: ${item.serviceName} - السعر: $actualPrice (ربح: 0)',
+          );
         } else {
-          // إذا كانت الوحدة الأساسية
-          unitType = product.baseUnit; // 'piece' أو 'kg'
-          customUnitName = null;
-        }
+          // معالجة المنتج (الكود الأصلي)
+          final product = item.product;
+          if (product == null) {
+            throw Exception('المنتج غير موجود');
+          }
 
-        final double subtotal = item.totalPrice;
-        final double profit = (actualPrice - costPrice) * item.quantity;
+          final double costPrice = product.costPrice;
 
-        totalProfit += profit;
+          // استخدام سعر الوحدة المختارة إذا كانت موجودة
+          double actualPrice = item.unitPrice;
+          int? unitId = item.selectedUnit?.id;
 
-        // إدراج العنصر مع معلومات الوحدة
-        await txn.insert('sale_items', {
-          'sale_id': saleId,
-          'product_id': product.id,
-          'unit_id': unitId, // يمكن أن يكون null إذا بيع بالوحدة الأساسية
-          'quantity': item.quantity,
-          'unit_type': unitType, // ⬅️ هذا الحقل كان ناقص
-          'custom_unit_name': customUnitName, // ⬅️ وهذا أيضاً كان ناقص
-          'price': actualPrice,
-          'cost_price': costPrice,
-          'subtotal': subtotal,
-          'profit': profit,
-        });
+          // تحديد نوع الوحدة واسمها
+          String unitType;
+          String? customUnitName;
 
-        // 3️⃣ خصم الكمية من المخزون بالوحدة الأساسية
-        double quantityToDeduct = item.quantity;
+          if (item.selectedUnit != null) {
+            // إذا كانت وحدة مخصصة
+            unitType = 'custom';
+            customUnitName = item.selectedUnit!.unitName;
+          } else {
+            // إذا كانت الوحدة الأساسية
+            unitType = product.baseUnit;
+            customUnitName = null;
+          }
 
-        if (item.selectedUnit != null) {
-          // تحويل الكمية إلى الوحدة الأساسية
-          quantityToDeduct = item.quantity * item.selectedUnit!.containQty;
-        }
+          final double subtotal = item.totalPrice;
+          final double profit = (actualPrice - costPrice) * item.quantity;
 
-        await txn.rawUpdate(
-          '''
+          totalProfit += profit;
+
+          // إدراج العنصر مع معلومات الوحدة
+          await txn.insert('sale_items', {
+            'sale_id': saleId,
+            'product_id': product.id,
+            'unit_id': unitId,
+            'quantity': item.quantity,
+            'unit_type': unitType,
+            'custom_unit_name': customUnitName,
+            'price': actualPrice,
+            'cost_price': costPrice,
+            'subtotal': subtotal,
+            'profit': profit,
+          });
+
+          // 3️⃣ خصم الكمية من المخزون بالوحدة الأساسية (للمنتجات فقط)
+          double quantityToDeduct = item.quantity;
+
+          if (item.selectedUnit != null) {
+            // تحويل الكمية إلى الوحدة الأساسية
+            quantityToDeduct = item.quantity * item.selectedUnit!.containQty;
+          }
+
+          await txn.rawUpdate(
+            '''
         UPDATE products 
         SET quantity = quantity - ?
         WHERE id = ?
         ''',
-          [quantityToDeduct, product.id],
-        );
+            [quantityToDeduct, product.id],
+          );
 
-        log(
-          '📦 تم خصم ${quantityToDeduct.toStringAsFixed(2)} ${product.baseUnit} من منتج ${product.name}',
-        );
+          log(
+            '📦 تم خصم ${quantityToDeduct.toStringAsFixed(2)} ${product.baseUnit} من منتج ${product.name}',
+          );
+        }
       }
 
       // 4️⃣ تحديث إجمالي الربح في جدول sales
@@ -511,9 +551,8 @@ class ProductProvider with ChangeNotifier {
 
     log('✅ تم إضافة الفاتورة بنجاح - showForTax: $showForTax');
     notifyListeners();
-  }
 
-  // في ProductProvider.dart
+  }
 
   // جلب منتج بواسطة الـ ID
   Future<Product?> getProductById(int id) async {
@@ -669,7 +708,7 @@ class ProductProvider with ChangeNotifier {
         if (item.quantity == 0) continue;
 
         final product = item.product;
-        final double costPrice = product.costPrice;
+        final double costPrice = product!.costPrice;
         double actualPrice = item.selectedUnit?.sellPrice ?? product.price;
         int? unitId = item.selectedUnit?.id;
 
@@ -680,7 +719,7 @@ class ProductProvider with ChangeNotifier {
           unitType = 'custom';
           customUnitName = item.selectedUnit!.unitName;
         } else {
-          unitType = product.baseUnit;
+          unitType = product!.baseUnit;
           customUnitName = null;
         }
 
@@ -690,7 +729,7 @@ class ProductProvider with ChangeNotifier {
 
         Map<String, dynamic> saleItemData = {
           'sale_id': originalSale.id,
-          'product_id': product.id,
+          'product_id': product?.id,
           'unit_id': unitId,
           'quantity': item.quantity,
           'unit_type': unitType,
@@ -711,7 +750,7 @@ class ProductProvider with ChangeNotifier {
         }
         await txn.rawUpdate(
           'UPDATE products SET quantity = quantity - ? WHERE id = ?',
-          [quantityToDeduct, product.id],
+          [quantityToDeduct, product?.id],
         );
       }
 
@@ -775,7 +814,7 @@ class ProductProvider with ChangeNotifier {
         'products',
         columns: ['quantity', 'name'],
         where: 'id = ?',
-        whereArgs: [product.id],
+        whereArgs: [product?.id],
       );
 
       if (result.isNotEmpty) {
@@ -795,7 +834,7 @@ class ProductProvider with ChangeNotifier {
         if (requiredQuantity > 0 && currentQuantity < requiredQuantity) {
           throw Exception(
             'المنتج "$productName" لا يوجد به كمية كافية. '
-            'الكمية المتاحة: ${currentQuantity.toStringAsFixed(2)} ${translateUnit(product.baseUnit)}',
+            'الكمية المتاحة: ${currentQuantity.toStringAsFixed(2)} ${translateUnit(product!.baseUnit)}',
           );
         }
       } else {

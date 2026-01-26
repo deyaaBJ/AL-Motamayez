@@ -43,7 +43,6 @@ class _MainScreenState extends State<MainScreen> {
       textDirection: TextDirection.rtl, // 🔥 تحويل كل الواجهة للعربي
       child: BaseLayout(
         currentPage: 'home',
-        showAppBar: false,
         child: _buildMainContent(context, role),
       ),
     );
@@ -84,8 +83,6 @@ class _MainScreenState extends State<MainScreen> {
                 ],
               ),
               const Spacer(), // يدفع العنصر التالي لأقصى الجهة الأخرى
-              // 👇 هنا الأنيميشن الجديد بدلاً من أيقونة الإشعارات
-              const BeautifulCartAnimation(color: Color(0xFF4A1C6D)),
             ],
           ),
         ),

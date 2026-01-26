@@ -836,7 +836,6 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'الفواتير',
-        showAppBar: false,
         child: Scaffold(
           body: Consumer<PurchaseInvoiceProvider>(
             builder: (context, provider, child) {

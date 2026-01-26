@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/components/posPageCompoments/search_section.dart';
@@ -99,7 +100,7 @@ class _PosScreenState extends State<PosScreen>
 
       for (final saleItem in saleItems) {
         try {
-          final product = await _provider.getProductById(saleItem.productId);
+          final product = await _provider.getProductById(saleItem.productId!);
           if (product != null) {
             List<ProductUnit> units = [];
             if (product.id != null) {
@@ -118,7 +119,7 @@ class _PosScreenState extends State<PosScreen>
               }
             }
 
-            final cartItem = CartItem(
+            final cartItem = CartItem.product(
               product: product,
               quantity: saleItem.quantity,
               availableUnits: units,
@@ -155,41 +156,40 @@ class _PosScreenState extends State<PosScreen>
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: '',
-        showAppBar: true,
-        title: 'نقاط البيع',
-        actions: [
-          IconButton(
-            onPressed: () {
-              setState(() {
-                _calculateTotal();
-              });
-            },
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
+
         floatingActionButton: null,
         child: Column(
           children: [
             if (widget.isEditMode) _buildModeBanner(),
 
-            SearchSection(
-              searchController: _searchController,
-              searchFocusNode: _searchFocusNode,
-              searchType: _searchType,
-              isSearching: _isSearching,
-              performSearch: _performSearch,
-              onEnterPressed: _handleEnterPressed,
-              clearSearch: _clearSearch,
-              showSearchResults: _showSearchResults,
-              refreshState: () => setState(() {}),
-              onChangeSearchType: (type) {
-                setState(() {
-                  _searchType = type;
-                  _searchController.clear();
-                  _showSearchResults = false;
-                  _searchResults.clear();
-                });
-              },
+            Row(
+              children: [
+                Expanded(
+                  child: SearchSection(
+                    searchController: _searchController,
+                    searchFocusNode: _searchFocusNode,
+                    searchType: _searchType,
+                    isSearching: _isSearching,
+                    performSearch: _performSearch,
+                    onEnterPressed: _handleEnterPressed,
+                    clearSearch: _clearSearch,
+                    showSearchResults: _showSearchResults,
+                    refreshState: () => setState(() {}),
+                    onChangeSearchType: (type) {
+                      setState(() {
+                        _searchType = type;
+                        _searchController.clear();
+                        _showSearchResults = false;
+                        _searchResults.clear();
+                      });
+                    },
+                    addService: _addService,
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // زر إضافة خدمة
+              ],
             ),
 
             if (_showSearchResults) _buildSearchResults(),
@@ -495,9 +495,11 @@ class _PosScreenState extends State<PosScreen>
         for (final cartItem in _cartItems) {
           final product = cartItem.product;
 
-          if ((!isBarcodeSearch && product.name.contains(trimmedQuery)) ||
+          if ((!isBarcodeSearch && product!.name.contains(trimmedQuery)) ||
               (isBarcodeSearch &&
+                  product != null &&
                   product.barcode != null &&
+                  product.barcode!.isNotEmpty &&
                   product.barcode!.contains(trimmedQuery))) {
             if (!results.any(
               (item) =>
@@ -564,7 +566,7 @@ class _PosScreenState extends State<PosScreen>
       } else if (firstResult is Product) {
         if (widget.isEditMode) {
           final existingItemIndex = _cartItems.indexWhere(
-            (item) => item.product.id == firstResult.id,
+            (item) => item.product?.id == firstResult.id,
           );
 
           if (existingItemIndex != -1) {
@@ -612,7 +614,7 @@ class _PosScreenState extends State<PosScreen>
 
     final existingItemIndex = _cartItems.indexWhere(
       (item) =>
-          item.product.id == product.id && item.selectedUnit?.id == unit.id,
+          item.product?.id == product.id && item.selectedUnit?.id == unit.id,
     );
 
     if (existingItemIndex != -1) {
@@ -630,7 +632,7 @@ class _PosScreenState extends State<PosScreen>
 
       setState(() {
         _cartItems.add(
-          CartItem(
+          CartItem.product(
             product: product,
             quantity: 1,
             availableUnits: allUnits,
@@ -675,12 +677,12 @@ class _PosScreenState extends State<PosScreen>
           existingSaleItem = null;
         }
 
-        ProductUnit? selectedUnit;
+        ProductUnit? selectedUnitForEdit;
 
         if (existingSaleItem != null && existingSaleItem.unitId != null) {
           for (final unit in allUnits) {
-            if (unit.id == existingSaleItem.unitId) {
-              selectedUnit = unit;
+            if (unit.id == existingSaleItem!.unitId) {
+              selectedUnitForEdit = unit;
               break;
             }
           }
@@ -688,8 +690,8 @@ class _PosScreenState extends State<PosScreen>
 
         final existingItemIndex = _cartItems.indexWhere(
           (item) =>
-              item.product.id == product.id &&
-              item.selectedUnit?.id == selectedUnit?.id,
+              item.product?.id == product.id &&
+              item.selectedUnit?.id == selectedUnitForEdit?.id,
         );
 
         if (!mounted) return;
@@ -698,19 +700,20 @@ class _PosScreenState extends State<PosScreen>
             _cartItems[existingItemIndex].quantity += 1;
           } else {
             _cartItems.add(
-              CartItem(
+              CartItem.product(
                 product: product,
                 quantity: 1,
                 availableUnits: allUnits,
-                selectedUnit: selectedUnit,
+                selectedUnit: selectedUnitForEdit,
               ),
             );
           }
           _calculateTotal();
         });
       } else {
+        // الحالة العادية (ليست وضع التعديل)
         final existingItemIndex = _cartItems.indexWhere(
-          (item) => item.product.id == product.id && item.selectedUnit == null,
+          (item) => item.product?.id == product.id && item.selectedUnit == null,
         );
 
         if (!mounted) return;
@@ -719,7 +722,7 @@ class _PosScreenState extends State<PosScreen>
             _cartItems[existingItemIndex].quantity += 1;
           } else {
             _cartItems.add(
-              CartItem(
+              CartItem.product(
                 product: product,
                 quantity: 1,
                 availableUnits: allUnits,
@@ -782,7 +785,7 @@ class _PosScreenState extends State<PosScreen>
               ..._cartItems.asMap().entries.map(
                 (entry) => CartItemWidget(
                   key: ValueKey(
-                    'cart_item_${entry.key}_${entry.value.product.barcode}',
+                    'cart_item_${entry.key}_${entry.value.product?.barcode}',
                   ),
                   item: entry.value,
                   onQuantityChange:
@@ -1115,11 +1118,7 @@ class _PosScreenState extends State<PosScreen>
 
   void _calculateTotal() {
     _totalAmount = _cartItems.fold(0.0, (sum, item) {
-      // ← التعديل الأهم هنا
-      double price =
-          item.customPrice ??
-          (item.selectedUnit?.sellPrice ?? item.product.price);
-
+      double price = item.unitPrice;
       return sum + (price * item.quantity);
     });
 
@@ -1270,6 +1269,21 @@ class _PosScreenState extends State<PosScreen>
     final productProvider = context.read<ProductProvider>();
 
     try {
+      // تحقق من أن جميع المنتجات لديها كمية كافية (باستثناء الخدمات)
+      for (final item in _cartItems) {
+        if (!item.isService && item.product != null) {
+          final product = item.product!;
+          if (product.quantity < item.quantity) {
+            showAppToast(
+              context,
+              'الكمية غير كافية لـ ${product.name}',
+              ToastType.error,
+            );
+            return;
+          }
+        }
+      }
+
       if (widget.isEditMode) {
         await productProvider.updateSale(
           originalSale: _originalSale!,
@@ -1300,6 +1314,21 @@ class _PosScreenState extends State<PosScreen>
     final productProvider = context.read<ProductProvider>();
 
     try {
+      // تحقق من أن جميع المنتجات لديها كمية كافية (باستثناء الخدمات)
+      for (final item in _cartItems) {
+        if (!item.isService && item.product != null) {
+          final product = item.product!;
+          if (product.quantity < item.quantity) {
+            showAppToast(
+              context,
+              'الكمية غير كافية لـ ${product.name}',
+              ToastType.error,
+            );
+            return;
+          }
+        }
+      }
+
       await productProvider.addSale(
         cartItems: _cartItems,
         totalAmount: _finalAmount,
@@ -1573,6 +1602,21 @@ class _PosScreenState extends State<PosScreen>
     final debtProvider = context.read<DebtProvider>();
 
     try {
+      // تحقق من أن جميع المنتجات لديها كمية كافية (باستثناء الخدمات)
+      for (final item in _cartItems) {
+        if (!item.isService && item.product != null) {
+          final product = item.product!;
+          if (product.quantity < item.quantity) {
+            showAppToast(
+              context,
+              'الكمية غير كافية لـ ${product.name}',
+              ToastType.error,
+            );
+            return;
+          }
+        }
+      }
+
       await productProvider.addSale(
         cartItems: _cartItems,
         totalAmount: _finalAmount,
@@ -1584,7 +1628,7 @@ class _PosScreenState extends State<PosScreen>
       await debtProvider.addCreditSale(
         customerId: customer.id!,
         amount: _finalAmount,
-        note: 'فاتورة #',
+        note: 'فاتورة تحتوي على خدمات',
       );
 
       if (mounted) {
@@ -1608,5 +1652,118 @@ class _PosScreenState extends State<PosScreen>
         showAppToast(context, 'خطأ: $errorMessage', ToastType.error);
       }
     }
+  }
+
+  // دالة لإضافة خدمة جديدة
+  void _addService() {
+    final TextEditingController nameController = TextEditingController();
+    final TextEditingController priceController = TextEditingController();
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.design_services, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('إضافة خدمة جديدة'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'اسم الخدمة',
+                    hintText: 'أدخل اسم الخدمة',
+                    border: OutlineInputBorder(),
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: priceController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'المبلغ',
+                    hintText: '0.00',
+                    suffixText: settings.currencyName,
+                    border: const OutlineInputBorder(),
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final String name = nameController.text.trim();
+                  final String priceText = priceController.text.trim();
+
+                  if (name.isEmpty) {
+                    showAppToast(
+                      context,
+                      'الرجاء إدخال اسم الخدمة',
+                      ToastType.error,
+                    );
+                    return;
+                  }
+
+                  if (priceText.isEmpty) {
+                    showAppToast(
+                      context,
+                      'الرجاء إدخال المبلغ',
+                      ToastType.error,
+                    );
+                    return;
+                  }
+
+                  double? price = double.tryParse(priceText);
+                  if (price == null || price < 0) {
+                    showAppToast(
+                      context,
+                      'الرجاء إدخال مبلغ صحيح',
+                      ToastType.error,
+                    );
+                    return;
+                  }
+
+                  // إضافة الخدمة إلى السلة
+                  final newServiceItem = CartItem.service(
+                    serviceName: name,
+                    price: price,
+                  );
+
+                  setState(() {
+                    _cartItems.add(newServiceItem);
+                    _calculateTotal();
+                  });
+
+                  Navigator.pop(context);
+                  showAppToast(
+                    context,
+                    'تم إضافة الخدمة بنجاح',
+                    ToastType.success,
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2196F3),
+                ),
+                child: const Text('إضافة'),
+              ),
+            ],
+          ),
+    );
   }
 }

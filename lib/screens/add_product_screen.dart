@@ -120,7 +120,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
       textDirection: TextDirection.rtl, // واجهة عربية كاملة
       child: BaseLayout(
         currentPage: 'المنتجات', // الصفحة الحالية
-        showAppBar: true,
         title: _isNewProduct ? 'إضافة منتج جديد' : 'تحديث المنتج',
         actions: [
           IconButton(

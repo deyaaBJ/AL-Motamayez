@@ -117,23 +117,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'المنتجات',
-        showAppBar: true,
         title: 'إدارة المنتجات',
-        actions: [
-          _buildTotalProductsIndicator(),
-          IconButton(
-            onPressed: _loadInitialProducts,
-            icon: Icon(Icons.refresh),
-            tooltip: 'تحديث',
-          ),
-        ],
-        floatingActionButton: Hero(
-          tag: 'products_fab',
-          child: FloatingActionButton(
-            onPressed: _addNewProduct,
-            backgroundColor: const Color(0xFF8B5FBF),
-            child: const Icon(Icons.add, color: Colors.white, size: 28),
-          ),
+
+        floatingActionButton: FloatingActionButton(
+          onPressed: _addNewProduct,
+          backgroundColor: const Color(0xFF8B5FBF),
+          child: const Icon(Icons.add, color: Colors.white, size: 28),
         ),
         child: Column(
           children: [
@@ -143,6 +132,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 setState(() => _currentFilter = filter);
               },
             ),
+            _buildTotalProductsIndicator(),
             _buildSearchBar(),
             ProductTableHeader(columns: productTableColumns),
 

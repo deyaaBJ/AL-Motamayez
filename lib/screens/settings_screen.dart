@@ -165,7 +165,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       textDirection: TextDirection.rtl, // واجهة عربية كاملة
       child: BaseLayout(
         currentPage: 'settings', // اسم الصفحة للسايدبار
-        showAppBar: true,
         title: 'الإعدادات',
         actions: [
           IconButton(

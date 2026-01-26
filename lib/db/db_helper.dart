@@ -129,9 +129,36 @@ class DBHelper {
 
         // 2️⃣ أرشيف عناصر الفواتير القديمة
         await db.execute('''
-        INSERT INTO sale_items_archive
-        SELECT * FROM sale_items
-        WHERE sale_id IN ($idsString);
+        INSERT INTO sale_items_archive (
+  id,
+  sale_id,
+  item_type,
+  product_id,
+  unit_id,
+  quantity,
+  unit_type,
+  custom_unit_name,
+  price,
+  cost_price,
+  subtotal,
+  profit
+)
+SELECT
+  id,
+  sale_id,
+  item_type,
+  product_id,
+  unit_id,
+  quantity,
+  unit_type,
+  custom_unit_name,
+  price,
+  cost_price,
+  subtotal,
+  profit
+FROM sale_items
+WHERE sale_id IN ($idsString);
+
       ''');
 
         // 3️⃣ أرشيف الفواتير القديمة
@@ -182,6 +209,7 @@ class DBHelper {
         price REAL NOT NULL,
         quantity REAL NOT NULL,
         cost_price REAL NOT NULL,
+        has_expiry BOOLEAN DEFAULT 1,
         added_date DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     ''');
@@ -210,6 +238,24 @@ class DBHelper {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
         ''');
+
+    await db.execute('''
+
+  CREATE TABLE product_batches (
+
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    purchase_item_id INTEGER, 
+    quantity REAL NOT NULL,
+    remaining_quantity REAL NOT NULL,
+    cost_price REAL NOT NULL,
+    production_date TEXT,   
+    expiry_date TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+  );  
+
+  ''');
 
     // جدول المستخدمين
     await db.execute('''
@@ -292,22 +338,29 @@ class DBHelper {
 
     // جدول عناصر الفاتورة
     await db.execute('''
-      CREATE TABLE sale_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sale_id INTEGER NOT NULL,
-        product_id INTEGER NOT NULL,
-        unit_id INTEGER,
-        quantity REAL NOT NULL,
-        unit_type TEXT NOT NULL,
-        custom_unit_name TEXT,
-        price REAL NOT NULL,
-        cost_price REAL NOT NULL,
-        subtotal REAL NOT NULL,
-        profit REAL NOT NULL,
-        FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
-        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
-        FOREIGN KEY (unit_id) REFERENCES product_units (id) ON DELETE SET NULL
-      );
+CREATE TABLE sale_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sale_id INTEGER NOT NULL,
+
+  item_type TEXT NOT NULL DEFAULT 'product', -- product / service
+
+  product_id INTEGER,        -- NULL للخدمة
+  unit_id INTEGER,
+
+  quantity REAL NOT NULL DEFAULT 1,
+  unit_type TEXT NOT NULL,
+  custom_unit_name TEXT,
+
+  price REAL NOT NULL,
+  cost_price REAL NOT NULL DEFAULT 0,
+  subtotal REAL NOT NULL,
+  profit REAL NOT NULL DEFAULT 0,
+
+  FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+  FOREIGN KEY (unit_id) REFERENCES product_units (id) ON DELETE SET NULL
+);
+
     ''');
 
     // أرشيف الفواتير
@@ -325,19 +378,25 @@ class DBHelper {
 
     // أرشيف عناصر الفواتير
     await db.execute('''
-      CREATE TABLE sale_items_archive (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sale_id INTEGER NOT NULL,
-        product_id INTEGER NOT NULL,
-        unit_id INTEGER,
-        quantity REAL NOT NULL,
-        unit_type TEXT NOT NULL,
-        custom_unit_name TEXT,
-        price REAL NOT NULL,
-        cost_price REAL NOT NULL,
-        subtotal REAL NOT NULL,
-        profit REAL NOT NULL
-      );
+    CREATE TABLE sale_items_archive (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sale_id INTEGER NOT NULL,
+
+  item_type TEXT NOT NULL DEFAULT 'product',
+
+  product_id INTEGER,
+  unit_id INTEGER,
+
+  quantity REAL NOT NULL DEFAULT 1,
+  unit_type TEXT NOT NULL,
+  custom_unit_name TEXT,
+
+  price REAL NOT NULL,
+  cost_price REAL NOT NULL DEFAULT 0,
+  subtotal REAL NOT NULL,
+  profit REAL NOT NULL DEFAULT 0
+);
+
     ''');
 
     // جدول الموردين

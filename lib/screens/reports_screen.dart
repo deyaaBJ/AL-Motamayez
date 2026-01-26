@@ -194,7 +194,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'التقارير',
-        showAppBar: true,
         title: 'التقارير والإحصائيات',
         actions: [
           // زر تصدير PDF

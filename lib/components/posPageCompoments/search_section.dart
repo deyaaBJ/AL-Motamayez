@@ -14,6 +14,7 @@ class SearchSection extends StatelessWidget {
   final bool showSearchResults;
   final VoidCallback refreshState; // setState()
   final Function(String) onChangeSearchType;
+  final VoidCallback addService;
 
   const SearchSection({
     super.key,
@@ -27,6 +28,7 @@ class SearchSection extends StatelessWidget {
     required this.showSearchResults,
     required this.refreshState,
     required this.onChangeSearchType,
+    required this.addService,
   });
 
   @override
@@ -123,6 +125,20 @@ class SearchSection extends StatelessWidget {
                       performSearch(searchController.text);
                     }
                   },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2196F3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.design_services, color: Colors.white),
+                  onPressed: addService,
+                  tooltip: 'إضافة خدمة',
                 ),
               ),
             ],

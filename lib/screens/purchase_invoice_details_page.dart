@@ -1081,7 +1081,6 @@ class _PurchaseInvoiceDetailsPageState
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'تفاصيل الفاتورة',
-        showAppBar: false,
         child: Scaffold(
           backgroundColor: Colors.grey.shade50,
           body: SafeArea(

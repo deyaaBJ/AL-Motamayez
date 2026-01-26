@@ -73,7 +73,6 @@ class _ExpensesPageState extends State<ExpensesPage> {
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'المصاريف',
-        showAppBar: false,
         child: _buildMainContent(context),
       ),
     );

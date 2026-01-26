@@ -79,7 +79,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'المبيعات',
-        showAppBar: true,
         title: 'سجل الفواتير',
 
         child: Consumer<SalesProvider>(
