@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:motamayez/models/cart_item.dart';
 import 'package:motamayez/models/product.dart';
+import 'package:motamayez/models/productFilter.dart';
 import 'package:motamayez/models/product_unit.dart';
 import 'package:motamayez/models/sale.dart';
 import 'package:motamayez/models/sale_item.dart';
@@ -24,6 +25,8 @@ class ProductProvider with ChangeNotifier {
 
   bool get hasMore => _hasMore;
   int get currentPage => _page;
+
+  ProductFilter? _currentActiveFilter;
 
   // ✅ إعادة تعيين حالة الـ pagination
   void resetPagination() {
@@ -74,7 +77,9 @@ class ProductProvider with ChangeNotifier {
   }
 
   // ✅ التحميل التدريجي للمنتجات مع تحسين الأداء
-  Future<List<Product>> loadProducts({bool reset = false}) async {
+  // في ProductProvider.dart - تحديث دالة loadProducts
+
+  Future<List<Product>> loadProducts({bool reset = false, bool? active}) async {
     if (!reset && !_hasMore) return [];
 
     if (reset) {
@@ -84,19 +89,64 @@ class ProductProvider with ChangeNotifier {
     final db = await _dbHelper.db;
 
     try {
+      String whereClause = '';
+      List<Object?> whereArgs = [];
+
+      // بناء الـ WHERE clause بناءً على حالة active
+      if (active != null) {
+        whereClause = 'active = ?';
+        whereArgs.add(active ? 1 : 0);
+      }
+
+      print(
+        'Loading products with filter: active=$active, where: $whereClause',
+      );
+
       final result = await db.query(
         'products',
+        where: whereClause.isNotEmpty ? whereClause : null,
+        whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
         limit: _limit,
         offset: _page * _limit,
-        orderBy: 'id DESC', // استخدام id إذا لم يكن created_at موجود
+        orderBy: 'id DESC',
       );
+
+      print('Found ${result.length} products');
 
       if (result.isEmpty) {
         _hasMore = false;
         return [];
       }
 
-      final newProducts = result.map((e) => Product.fromMap(e)).toList();
+      // تحويل النتائج إلى كائنات Product
+      final newProducts =
+          result.map((map) {
+            try {
+              return Product(
+                id: map['id'] as int?,
+                name: (map['name'] ?? '') as String,
+                barcode: map['barcode'] as String?,
+                baseUnit: (map['base_unit'] ?? 'piece') as String,
+                price: ((map['price'] ?? 0) as num).toDouble(),
+                quantity: ((map['quantity'] ?? 0) as num).toDouble(),
+                costPrice: ((map['cost_price'] ?? 0) as num).toDouble(),
+                addedDate: map['added_date'] as String?,
+                hasExpiry: (map['has_expiry'] as int?) == 1,
+                hasExpiryDate: (map['has_expiry_date'] as int?) == 1,
+                active: (map['active'] as int?) != 0,
+              );
+            } catch (e) {
+              log('Error parsing product: $e, map: $map');
+              return Product(
+                id: 0,
+                name: 'Error',
+                baseUnit: 'piece',
+                price: 0,
+                quantity: 0,
+                costPrice: 0,
+              );
+            }
+          }).toList();
 
       // تحديث الحالة
       _page++;
@@ -112,8 +162,8 @@ class ProductProvider with ChangeNotifier {
         _products.addAll(newProducts);
       }
 
-      // تحميل العدد الإجمالي تلقائياً
-      await loadTotalProducts();
+      // تحميل العدد الإجمالي
+      await _loadTotalProductsByFilter(active);
 
       notifyListeners();
       return newProducts;
@@ -123,18 +173,87 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
+  // دالة جديدة: تحميل العدد الإجمالي بناءً على الفلتر
+  Future<void> _loadTotalProductsByFilter(bool? active) async {
+    try {
+      final db = await _dbHelper.db;
+
+      String whereClause = '';
+      List<Object?> whereArgs = [];
+
+      if (active != null) {
+        whereClause = 'active = ?';
+        whereArgs.add(active ? 1 : 0);
+      }
+
+      final res = await db.rawQuery(
+        whereClause.isNotEmpty
+            ? "SELECT COUNT(*) as count FROM products WHERE $whereClause"
+            : "SELECT COUNT(*) as count FROM products",
+        whereArgs,
+      );
+
+      if (res.isNotEmpty) {
+        _totalProducts = (res.first['count'] as int?) ?? 0;
+      } else {
+        _totalProducts = 0;
+      }
+
+      notifyListeners();
+    } catch (e) {
+      log('Error loading total products: $e');
+      _totalProducts = 0;
+      notifyListeners();
+    }
+  }
+
+  // تحديث دالة loadProductsByFilter
+  Future<void> loadProductsByFilter(
+    ProductFilter filter, {
+    bool reset = true,
+  }) async {
+    bool? active;
+
+    switch (filter) {
+      case ProductFilter.inactive:
+        active = false;
+        break;
+      case ProductFilter.all:
+        active = null; // جميع المنتجات
+        break;
+      case ProductFilter.available:
+      case ProductFilter.unavailable:
+      case ProductFilter.lowStock:
+        active = true; // المنتجات النشطة فقط
+        break;
+    }
+
+    _currentActiveFilter = filter;
+    await loadProducts(reset: reset, active: active);
+  }
+
   // البحث عن المنتجات (لا يستخدم التحميل التدريجي)
-  Future<List<Product>> searchProducts(String query) async {
+  Future<List<Product>> searchProducts(String query, {bool? active}) async {
     final db = await _dbHelper.db;
     if (query.trim().isEmpty) {
-      return _products; // إرجاع المنتجات المحملة
+      return _products;
     }
 
     try {
+      String whereClause =
+          'LOWER(name) LIKE LOWER(?) OR LOWER(barcode) LIKE LOWER(?)';
+      List<Object?> whereArgs = ['%$query%', '%$query%'];
+
+      // إضافة شرط active إذا تم تمريره
+      if (active != null) {
+        whereClause += ' AND active = ?';
+        whereArgs.add(active ? 1 : 0);
+      }
+
       final result = await db.query(
         'products',
-        where: 'LOWER(name) LIKE LOWER(?) OR LOWER(barcode) LIKE LOWER(?)',
-        whereArgs: ['%$query%', '%$query%'],
+        where: whereClause,
+        whereArgs: whereArgs,
         orderBy: 'name ASC',
       );
 
@@ -142,6 +261,68 @@ class ProductProvider with ChangeNotifier {
     } catch (e) {
       log('Error searching products: $e');
       return [];
+    }
+  }
+
+  Future<void> loadMoreProducts() async {
+    if (!_hasMore) return;
+
+    bool? active;
+
+    if (_currentActiveFilter != null) {
+      switch (_currentActiveFilter!) {
+        case ProductFilter.inactive:
+          active = false;
+          break;
+        default:
+          active = true;
+      }
+    }
+
+    await loadProducts(reset: false, active: active);
+  }
+
+  // في ProductProvider.dart أضف هذه الدالة:
+
+  Future<void> toggleProductActive(int productId) async {
+    try {
+      final db = await _dbHelper.db;
+
+      // الحصول على الحالة الحالية
+      final result = await db.query(
+        'products',
+        columns: ['active', 'name'],
+        where: 'id = ?',
+        whereArgs: [productId],
+      );
+
+      if (result.isNotEmpty) {
+        final currentActive = (result.first['active'] as int?) == 1;
+        final productName = result.first['name'] as String;
+        final newActive = !currentActive;
+
+        // تحديث الحالة
+        await db.update(
+          'products',
+          {'active': newActive ? 1 : 0},
+          where: 'id = ?',
+          whereArgs: [productId],
+        );
+
+        log(
+          '✅ تم ${newActive ? 'تفعيل' : 'تعطيل'} المنتج: $productName (ID: $productId)',
+        );
+
+        // تحديث القائمة المحلية
+        final index = _products.indexWhere((p) => p.id == productId);
+        if (index != -1) {
+          _products[index].active = newActive;
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      log('❌ خطأ في تغيير حالة المنتج: $e');
+      rethrow;
     }
   }
 
@@ -156,7 +337,21 @@ class ProductProvider with ChangeNotifier {
         whereArgs: [barcode],
       );
 
-      return result.map((map) => Product.fromMap(map)).toList();
+      return result.map((map) {
+        return Product(
+          id: map['id'] as int?,
+          name: map['name'] as String,
+          barcode: map['barcode'] as String?,
+          baseUnit: map['base_unit'] as String? ?? 'piece',
+          price: (map['price'] as num?)?.toDouble() ?? 0.0,
+          quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
+          costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
+          addedDate: map['added_date'] as String?,
+          hasExpiry: map['has_expiry'] == 1,
+          hasExpiryDate: (map['has_expiry_date'] as int?) == 1,
+          active: (map['active'] as int?) != 0,
+        );
+      }).toList();
     } catch (e) {
       log('Error searching by barcode: $e');
       return [];
@@ -282,10 +477,17 @@ class ProductProvider with ChangeNotifier {
             'quantity': newQuantity,
             'cost_price': newCostPriceFixed,
             'price': safePrice,
+            // ⬅️ تحديث حقول active و has_expiry_date
+            'active': product.active ? 1 : 0,
+            'has_expiry_date': product.hasExpiryDate ? 1 : 0,
           },
           where: 'id = ?',
           whereArgs: [oldProduct['id']],
         );
+
+        // إعادة تحميل البيانات
+        await loadProducts(reset: true);
+        notifyListeners();
         return; // خلصنا التحديث
       }
     }
@@ -299,7 +501,12 @@ class ProductProvider with ChangeNotifier {
       'quantity': safeQuantity,
       'cost_price': safeCostPrice,
       'added_date': product.addedDate,
+      // ⬅️ إضافة حقول active و has_expiry_date
+      'active': product.active ? 1 : 0,
+      'has_expiry_date': product.hasExpiryDate ? 1 : 0,
     };
+
+    print('إضافة منتج جديد: $productMap'); // للتصحيح
 
     await db.insert('products', productMap);
 
@@ -551,10 +758,10 @@ class ProductProvider with ChangeNotifier {
 
     log('✅ تم إضافة الفاتورة بنجاح - showForTax: $showForTax');
     notifyListeners();
-
   }
 
   // جلب منتج بواسطة الـ ID
+  // في ProductProvider.dart - تحديث دالة getProductById
   Future<Product?> getProductById(int id) async {
     try {
       final db = await _dbHelper.db;
@@ -568,7 +775,22 @@ class ProductProvider with ChangeNotifier {
         return null;
       }
 
-      final product = Product.fromMap(result.first);
+      final map = result.first;
+      final product = Product(
+        id: map['id'] as int?,
+        name: map['name'] as String,
+        barcode: map['barcode'] as String?,
+        baseUnit: map['base_unit'] as String? ?? 'piece',
+        price: (map['price'] as num?)?.toDouble() ?? 0.0,
+        quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
+        costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
+        addedDate: map['added_date'] as String?,
+        hasExpiry: map['has_expiry'] == 1,
+        // ⬅️ إضافة الحقول الجديدة
+        hasExpiryDate: (map['has_expiry_date'] as int?) == 1,
+        active: (map['active'] as int?) != 0, // Default to true if null
+      );
+
       return product;
     } catch (e) {
       log('Error getting product by ID: $e');

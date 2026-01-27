@@ -1,17 +1,21 @@
+// purchase_invoice_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart' show DateFormat;
+import 'package:motamayez/db/db_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/product.dart';
+import 'package:motamayez/models/product_unit.dart';
 import 'package:motamayez/screens/add_product_screen.dart';
 import 'package:motamayez/screens/add_supplier_page.dart';
 import '../providers/supplier_provider.dart';
 import '../providers/purchase_invoice_provider.dart';
 import '../providers/purchase_item_provider.dart';
 import '../providers/product_provider.dart';
-import '../providers/product_batch_provider.dart'; // تأكد من إنشاء هذا الـProvider
+import '../providers/product_batch_provider.dart';
 import '../utils/formatters.dart';
+import 'dart:developer';
 
 class PurchaseInvoicePage extends StatefulWidget {
   const PurchaseInvoicePage({super.key});
@@ -21,21 +25,26 @@ class PurchaseInvoicePage extends StatefulWidget {
 }
 
 class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
-  // التحكم في الحقول
   final TextEditingController _qtyController = TextEditingController();
   final TextEditingController _costController = TextEditingController();
   final TextEditingController _searchProductController =
       TextEditingController();
   final TextEditingController _discountController = TextEditingController();
 
-  // المتغيرات المحلية فقط
   int? _selectedProductId;
   int? _invoiceId;
-  DateTime? _expiryDate; // أضف هذا لتخزين تاريخ الانتهاء
+  DateTime? _expiryDate;
   bool _isLoading = false;
   bool _isInitialLoading = true;
   bool _isSearching = false;
   List<Product> _searchResults = [];
+
+  // ⬅️ متغيرات جديدة للوحدات
+  String? _selectedUnitBarcode;
+  double _selectedUnitContainQty = 1.0;
+  int? _selectedUnitId;
+  String? _selectedUnitName;
+  bool _isUnitSearch = false;
 
   @override
   void initState() {
@@ -70,45 +79,125 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     }
   }
 
-  void _performSearch() {
+  Future<void> _performSearch() async {
     final query = _searchProductController.text.trim().toLowerCase();
 
     if (query.isEmpty) {
       setState(() {
         _searchResults = [];
         _isSearching = false;
+        _resetUnitData();
       });
       return;
     }
 
     setState(() => _isSearching = true);
 
-    final productProvider = context.read<ProductProvider>();
-    final products = productProvider.products;
+    try {
+      final productProvider = context.read<ProductProvider>();
+      final products = productProvider.products;
+      List<Product> results = [];
 
-    final bool isBarcodeSearch = RegExp(r'^\d+$').hasMatch(query);
+      // ⬅️ 1. البحث في باركود الوحدات أولاً
+      if (RegExp(r'^\d+$').hasMatch(query)) {
+        final db = await DBHelper().db;
+        final unitResults = await db.query(
+          'product_units',
+          where: 'barcode = ?',
+          whereArgs: [query],
+        );
 
-    final results =
-        products.where((p) {
-          final name = p.name.toLowerCase();
+        if (unitResults.isNotEmpty) {
+          _isUnitSearch = true;
+          final unit = unitResults.first;
+          final productId = unit['product_id'] as int;
+          _selectedUnitContainQty = (unit['contain_qty'] as num).toDouble();
+          _selectedUnitId = unit['id'] as int;
+          _selectedUnitBarcode = unit['barcode'] as String?;
+          _selectedUnitName = unit['unit_name'] as String?;
 
-          // 🔹 بحث بالاسم → كل المنتجات
-          if (!isBarcodeSearch) {
-            return name.contains(query);
+          // البحث عن المنتج الأصلي
+          try {
+            final product = products.firstWhere((p) => p.id == productId);
+
+            // حساب سعر تكلفة الوحدة المقترح: سعر تكلفة القطعة × عدد القطع
+            double suggestedUnitCost =
+                product.costPrice * _selectedUnitContainQty;
+
+            // إنشاء منتج معدل لعرضه في النتائج
+            final modifiedProduct = Product(
+              id: product.id,
+              name: '${product.name} [${unit['unit_name']}]',
+              barcode: query,
+              baseUnit: product.baseUnit,
+              price: (unit['sell_price'] as num).toDouble(), // سعر البيع
+              quantity: product.quantity,
+              costPrice: suggestedUnitCost, // ⬅️ سعر تكلفة الوحدة المقترح
+              hasExpiry: product.hasExpiry,
+            );
+
+            results.add(modifiedProduct);
+
+            // عرض رسالة إعلامية للمستخدم
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'سعر تكلفة الوحدة المقترح: ${Formatters.formatCurrency(suggestedUnitCost)} '
+                    '(${Formatters.formatCurrency(product.costPrice)} × ${_selectedUnitContainQty.toInt()})',
+                  ),
+                  backgroundColor: Colors.blue,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            });
+
+            log('💰 حساب سعر تكلفة الوحدة:');
+            log('   - المنتج: ${product.name}');
+            log('   - سعر تكلفة القطعة: ${product.costPrice}');
+            log('   - عدد القطع في الوحدة: $_selectedUnitContainQty');
+            log('   - سعر تكلفة الوحدة المقترح: $suggestedUnitCost');
+          } catch (e) {
+            log('المنتج الأصلي غير موجود: $e');
           }
+        } else {
+          _isUnitSearch = false;
+        }
+      } else {
+        _isUnitSearch = false;
+      }
 
-          // 🔹 بحث بالباركود → فقط اللي عنده باركود
-          if (p.barcode == null || p.barcode!.isEmpty) {
-            return false;
+      // ⬅️ 2. البحث في المنتجات العادية
+      if (!_isUnitSearch || results.isEmpty) {
+        for (var product in products) {
+          final name = product.name.toLowerCase();
+          final barcode = product.barcode?.toLowerCase() ?? '';
+
+          if (name.contains(query) ||
+              (barcode.isNotEmpty && barcode.contains(query))) {
+            if (!results.any((p) => p.id == product.id)) {
+              results.add(product);
+            }
           }
+        }
+      }
 
-          return p.barcode!.toLowerCase().contains(query);
-        }).toList();
+      setState(() {
+        _searchResults = results;
+        _isSearching = false;
+      });
+    } catch (e) {
+      log('❌ خطأ في البحث: $e');
+      setState(() => _isSearching = false);
+    }
+  }
 
-    setState(() {
-      _searchResults = results;
-      _isSearching = false;
-    });
+  void _resetUnitData() {
+    _selectedUnitBarcode = null;
+    _selectedUnitContainQty = 1.0;
+    _selectedUnitId = null;
+    _selectedUnitName = null;
+    _isUnitSearch = false;
   }
 
   @override
@@ -428,7 +517,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
             TextField(
               controller: _searchProductController,
               decoration: InputDecoration(
-                labelText: 'ابحث عن المنتج',
+                labelText: 'ابحث عن المنتج أو أدخل باركود الوحدة',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -456,6 +545,29 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
             const SizedBox(height: 16),
 
+            // ⬅️ عرض معلومات الوحدة إذا كانت موجودة
+            if (_selectedUnitId != null && _selectedUnitName != null)
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.layers, color: Colors.blue, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'وحدة: $_selectedUnitName (تحتوي على ${_selectedUnitContainQty.toInt()} قطعة)',
+                      style: const TextStyle(color: Colors.blue, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+
+            const SizedBox(height: 16),
+
             Row(
               children: [
                 Expanded(
@@ -468,7 +580,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                       FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
                     ],
                     decoration: InputDecoration(
-                      labelText: 'الكمية',
+                      labelText:
+                          _selectedUnitId != null ? 'عدد الوحدات' : 'الكمية',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -487,7 +600,10 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                       FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
                     ],
                     decoration: InputDecoration(
-                      labelText: 'سعر التكلفة',
+                      labelText:
+                          _selectedUnitId != null
+                              ? 'سعر الوحدة'
+                              : 'سعر التكلفة',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -500,7 +616,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
             const SizedBox(height: 16),
 
-            // قسم تاريخ الانتهاء - يظهر فقط للمنتجات التي لها صلاحية
             if (_selectedProductId != null) _buildExpiryDateSection(),
 
             const SizedBox(height: 20),
@@ -535,7 +650,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   Widget _buildExpiryDateSection() {
-    // البحث عن المنتج المحدد
     final productProvider = context.read<ProductProvider>();
     Product? selectedProduct;
 
@@ -547,7 +661,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       selectedProduct = null;
     }
 
-    // إذا كان المنتج له صلاحية، اعرض خيار تاريخ الانتهاء
     if (selectedProduct != null && selectedProduct.hasExpiry) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -641,7 +754,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
           children: [
             Icon(Icons.search, size: 48, color: Colors.grey),
             SizedBox(height: 8),
-            Text('ابحث عن المنتجات'),
+            Text('ابحث عن المنتجات أو أدخل باركود الوحدة'),
           ],
         ),
       );
@@ -654,7 +767,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
           children: [
             const Icon(Icons.search_off, size: 48, color: Colors.grey),
             const SizedBox(height: 8),
-            Text('لا توجد منتجات مطابقة لـ "$query"'),
+            Text('لا توجد نتائج مطابقة لـ "$query"'),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
@@ -707,6 +820,11 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     '📅 له صلاحية',
                     style: TextStyle(color: Colors.orange, fontSize: 12),
                   ),
+                if (product.name.contains('['))
+                  const Text(
+                    '📦 وحدة مركبة',
+                    style: TextStyle(color: Colors.blue, fontSize: 12),
+                  ),
               ],
             ),
             trailing: Icon(
@@ -718,8 +836,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                 _selectedProductId = product.id;
                 _costController.text = product.costPrice.toStringAsFixed(2);
                 _qtyController.text = '1';
-                // إعادة تعيين تاريخ الانتهاء فقط إذا كان المنتج الجديد له صلاحية
-                if (!product.hasExpiry) {
+
+                // إذا كان المنتج من نتائج الوحدات، لا نعيد تعيين _expiryDate
+                if (!product.name.contains('[') && !product.hasExpiry) {
                   _expiryDate = null;
                 }
               });
@@ -795,6 +914,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     child: const Row(
                       children: [
                         Expanded(
+                          flex: 2,
                           child: Padding(
                             padding: EdgeInsets.all(12),
                             child: Text(
@@ -803,36 +923,48 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                             ),
                           ),
                         ),
-                        SizedBox(width: 16),
-                        Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text(
-                            'الكمية',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Text(
+                              'الكمية',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
-                        SizedBox(width: 16),
-                        Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text(
-                            'السعر',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Text(
+                              'السعر',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
-                        SizedBox(width: 16),
-                        Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text(
-                            'المجموع',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Text(
+                              'المجموع',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
-                        SizedBox(width: 16),
+                        SizedBox(width: 8),
                         Padding(
                           padding: EdgeInsets.all(12),
-                          child: Text(
-                            '',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                          child: SizedBox(
+                            width: 40,
+                            child: Text(
+                              '',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                       ],
@@ -848,32 +980,80 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
                     final productName = item['product_name'] ?? 'غير معروف';
                     final quantity = (item['quantity'] as num).toDouble();
-                    final costPrice = (item['cost_price'] as num).toDouble();
+                    final costPrice =
+                        (item['cost_price'] as num)
+                            .toDouble(); // سعر تكلفة القطعة الواحدة
                     final subtotal = quantity * costPrice;
                     final hasExpiry = item['has_expiry'] as bool? ?? false;
                     final expiryDate = item['expiry_date_formatted'] as String?;
+                    final isUnit = item['is_unit'] as bool? ?? false;
+                    final unitContainQty =
+                        (item['unit_contain_qty'] as num?)?.toDouble() ?? 1.0;
+                    final displayQuantity =
+                        (item['display_quantity'] as num?)?.toDouble() ??
+                        quantity;
+                    final unitName = item['unit_name'] as String?;
+
+                    // حساب سعر الوحدة للعرض فقط (ليس للتخزين)
+                    double displayUnitPrice = costPrice;
+                    if (isUnit) {
+                      displayUnitPrice = costPrice * unitContainQty;
+                    }
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
+                        color:
+                            isUnit ? Colors.blue.shade50 : Colors.grey.shade50,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade200),
+                        border: Border.all(
+                          color:
+                              isUnit
+                                  ? Colors.blue.shade200
+                                  : Colors.grey.shade200,
+                        ),
                       ),
                       child: Row(
                         children: [
                           Expanded(
+                            flex: 2,
                             child: Padding(
                               padding: const EdgeInsets.all(12),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(productName),
+                                  Text(
+                                    productName,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color:
+                                          isUnit
+                                              ? Colors.blue.shade800
+                                              : Colors.black,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  if (isUnit && unitName != null)
+                                    Text(
+                                      '$displayQuantity × $unitName',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
+                                  if (isUnit)
+                                    Text(
+                                      '(${unitContainQty.toInt()} قطعة × ${(quantity / unitContainQty).toInt()} وحدة)',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.green,
+                                      ),
+                                    ),
                                   if (hasExpiry && expiryDate != null)
                                     Text(
                                       'ينتهي: $expiryDate',
                                       style: const TextStyle(
-                                        fontSize: 12,
+                                        fontSize: 11,
                                         color: Colors.orange,
                                       ),
                                     ),
@@ -881,32 +1061,90 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Text(quantity.toStringAsFixed(2)),
-                          ),
-                          const SizedBox(width: 16),
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Text(Formatters.formatNumber(costPrice)),
-                          ),
-                          const SizedBox(width: 16),
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Text(
-                              Formatters.formatCurrency(subtotal),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green,
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    isUnit
+                                        ? '${displayQuantity.toStringAsFixed(0)} وحدة'
+                                        : '${quantity.toStringAsFixed(0)} قطعة',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  if (isUnit)
+                                    Text(
+                                      '(${quantity.toStringAsFixed(0)} قطعة)',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                ],
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed:
-                                _isLoading ? null : () => _removeItem(index),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    Formatters.formatCurrency(
+                                      isUnit ? displayUnitPrice : costPrice,
+                                    ),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  if (isUnit)
+                                    Text(
+                                      '(${Formatters.formatCurrency(costPrice)}/قطعة)',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Text(
+                                Formatters.formatCurrency(subtotal),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.delete,
+                                color: Colors.red,
+                                size: 20,
+                              ),
+                              onPressed:
+                                  _isLoading ? null : () => _removeItem(index),
+                            ),
                           ),
                         ],
                       ),
@@ -944,8 +1182,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                             ),
                           ],
                         ),
+
                         const SizedBox(height: 8),
-                        const Divider(),
+
                         const SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1002,13 +1241,11 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                                     return;
                                   }
 
-                                  // السماح فقط بالأرقام والنقطة
                                   String cleanedValue = value.replaceAll(
                                     RegExp(r'[^\d.]'),
                                     '',
                                   );
 
-                                  // منع أكثر من نقطة واحدة
                                   final dotCount =
                                       cleanedValue.split('.').length - 1;
                                   if (dotCount > 1) {
@@ -1133,7 +1370,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     );
   }
 
-  // === الدوال المنطقية ===
   Future<void> _addItem() async {
     final invoiceProvider = context.read<PurchaseInvoiceProvider>();
 
@@ -1166,64 +1402,112 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     setState(() => _isLoading = true);
 
     try {
-      // الحصول على معلومات المنتج
       final productProvider = context.read<ProductProvider>();
       final product = productProvider.products.firstWhere(
         (p) => p.id == _selectedProductId,
         orElse: () => throw Exception('المنتج غير موجود في القائمة'),
       );
 
+      // ⬅️ إضافة استعلام للحصول على معلومات الوحدة من قاعدة البيانات
+      double unitContainQty = 1.0;
+      String? unitName;
+
+      if (_selectedUnitId != null) {
+        final db = await DBHelper().db;
+        final unitResult = await db.query(
+          'product_units',
+          where: 'id = ?',
+          whereArgs: [_selectedUnitId],
+        );
+
+        if (unitResult.isNotEmpty) {
+          unitContainQty = (unitResult.first['contain_qty'] as num).toDouble();
+          unitName = unitResult.first['unit_name'] as String;
+
+          log('📦 معلومات الوحدة:');
+          log('   - اسم الوحدة: $unitName');
+          log('   - تحتوي على: $unitContainQty قطعة');
+        }
+      }
+
+      // حساب الكمية الفعلية والعرضية
+      double displayQuantity = qty; // عدد الوحدات التي يدخلها المستخدم
+      double actualQuantity = qty; // الكمية الفعلية (القطع)
+      String displayName = product.name;
+      bool isUnit = _selectedUnitId != null;
+
+      if (isUnit) {
+        actualQuantity = qty * unitContainQty; // 2 كرتونة × 5 قطع = 10 قطع
+        displayName = '${product.name} ($displayQuantity × $unitName)';
+      }
+
+      // ⬅️ حساب سعر تكلفة القطعة الواحدة (لحساب المتوسط)
+      // المستخدم يدخل سعر الوحدة، نحوله لسعر القطعة الواحدة
+      double costPricePerPiece = cost;
+
+      if (isUnit) {
+        // إذا كانت وحدة مركبة، نحسب سعر تكلفة القطعة الواحدة
+        costPricePerPiece = cost / unitContainQty;
+        log(
+          'سعر تكلفة القطعة الواحدة: $costPricePerPiece (سعر الوحدة $cost ÷ $unitContainQty)',
+        );
+      }
+
       // التحقق إذا كان المنتج له صلاحية
       if (product.hasExpiry) {
-        // التحقق من إدخال تاريخ الانتهاء
         if (_expiryDate == null) {
           _showError('يجب تحديد تاريخ الانتهاء لهذا المنتج');
           setState(() => _isLoading = false);
           return;
         }
 
-        // التحقق من أن تاريخ الانتهاء ليس في الماضي
         if (_expiryDate!.isBefore(DateTime.now())) {
           _showError('تاريخ الانتهاء لا يمكن أن يكون في الماضي');
           setState(() => _isLoading = false);
           return;
         }
 
-        // إضافة العنصر مع معلومات تاريخ الانتهاء
         final newItem = {
           'product_id': product.id!,
-          'product_name': product.name,
-          'quantity': qty,
-          'cost_price': cost,
-          'subtotal': qty * cost,
+          'product_name': displayName,
+          'quantity': actualQuantity, // الكمية الفعلية (القطع)
+          'display_quantity': displayQuantity, // الكمية المعروضة (عدد الوحدات)
+          'cost_price':
+              costPricePerPiece, // سعر تكلفة القطعة الواحدة فقط (ما نحتاج unit_cost_price)
+          'subtotal': actualQuantity * costPricePerPiece,
           'has_expiry': true,
           'expiry_date': _expiryDate!.toIso8601String(),
           'expiry_date_formatted': DateFormat(
             'yyyy-MM-dd',
           ).format(_expiryDate!),
+          'is_unit': isUnit,
+          'unit_id': _selectedUnitId,
+          'unit_name': unitName,
+          'unit_contain_qty': unitContainQty,
+          // ⬅️ مش محتاج unit_cost_price لانو ما في سعر شراء للوحدة
         };
 
         invoiceProvider.addTempItem(newItem);
-
-        _showSuccess(
-          'تم إضافة "${product.name}" مع تاريخ انتهاء: ${DateFormat('yyyy-MM-dd').format(_expiryDate!)}',
-        );
+        _showSuccess('تم إضافة "$displayName" بنجاح');
       } else {
-        // المنتج بدون صلاحية
         final newItem = {
           'product_id': product.id!,
-          'product_name': product.name,
-          'quantity': qty,
-          'cost_price': cost,
-          'subtotal': qty * cost,
+          'product_name': displayName,
+          'quantity': actualQuantity,
+          'display_quantity': displayQuantity,
+          'cost_price': costPricePerPiece, // سعر تكلفة القطعة الواحدة
+          'subtotal': actualQuantity * costPricePerPiece,
           'has_expiry': false,
+          'is_unit': isUnit,
+          'unit_id': _selectedUnitId,
+          'unit_name': unitName,
+          'unit_containQty': unitContainQty,
         };
 
         invoiceProvider.addTempItem(newItem);
-        _showSuccess('تم إضافة "${product.name}" بنجاح');
+        _showSuccess('تم إضافة "$displayName" بنجاح');
       }
 
-      // تفريغ الحقول وإعادة التعيين
       _resetFormFields();
     } catch (e) {
       _showError('حدث خطأ أثناء إضافة المنتج: $e');
@@ -1234,6 +1518,18 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     }
   }
 
+  // دالة لعرض تحذير
+  void _showWarning(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Future<void> _removeItem(int index) async {
     final invoiceProvider = context.read<PurchaseInvoiceProvider>();
 
@@ -1242,7 +1538,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     setState(() => _isLoading = true);
 
     try {
-      // حذف العنصر من الـProvider
       invoiceProvider.removeTempItem(index);
       _showSuccess('تم حذف المنتج بنجاح');
     } catch (e) {
@@ -1266,13 +1561,11 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       return;
     }
 
-    // تحقق من أن الخصم لا يتجاوز الإجمالي
     if (invoiceProvider.tempDiscountValue > invoiceProvider.tempInvoiceTotal) {
       _showError('قيمة الخصم لا يمكن أن تتجاوز الإجمالي');
       return;
     }
 
-    // التحقق من تاريخ الانتهاء للمنتجات التي لها صلاحية (جديد)
     for (final item in invoiceItems) {
       final hasExpiry = item['has_expiry'] as bool;
 
@@ -1300,7 +1593,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       final purchaseItemProvider = context.read<PurchaseItemProvider>();
       final productBatchProvider = context.read<ProductBatchProvider>();
 
-      // 🔹 1. إنشاء الفاتورة الرئيسية (كما كان)
       _invoiceId = await purchaseInvoiceProvider.addPurchaseInvoice(
         supplierId: invoiceProvider.tempSelectedSupplierId!,
         totalCost: invoiceProvider.tempInvoiceFinalTotal,
@@ -1309,34 +1601,44 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         paidAmount: 0.0,
       );
 
-      // 🔹 2. حفظ عناصر الفاتورة والدفعات
       int batchCount = 0;
 
+      // في دالة _saveInvoice في PurchaseInvoicePage
+      // في دالة _saveInvoice في PurchaseInvoicePage
       for (final item in invoiceItems) {
         final productId = item['product_id'] as int;
-        final quantity = (item['quantity'] as num).toDouble();
-        final costPrice = (item['cost_price'] as num).toDouble();
+        final quantity =
+            (item['quantity'] as num).toDouble(); // الكمية الفعلية (القطع)
+        final costPrice =
+            (item['cost_price'] as num)
+                .toDouble(); // سعر تكلفة القطعة الواحدة (تم حسابها في _addItem)
         final hasExpiry = item['has_expiry'] as bool;
+        final isUnit = item['is_unit'] as bool? ?? false;
+        final unitId = item['unit_id'] as int?;
+        final unitContainQty =
+            (item['unit_contain_qty'] as num?)?.toDouble() ?? 1.0;
 
-        // 2.1 إضافة عنصر الشراء (كما كان)
+        // ⬅️ تمرير معلومات الوحدة
         await purchaseItemProvider.addPurchaseItem(
           purchaseId: _invoiceId!,
           productId: productId,
           quantity: quantity,
-          costPrice: costPrice,
+          costPrice: costPrice, // ⬅️ سعر تكلفة القطعة الواحدة فقط
+          isUnit: isUnit,
+          unitId: unitId,
+          unitContainQty: unitContainQty,
         );
 
-        // 2.2 إذا كان له صلاحية، إضافة الدفعة (جديد)
         if (hasExpiry) {
           final expiryDateStr = item['expiry_date'] as String;
 
           await productBatchProvider.addProductBatch(
             productId: productId,
-            purchaseItemId: null, // أو purchaseItemId إذا عدلت addPurchaseItem
-            quantity: quantity,
+            purchaseItemId: null,
+            quantity: quantity, // ⬅️ استخدام الكمية الفعلية
             remainingQuantity: quantity,
-            costPrice: costPrice,
-            expiryDate: expiryDateStr.split('T')[0], // تنسيق YYYY-MM-DD
+            costPrice: costPrice, // ⬅️ استخدام سعر تكلفة القطعة الواحدة
+            expiryDate: expiryDateStr.split('T')[0],
             productionDate: null,
           );
 
@@ -1344,7 +1646,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         }
       }
 
-      // 🔹 3. عرض رسالة النجاح
       String successMessage = 'تم حفظ الفاتورة بنجاح رقم #$_invoiceId';
       if (batchCount > 0) {
         successMessage += '\nتم حفظ $batchCount دفعة للمنتجات ذات الصلاحية';
@@ -1360,20 +1661,18 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   void _clearInvoice() {
-    // مسح الفاتورة من الـProvider
     final invoiceProvider = context.read<PurchaseInvoiceProvider>();
     invoiceProvider.clearTempInvoice();
 
-    // مسح جميع الحقول المحلية
     setState(() {
       _invoiceId = null;
       _selectedProductId = null;
       _expiryDate = null;
       _searchProductController.clear();
       _searchResults.clear();
+      _resetUnitData();
     });
 
-    // مسح المتحكمات
     _qtyController.clear();
     _costController.clear();
     _discountController.clear();
@@ -1412,7 +1711,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     }
   }
 
-  // دالة مساعدة لتفريغ الحقول
   void _resetFormFields() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _qtyController.clear();
@@ -1420,6 +1718,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       _selectedProductId = null;
       _expiryDate = null;
       _searchProductController.clear();
+      _resetUnitData();
       setState(() {
         _searchResults.clear();
       });

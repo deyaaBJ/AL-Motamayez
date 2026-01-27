@@ -1,3 +1,5 @@
+import 'dart:developer' show log;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:motamayez/components/base_layout.dart';
@@ -8,12 +10,11 @@ import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/widgets/TextField.dart';
 import 'package:motamayez/widgets/existing_product_message.dart';
 import 'package:motamayez/widgets/qr_scan_section.dart';
-import 'dart:developer';
 
 class AddProductScreen extends StatefulWidget {
-  final int? productId; // تغيير من productBarcode إلى productId
+  final int? productId;
 
-  const AddProductScreen({super.key, this.productId}); // تحديث البارامتر
+  const AddProductScreen({super.key, this.productId});
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
@@ -29,9 +30,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final TextEditingController _originalQuantityController =
       TextEditingController();
 
+  // ⬅️ جديد: متحكمات لسويتشين
+  bool _isProductActive = true;
+  bool _hasExpiryDate = false;
+
   // وحدات التحكم للوحدات الإضافية
   final List<UnitController> _unitControllers = [];
-  final List<int> _unitIds = []; // لتخزين IDs للوحدات الموجودة
+  final List<int> _unitIds = [];
 
   Product? _existingProduct;
   bool _isLoading = false;
@@ -46,26 +51,22 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void initState() {
     super.initState();
 
-    // تحميل المنتج إذا كان productId موجوداً
     if (widget.productId != null) {
       _loadProductById(widget.productId!);
     }
 
-    // إضافة listener لمراقبة تغييرات QR Controller
     _qrController.addListener(() {
-      // عندما يتم مسح QR Controller، يتم مسح Barcode Controller أيضاً
       if (_qrController.text.isEmpty && _isNewProduct) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_barcodeController.text.isNotEmpty) {
             _barcodeController.clear();
-            // لا حاجة لإعادة تعيين كل النموذج، فقط تنظيف الباركود
           }
         });
       }
     });
   }
 
-  // دالة جديدة لتحميل المنتج بواسطة ID
+  // استبدال دالة _loadProductById كاملة:
   Future<void> _loadProductById(int productId) async {
     setState(() {
       _isLoading = true;
@@ -73,6 +74,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     try {
       final product = await _provider.getProductById(productId);
+
+      if (!mounted) return;
 
       setState(() {
         _isLoading = false;
@@ -83,17 +86,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
           // تعبئة البيانات الأساسية
           _nameController.text = _existingProduct!.name;
-          _priceController.text = _existingProduct!.price.toString();
-          _costPriceController.text = _existingProduct!.costPrice.toString();
-          _quantityController.text = '0'; // الكمية الجديدة التي ستضاف
-
-          // ⬅️ التعديل هنا: استخدام كمية المنتج الفعلية بدلاً من 0
-          _originalQuantityController.text =
-              _existingProduct!.quantity.toString();
-
+          _priceController.text = _existingProduct!.price.toStringAsFixed(2);
+          _costPriceController.text = _existingProduct!.costPrice
+              .toStringAsFixed(2);
+          _quantityController.text = '0';
+          _originalQuantityController.text = _existingProduct!.quantity
+              .toStringAsFixed(2);
           _barcodeController.text = _existingProduct!.barcode ?? '';
-
           _selectedUnit = _existingProduct!.baseUnit;
+
+          // ⬅️ تأكد من تعبئة حالة السويتشين بشكل صحيح
+          _isProductActive = _existingProduct!.active;
+          _hasExpiryDate = _existingProduct!.hasExpiryDate;
 
           // تحميل الوحدات الإضافية للمنتج الموجود
           _loadExistingUnits();
@@ -104,6 +108,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
         }
       });
     } catch (e) {
+      if (!mounted) return;
+
       setState(() {
         _isLoading = false;
       });
@@ -112,23 +118,72 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
+  // ⬅️ تحديث دالة _checkProduct:
+  Future<void> _checkProduct(String qrCode) async {
+    if (qrCode.trim().isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final results = await _provider.searchProductsByBarcode(qrCode);
+
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+
+        if (results.isNotEmpty) {
+          _existingProduct = results.first;
+          _isNewProduct = false;
+
+          // تعبئة البيانات الأساسية
+          _nameController.text = _existingProduct!.name;
+          _priceController.text = _existingProduct!.price.toStringAsFixed(2);
+          _costPriceController.text = _existingProduct!.costPrice
+              .toStringAsFixed(2);
+          _originalQuantityController.text = _existingProduct!.quantity
+              .toStringAsFixed(2);
+          _quantityController.text = '0';
+          _barcodeController.text = _existingProduct!.barcode ?? '';
+          _selectedUnit = _existingProduct!.baseUnit;
+
+          // ⬅️ تعبئة حالة السويتشين
+          _isProductActive = _existingProduct!.active;
+          _hasExpiryDate = _existingProduct!.hasExpiryDate;
+
+          // تحميل الوحدات الإضافية للمنتج الموجود
+          _loadExistingUnits();
+        } else {
+          _existingProduct = null;
+          _isNewProduct = true;
+          _resetForm();
+          _barcodeController.text = qrCode;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+      });
+      log('Error searching product: $e');
+      showAppToast(context, 'خطأ في البحث عن المنتج: $e', ToastType.error);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = MediaQuery.of(context).size.width > 600;
 
     return Directionality(
-      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      textDirection: TextDirection.rtl,
       child: BaseLayout(
-        currentPage: 'المنتجات', // الصفحة الحالية
+        currentPage: 'المنتجات',
         title: _isNewProduct ? 'إضافة منتج جديد' : 'تحديث المنتج',
-        actions: [
-          IconButton(
-            onPressed: () {
-              // أي إجراء تريده هنا
-            },
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
         child: Padding(
           padding:
               isDesktop
@@ -173,7 +228,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // QR Section - جانب واحد
         Expanded(
           flex: 1,
           child: Card(
@@ -208,7 +262,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
           ),
         ),
         SizedBox(width: 20),
-        // Product Info - الجانب الآخر
         Expanded(
           flex: 2,
           child: Column(
@@ -239,6 +292,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ],
 
               if (isDesktop) _buildDesktopForm() else _buildMobileForm(),
+
+              // ⬅️ جديد: قسم السويتشين
+              _buildSwitchesSection(),
             ],
           ),
         ),
@@ -291,6 +347,255 @@ class _AddProductScreenState extends State<AddProductScreen> {
       ],
     );
   }
+
+  // ⬅️ جديد: قسم السويتشين
+  // في AddProductScreen.dart - تحديث قسم السويتشين
+
+  Widget _buildSwitchesSection() {
+    return Container(
+      margin: EdgeInsets.only(top: 20),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'إعدادات المنتج',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF6A3093),
+            ),
+          ),
+          SizedBox(height: 16),
+
+          // سويتش تفعيل/تعطيل المنتج
+          Container(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Icon(
+                  _isProductActive ? Icons.check_circle : Icons.cancel,
+                  color: _isProductActive ? Colors.green : Colors.red,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'حالة المنتج',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        _isProductActive
+                            ? 'المنتج نشط وجاهز للبيع'
+                            : 'المنتج معطل وغير متاح للبيع',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _isProductActive,
+                  activeColor: Colors.green,
+                  inactiveTrackColor: Colors.red[200],
+                  inactiveThumbColor: Colors.red,
+                  onChanged: (value) {
+                    setState(() {
+                      _isProductActive = value;
+                      print(
+                        'تم تغيير حالة المنتج إلى: ${value ? "نشط" : "غير نشط"}',
+                      );
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          Divider(color: Colors.grey.shade300),
+
+          // سويتش تاريخ الصلاحية
+          Container(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Icon(
+                  _hasExpiryDate
+                      ? Icons.calendar_today
+                      : Icons.calendar_today_outlined,
+                  color: _hasExpiryDate ? Colors.blue : Colors.grey,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'تاريخ الصلاحية',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        _hasExpiryDate
+                            ? 'هذا المنتج يحتوي على تاريخ صلاحية'
+                            : 'هذا المنتج لا يحتوي على تاريخ صلاحية',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _hasExpiryDate,
+                  activeColor: Colors.blue,
+                  onChanged: (value) {
+                    setState(() {
+                      _hasExpiryDate = value;
+                      print(
+                        'تم تغيير حالة الصلاحية إلى: ${value ? "له صلاحية" : "بدون صلاحية"}',
+                      );
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ⬅️ تحديث دالة _saveProduct لطباعة القيم للتصحيح
+  Future<void> _saveProduct() async {
+    if (!_formKey.currentState!.validate()) {
+      showAppToast(context, 'يرجى تصحيح الأخطاء في النموذج', ToastType.error);
+      return;
+    }
+
+    // حساب الكمية النهائية
+    double finalQuantity;
+    if (_isNewProduct) {
+      finalQuantity = double.tryParse(_quantityController.text) ?? 0.0;
+    } else {
+      final originalQty =
+          double.tryParse(_originalQuantityController.text) ?? 0.0;
+      final addedQty = double.tryParse(_quantityController.text) ?? 0.0;
+      finalQuantity = originalQty + addedQty;
+    }
+
+    // التحقق من البيانات الأساسية
+    if (_nameController.text.isEmpty) {
+      showAppToast(context, 'يرجى إدخال اسم المنتج', ToastType.error);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    // ⬅️ طباعة القيم للتصحيح
+    print('=== بيانات المنتج قبل الحفظ ===');
+    print('اسم المنتج: ${_nameController.text}');
+    print('الحالة النشطة: $_isProductActive');
+    print('له صلاحية: $_hasExpiryDate');
+    print('الكمية: $finalQuantity');
+    print('السعر: ${_priceController.text}');
+
+    try {
+      if (_isNewProduct) {
+        // إنشاء كائن المنتج الجديد مع السويتشين
+        final product = Product(
+          name: _nameController.text,
+          barcode: _barcodeController.text,
+          baseUnit: _selectedUnit,
+          price: double.tryParse(_priceController.text) ?? 0.0,
+          quantity: finalQuantity,
+          costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
+          active: _isProductActive, // ⬅️ هذا هو المهم!
+          hasExpiryDate: _hasExpiryDate, // ⬅️ هذا هو المهم!
+        );
+
+        print('كائن المنتج المرسل:');
+        print('active: ${product.active}');
+        print('hasExpiryDate: ${product.hasExpiryDate}');
+
+        await _provider.addProduct(product);
+
+        // محاولة الحصول على الـ ID
+        try {
+          final results = await _provider.searchProductsByBarcode(
+            product.barcode ?? '',
+          );
+          if (product.barcode == null || product.barcode!.isEmpty) {
+            results.clear();
+          }
+          if (results.isNotEmpty) {
+            final newProductId = results.first.id;
+
+            // حفظ الوحدات الإضافية
+            if (_showUnitsSection && newProductId != null) {
+              await _saveProductUnits(newProductId);
+            }
+          }
+        } catch (e) {
+          log('Warning: Could not get product ID: $e');
+        }
+      } else {
+        // تحديث المنتج الموجود
+        if (_existingProduct?.id == null) {
+          throw Exception('لا يمكن تحديث منتج بدون ID');
+        }
+
+        final product = Product(
+          id: _existingProduct!.id,
+          name: _nameController.text,
+          barcode: _barcodeController.text,
+          baseUnit: _selectedUnit,
+          price: double.tryParse(_priceController.text) ?? 0.0,
+          quantity: finalQuantity,
+          costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
+          addedDate: _existingProduct?.addedDate,
+          active: _isProductActive, // ⬅️ هذا هو المهم!
+          hasExpiryDate: _hasExpiryDate, // ⬅️ هذا هو المهم!
+        );
+
+        print('كائن المنتج المرسل للتحديث:');
+        print('active: ${product.active}');
+        print('hasExpiryDate: ${product.hasExpiryDate}');
+
+        await _provider.updateProduct(product);
+
+        // حفظ الوحدات الإضافية
+        if (_showUnitsSection && _existingProduct!.id != null) {
+          await _saveProductUnits(_existingProduct!.id!);
+        }
+      }
+
+      setState(() => _isLoading = false);
+
+      showAppToast(
+        context,
+        _isNewProduct ? 'تم إضافة المنتج بنجاح' : 'تم تحديث المنتج بنجاح',
+        ToastType.success,
+      );
+
+      await Future.delayed(const Duration(seconds: 1));
+      Navigator.pop(context, true);
+    } catch (e) {
+      setState(() => _isLoading = false);
+      showAppToast(context, 'حدث خطأ: $e', ToastType.error);
+      print('Error saving product: $e');
+    }
+  }
+  // باقي الدوال تبقى كما هي مع تعديلات طفيفة في _saveProduct
 
   Widget _buildNameField() {
     return CustomTextField(
@@ -431,7 +736,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
               return null;
             },
             inputFormatters: [
-              // هذا يسمح فقط بالأرقام والفواصل العشرية
               FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
             ],
           ),
@@ -463,7 +767,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // زر إظهار/إخفاء قسم الوحدات
         Container(
           padding: EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -642,7 +945,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void _addNewUnit() {
     setState(() {
       _unitControllers.add(UnitController());
-      _unitIds.add(-1); // -1 يعني وحدة جديدة
+      _unitIds.add(-1);
     });
   }
 
@@ -692,59 +995,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
-  Future<void> _checkProduct(String qrCode) async {
-    // إذا كان الباركود فارغاً، لا تبحث
-    if (qrCode.trim().isEmpty) {
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final results = await _provider.searchProductsByBarcode(qrCode);
-
-      setState(() {
-        _isLoading = false;
-
-        if (results.isNotEmpty) {
-          _existingProduct = results.first;
-          _isNewProduct = false;
-
-          // تعبئة البيانات الأساسية
-          _nameController.text = _existingProduct!.name;
-          _priceController.text = _existingProduct!.price.toString();
-          _costPriceController.text = _existingProduct!.costPrice.toString();
-          _originalQuantityController.text =
-              _existingProduct!.quantity.toString();
-          _quantityController.text = '0';
-          _barcodeController.text = _existingProduct!.barcode ?? '';
-
-          // تعبئة البيانات الجديدة - استخدام baseUnit بدلاً من unit
-          _selectedUnit = _existingProduct!.baseUnit;
-
-          // تحميل الوحدات الإضافية للمنتج الموجود
-          _loadExistingUnits();
-        } else {
-          _existingProduct = null;
-          _isNewProduct = true;
-
-          // إعادة تعيين الحقول
-          _resetForm();
-          _barcodeController.text = qrCode;
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      log('Error searching product: $e');
-      showAppToast(context, 'خطأ في البحث عن المنتج: $e', ToastType.error);
-    }
-  }
-
-  // دالة _loadExistingUnits تبقى كما هي
   Future<void> _loadExistingUnits() async {
     if (_existingProduct?.id == null) return;
 
@@ -766,14 +1016,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
           _unitIds.add(unit.id!);
         }
 
-        // إذا كان هناك وحدات موجودة، نظهر قسم الوحدات تلقائياً
         if (units.isNotEmpty) {
           _showUnitsSection = true;
         }
       });
-    } catch (e) {
-      log('Error loading product units: $e');
-    }
+      // ignore: empty_catches
+    } catch (e) {}
   }
 
   void _resetForm() {
@@ -786,154 +1034,56 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _unitControllers.clear();
     _unitIds.clear();
     _barcodeController.text = '';
-  }
-
-  Future<void> _saveProduct() async {
-    if (!_formKey.currentState!.validate()) {
-      showAppToast(context, 'يرجى تصحيح الأخطاء في النموذج', ToastType.error);
-      return;
-    }
-
-    // حساب الكمية النهائية
-    double finalQuantity;
-    if (_isNewProduct) {
-      finalQuantity = double.tryParse(_quantityController.text) ?? 0.0;
-    } else {
-      final originalQty =
-          double.tryParse(_originalQuantityController.text) ?? 0.0;
-      final addedQty = double.tryParse(_quantityController.text) ?? 0.0;
-      finalQuantity = originalQty + addedQty;
-    }
-
-    // التحقق من البيانات الأساسية
-    if (_nameController.text.isEmpty) {
-      showAppToast(context, 'يرجى إدخال اسم المنتج', ToastType.error);
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      if (_isNewProduct) {
-        // إنشاء كائن المنتج الجديد
-        final product = Product(
-          name: _nameController.text,
-          barcode: _barcodeController.text,
-          baseUnit: _selectedUnit,
-          price: double.tryParse(_priceController.text) ?? 0.0,
-          quantity: finalQuantity,
-          costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
-        );
-        print('Adding new product: $product');
-
-        await _provider.addProduct(product);
-
-        // محاولة الحصول على الـ ID من خلال البحث بالباركود
-        try {
-          final results = await _provider.searchProductsByBarcode(
-            product.barcode ?? '',
-          );
-          if (product.barcode == null || product.barcode!.isEmpty) {
-            results.clear();
-          }
-          if (results.isNotEmpty) {
-            final newProductId = results.first.id;
-
-            // حفظ الوحدات الإضافية
-            if (_showUnitsSection && newProductId != null) {
-              await _saveProductUnits(newProductId);
-            }
-          }
-        } catch (e) {
-          log('Warning: Could not get product ID: $e');
-        }
-      } else {
-        // ✅ تحديث المنتج الموجود - مع إضافة ID
-        if (_existingProduct?.id == null) {
-          throw Exception('لا يمكن تحديث منتج بدون ID');
-        }
-
-        final product = Product(
-          id: _existingProduct!.id, // ⬅️ هذا هو الحل! إضافة الـ ID
-          name: _nameController.text,
-          barcode: _barcodeController.text,
-          baseUnit: _selectedUnit,
-          price: double.tryParse(_priceController.text) ?? 0.0,
-          quantity: finalQuantity,
-          costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
-          addedDate: _existingProduct?.addedDate, // الحفاظ على تاريخ الإضافة
-        );
-
-        await _provider.updateProduct(product);
-
-        // حفظ الوحدات الإضافية
-        if (_showUnitsSection && _existingProduct!.id != null) {
-          await _saveProductUnits(_existingProduct!.id!);
-        }
-      }
-
-      setState(() => _isLoading = false);
-
-      // إظهار رسالة نجاح
-      showAppToast(
-        context,
-        _isNewProduct ? 'تم إضافة المنتج بنجاح' : 'تم تحديث المنتج بنجاح',
-        ToastType.success,
-      );
-
-      // الانتظار قليلاً ثم العودة
-      await Future.delayed(const Duration(seconds: 1));
-      Navigator.pop(context, true);
-    } catch (e) {
-      setState(() => _isLoading = false);
-      showAppToast(context, 'حدث خطأ: $e', ToastType.error);
-      print('Error saving product: $e');
-    }
+    // ⬅️ جديد: إعادة تعيين السويتشين
+    _isProductActive = true; // الافتراضي نشط
+    _hasExpiryDate = false; // الافتراضي بدون صلاحية
   }
 
   Future<void> _saveProductUnits(int productId) async {
+    print('===== بدء حفظ الوحدات =====');
+    print('رقم المنتج: $productId');
+    print('عدد الوحدات: ${_unitControllers.length}');
+
     try {
-      // جلب الوحدات الحالية من قاعدة البيانات
       List<ProductUnit> existingUnits = [];
       try {
         existingUnits = await _provider.getProductUnits(productId);
+        print('الوحدات الموجودة: ${existingUnits.length}');
       } catch (e) {
-        log('خطأ في جلب الوحدات الحالية: $e');
+        print('خطأ في جلب الوحدات الحالية: $e');
       }
 
-      // معالجة كل وحدة في الواجهة
       for (int i = 0; i < _unitControllers.length; i++) {
         final controller = _unitControllers[i];
         final unitId = _unitIds[i];
 
         final unitName = controller.unitNameController.text.trim();
         final barcode = controller.barcodeController.text.trim();
-        final containQty =
-            double.tryParse(controller.containQtyController.text) ?? 0.0;
-        final sellPrice =
-            double.tryParse(controller.sellPriceController.text) ?? 0.0;
+        final containQtyText = controller.containQtyController.text.trim();
+        final sellPriceText = controller.sellPriceController.text.trim();
 
-        log('معالجة الوحدة: $unitName, ID: $unitId');
-
-        // التحقق من صحة البيانات
         if (unitName.isEmpty) {
-          log('تحذير: اسم الوحدة فارغ، تخطي');
+          print('⚠️ تخطي وحدة بدون اسم');
           continue;
         }
 
+        final containQty = double.tryParse(containQtyText) ?? 0.0;
+        final sellPrice = double.tryParse(sellPriceText) ?? 0.0;
+
         if (containQty <= 0) {
-          log('تحذير: كمية الوحدة غير صحيحة: $containQty');
+          print('⚠️ تخطي وحدة $unitName - الكمية غير صحيحة: $containQty');
           continue;
         }
 
         if (sellPrice <= 0) {
-          log('تحذير: سعر الوحدة غير صحيح: $sellPrice');
+          print('⚠️ تخطي وحدة $unitName - السعر غير صحيح: $sellPrice');
           continue;
         }
 
-        // إنشاء كائن الوحدة
+        print('▶️ معالجة الوحدة: $unitName');
+
         final unit = ProductUnit(
-          id: unitId != -1 ? unitId : null, // إذا كان -1 يعني وحدة جديدة
+          id: unitId != -1 ? unitId : null,
           productId: productId,
           unitName: unitName,
           barcode: barcode.isNotEmpty ? barcode : null,
@@ -943,25 +1093,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
         try {
           if (unitId == -1) {
-            // وحدة جديدة
-            log('إضافة وحدة جديدة: $unitName');
+            print('➕ إضافة وحدة جديدة: $unitName');
             await _provider.addProductUnit(unit);
           } else {
-            // تحديث وحدة موجودة
-            log('تحديث وحدة موجودة: $unitName (ID: $unitId)');
+            print('🔄 تحديث وحدة موجودة: $unitName (ID: $unitId)');
             await _provider.updateProductUnit(unit);
+            print('✅ تم تحديث الوحدة $unitName');
           }
         } catch (e) {
-          log('خطأ في حفظ الوحدة $unitName: $e');
+          print('❌ خطأ في حفظ الوحدة $unitName: $e');
         }
       }
 
-      // حذف الوحدات التي تم إزالتها من الواجهة
       await _deleteRemovedUnits(productId, existingUnits);
 
-      log('تم حفظ الوحدات بنجاح للمنتج: $productId');
+      print('===== انتهاء حفظ الوحدات بنجاح =====');
     } catch (e) {
-      log('خطأ كبير في حفظ الوحدات: $e');
+      print('❌ خطأ كبير في حفظ الوحدات: $e');
       rethrow;
     }
   }
@@ -970,29 +1118,37 @@ class _AddProductScreenState extends State<AddProductScreen> {
     int productId,
     List<ProductUnit> existingUnits,
   ) async {
-    try {
-      // إنشاء قائمة بأسماء الوحدات الحالية في الواجهة
-      final currentUnitNames =
-          _unitControllers
-              .map((controller) => controller.unitNameController.text.trim())
-              .where((name) => name.isNotEmpty)
-              .toList();
+    print('🔍 البحث عن وحدات محذوفة...');
 
-      log('أسماء الوحدات في الواجهة: $currentUnitNames');
-      log(
-        'الوحدات الموجودة في قاعدة البيانات: ${existingUnits.map((u) => u.unitName).toList()}',
-      );
+    final currentUnitIds = <int>[];
+    for (int i = 0; i < _unitIds.length; i++) {
+      if (_unitIds[i] != -1) {
+        currentUnitIds.add(_unitIds[i]);
+      }
+    }
 
-      // البحث عن الوحدات التي يجب حذفها
-      for (final existingUnit in existingUnits) {
-        if (!currentUnitNames.contains(existingUnit.unitName)) {
-          log('حذف الوحدة: ${existingUnit.unitName} (ID: ${existingUnit.id})');
+    print('IDs الوحدات في الواجهة: $currentUnitIds');
+    print(
+      'IDs الوحدات الموجودة في DB: ${existingUnits.map((u) => u.id).toList()}',
+    );
+
+    int deletedCount = 0;
+    for (final existingUnit in existingUnits) {
+      if (existingUnit.id != null &&
+          !currentUnitIds.contains(existingUnit.id!)) {
+        print(
+          '🗑️ حذف الوحدة: ${existingUnit.unitName} (ID: ${existingUnit.id})',
+        );
+        try {
           await _provider.deleteProductUnit(existingUnit.id!);
+          deletedCount++;
+        } catch (e) {
+          print('❌ خطأ في حذف الوحدة ${existingUnit.id}: $e');
         }
       }
-    } catch (e) {
-      log('خطأ في حذف الوحدات: $e');
     }
+
+    print('✅ تم حذف $deletedCount وحدة');
   }
 
   @override
@@ -1005,7 +1161,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _barcodeController.dispose();
     _originalQuantityController.dispose();
 
-    // التخلص من وحدات التحكم للوحدات
     for (final controller in _unitControllers) {
       controller.dispose();
     }

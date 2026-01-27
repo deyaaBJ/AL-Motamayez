@@ -47,6 +47,44 @@ class ProductItem extends StatelessWidget {
                     product.barcode ?? '',
                     style: const TextStyle(color: Colors.grey, fontSize: 12),
                   ),
+                  // ⬅️ جديد: عرض حالة التنشيط
+                  if (!product.active)
+                    Container(
+                      margin: EdgeInsets.only(top: 4),
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.red, width: 0.5),
+                      ),
+                      child: Text(
+                        'غير نشط',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  // ⬅️ جديد: عرض إذا كان له صلاحية
+                  if (product.hasExpiryDate)
+                    Container(
+                      margin: EdgeInsets.only(top: 2),
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.blue, width: 0.5),
+                      ),
+                      child: Text(
+                        'له صلاحية',
+                        style: TextStyle(
+                          color: Colors.blue,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -101,10 +139,25 @@ class ProductItem extends StatelessWidget {
             // الحالة
             Expanded(
               flex: 1,
-              child: Icon(
-                product.quantity > 0 ? Icons.check_circle : Icons.cancel,
-                color: product.quantity > 0 ? Colors.green : Colors.red,
-                size: 20,
+              child: Column(
+                children: [
+                  Icon(
+                    product.quantity > 0 ? Icons.check_circle : Icons.cancel,
+                    color: product.quantity > 0 ? Colors.green : Colors.red,
+                    size: 20,
+                  ),
+                  SizedBox(height: 4),
+                  // ⬅️ جديد: مؤشر حالة التنشيط
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: product.active ? Colors.green : Colors.red,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1),
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -117,7 +170,17 @@ class ProductItem extends StatelessWidget {
                 itemBuilder:
                     (BuildContext context) => [
                       const PopupMenuItem(value: 'edit', child: Text('تعديل')),
-                      const PopupMenuItem(value: 'delete', child: Text('حذف')),
+                      PopupMenuItem(
+                        value: 'toggle_active',
+                        child: Text(product.active ? 'إلغاء التنشيط' : 'تفعيل'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text(
+                          'حذف نهائي',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
                     ],
               ),
             ),
@@ -151,13 +214,59 @@ class ProductItem extends StatelessWidget {
           if (result == true) onUpdate();
         });
         break;
+      case 'toggle_active':
+        showDialog(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                title: Text(product.active ? 'إلغاء التنشيط' : 'تفعيل المنتج'),
+                content: Text(
+                  product.active
+                      ? 'هل أنت متأكد من إلغاء تنشيط "${product.name}"؟'
+                      : 'هل تريد تفعيل المنتج "${product.name}"؟',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('إلغاء'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          product.active ? Colors.orange : Colors.green,
+                    ),
+                    child: Text(product.active ? 'إلغاء التنشيط' : 'تفعيل'),
+                    onPressed: () async {
+                      try {
+                        await provider.toggleProductActive(product.id!);
+                        onUpdate();
+                        Navigator.pop(context);
+                        showAppToast(
+                          context,
+                          product.active
+                              ? 'تم إلغاء تنشيط ${product.name}'
+                              : 'تم تفعيل ${product.name}',
+                          ToastType.success,
+                        );
+                      } catch (e) {
+                        Navigator.pop(context);
+                        showAppToast(context, 'خطأ: $e', ToastType.error);
+                      }
+                    },
+                  ),
+                ],
+              ),
+        );
+        break;
       case 'delete':
         showDialog(
           context: context,
           builder:
               (context) => AlertDialog(
-                title: const Text('حذف المنتج'),
-                content: Text('هل أنت متأكد من حذف "${product.name}"؟'),
+                title: const Text('حذف نهائي'),
+                content: Text(
+                  'هل أنت متأكد من الحذف النهائي للمنتج "${product.name}"؟\n\n⚠️ هذه العملية لا يمكن التراجع عنها!',
+                ),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
@@ -167,16 +276,25 @@ class ProductItem extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                     ),
-                    child: const Text('حذف'),
+                    child: const Text('حذف نهائي'),
                     onPressed: () async {
-                      await provider.deleteProduct(product.id.toString());
-                      onUpdate();
-                      Navigator.pop(context);
-                      showAppToast(
-                        context,
-                        'تم حذف ${product.name} بنجاح',
-                        ToastType.success,
-                      );
+                      try {
+                        await provider.deleteProduct(product.id.toString());
+                        onUpdate();
+                        Navigator.pop(context);
+                        showAppToast(
+                          context,
+                          'تم حذف ${product.name} نهائياً',
+                          ToastType.success,
+                        );
+                      } catch (e) {
+                        Navigator.pop(context);
+                        showAppToast(
+                          context,
+                          'خطأ في الحذف: $e',
+                          ToastType.error,
+                        );
+                      }
                     },
                   ),
                 ],

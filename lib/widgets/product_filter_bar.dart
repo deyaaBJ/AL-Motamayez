@@ -18,16 +18,21 @@ bool matchesFilter(
 
   switch (currentFilter) {
     case ProductFilter.all:
-      return true;
+      return product.active; // ⬅️ يظهر المنتجات النشطة فقط
 
     case ProductFilter.available:
-      return product.quantity > 0;
+      return product.active && product.quantity > 0;
 
     case ProductFilter.unavailable:
-      return product.quantity == 0;
+      return product.active && product.quantity == 0;
 
     case ProductFilter.lowStock:
-      return product.quantity > 0 && product.quantity <= threshold;
+      return product.active &&
+          product.quantity > 0 &&
+          product.quantity <= threshold;
+
+    case ProductFilter.inactive: // ⬅️ جديد
+      return !product.active; // المنتجات غير النشطة فقط
   }
 }
 
@@ -58,6 +63,8 @@ class ProductFilterBar extends StatelessWidget {
             _buildFilterChip('⏸️ غير متوفر', ProductFilter.unavailable),
             const SizedBox(width: 8),
             _buildFilterChip('📊 منخفض', ProductFilter.lowStock),
+            const SizedBox(width: 8),
+            _buildFilterChip('🚫 غير نشط', ProductFilter.inactive), // ⬅️ جديد
           ],
         ),
       ),

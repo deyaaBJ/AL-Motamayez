@@ -5,7 +5,7 @@ import 'dart:developer';
 
 class DBHelper {
   static Database? _db;
-  static const int _version = 3; // زيادة الرقم لتطبيق التحديثات
+  static const int _version = 4; // ⬅️ غير من 3 ل 4
 
   Future<Database> get db async {
     if (_db != null) return _db!;
@@ -43,6 +43,39 @@ class DBHelper {
     }
     if (oldVersion < 3) {
       // أي تحديثات أخرى
+    }
+
+    // ⬅️ إضافة هذا الجزء الجديد للإصدار 4
+    if (oldVersion < 4) {
+      try {
+        // إضافة فهرس لباركود الوحدات
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_product_units_barcode ON product_units (barcode)',
+        );
+
+        log('✅ تم إضافة فهرس باركود الوحدات');
+
+        // ⬅️ إضافة الأعمدة المفقودة لجدول purchase_items
+        try {
+          await db.execute(
+            'ALTER TABLE purchase_items ADD COLUMN unit_id INTEGER',
+          );
+          log('✅ تم إضافة عمود unit_id لجدول purchase_items');
+        } catch (e) {
+          log('ℹ️ العمود unit_id موجود بالفعل: $e');
+        }
+
+        try {
+          await db.execute(
+            'ALTER TABLE purchase_items ADD COLUMN display_quantity REAL',
+          );
+          log('✅ تم إضافة عمود display_quantity لجدول purchase_items');
+        } catch (e) {
+          log('ℹ️ العمود display_quantity موجود بالفعل: $e');
+        }
+      } catch (e) {
+        log('❌ خطأ في إضافة الفهرس: $e');
+      }
     }
   }
 
@@ -106,6 +139,12 @@ class DBHelper {
       );
       await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_supplier_transactions_date ON supplier_transactions (date)',
+      );
+
+      // ⬅️ إضافة هذا الفهرس الجديد
+      // فهرس لباركود الوحدات (هام للبحث السريع)
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_product_units_barcode ON product_units (barcode)',
       );
 
       log('✅ تم إنشاء الفهارس بنجاح!');
@@ -201,18 +240,20 @@ WHERE sale_id IN ($idsString);
   Future _onCreate(Database db, int version) async {
     // جدول المنتجات
     await db.execute('''
-      CREATE TABLE products (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        barcode TEXT UNIQUE,
-        base_unit TEXT NOT NULL DEFAULT 'piece',
-        price REAL NOT NULL,
-        quantity REAL NOT NULL,
-        cost_price REAL NOT NULL,
-        has_expiry BOOLEAN DEFAULT 1,
-        added_date DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-    ''');
+  CREATE TABLE products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    barcode TEXT UNIQUE,
+    base_unit TEXT NOT NULL DEFAULT 'piece',
+    price REAL NOT NULL,
+    quantity REAL NOT NULL,
+    cost_price REAL NOT NULL,
+    has_expiry BOOLEAN DEFAULT 1,
+    has_expiry_date BOOLEAN DEFAULT 0, -- ⬅️ جديد: لتحديد إذا كان للمنتج تاريخ صلاحية
+    active BOOLEAN DEFAULT 1, -- ⬅️ جديد: حالة المنتج (نشط/غير نشط)
+    added_date DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+''');
 
     // وحدات المنتجات
     await db.execute('''
@@ -240,9 +281,7 @@ WHERE sale_id IN ($idsString);
         ''');
 
     await db.execute('''
-
   CREATE TABLE product_batches (
-
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     product_id INTEGER NOT NULL,
     purchase_item_id INTEGER, 
@@ -251,11 +290,11 @@ WHERE sale_id IN ($idsString);
     cost_price REAL NOT NULL,
     production_date TEXT,   
     expiry_date TEXT NOT NULL,
+    active BOOLEAN DEFAULT 0, -- ⬅️ جديد: تفعيل تاريخ الصلاحية
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
   );  
-
-  ''');
+''');
 
     // جدول المستخدمين
     await db.execute('''
@@ -430,17 +469,20 @@ CREATE TABLE sale_items (
       );
     ''');
 
-    // جدول عناصر فاتورة الشراء
+    // ⬅️ جدول عناصر فاتورة الشراء المعدل ⬅️
     await db.execute('''
       CREATE TABLE purchase_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         purchase_id INTEGER NOT NULL,
         product_id INTEGER NOT NULL,
-        quantity REAL NOT NULL,
+        unit_id INTEGER, -- ⬅️ جديد: معرف الوحدة إذا كان الشراء بوحدة
+        display_quantity REAL, -- ⬅️ جديد: الكمية المعروضة (عدد الوحدات)
+        quantity REAL NOT NULL, -- الكمية الفعلية (القطع)
         cost_price REAL NOT NULL,
         subtotal REAL NOT NULL,
         FOREIGN KEY (purchase_id) REFERENCES purchase_invoices (id) ON DELETE CASCADE,
-        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+        FOREIGN KEY (unit_id) REFERENCES product_units (id) ON DELETE SET NULL
       );
     ''');
 
@@ -510,6 +552,72 @@ CREATE TABLE sale_items (
       return result.isNotEmpty;
     } catch (e) {
       return false;
+    }
+  }
+
+  // ⬅️ دالة جديدة: حذف قاعدة البيانات وإعادة إنشائها
+  Future<void> resetDatabase() async {
+    try {
+      log('⚠️ بدء عملية إعادة تعيين قاعدة البيانات...');
+
+      if (_db != null) {
+        await _db!.close();
+        _db = null;
+      }
+
+      String folderPath = join(Directory.current.path, 'data');
+      String path = join(folderPath, 'motamayez.db');
+
+      // حذف ملف قاعدة البيانات
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+        log('✅ تم حذف ملف قاعدة البيانات القديم');
+      }
+
+      // إعادة إنشاء قاعدة البيانات
+      _db = await initDb();
+      log('🎉 تم إعادة إنشاء قاعدة البيانات بنجاح!');
+    } catch (e) {
+      log('❌ خطأ في إعادة تعيين قاعدة البيانات: $e');
+      rethrow;
+    }
+  }
+
+  // ⬅️ دالة جديدة: التحقق من هيكل قاعدة البيانات
+  Future<void> checkDatabaseStructure() async {
+    try {
+      final database = await db;
+      log('🔍 التحقق من هيكل قاعدة البيانات...');
+
+      // التحقق من جدول purchase_items
+      final purchaseItemsColumns = await database.rawQuery(
+        'PRAGMA table_info(purchase_items)',
+      );
+      log('📊 أعمدة جدول purchase_items:');
+
+      for (var column in purchaseItemsColumns) {
+        log('   - ${column['name']} (${column['type']})');
+      }
+
+      // التحقق من وجود الأعمدة المطلوبة
+      final columnNames =
+          purchaseItemsColumns.map((col) => col['name'] as String).toList();
+
+      if (!columnNames.contains('unit_id')) {
+        log('⚠️ عمود unit_id غير موجود في جدول purchase_items');
+      }
+
+      if (!columnNames.contains('display_quantity')) {
+        log('⚠️ عمود display_quantity غير موجود في جدول purchase_items');
+      }
+
+      if (columnNames.contains('unit_id') &&
+          columnNames.contains('display_quantity')) {
+        log('✅ جميع الأعمدة المطلوبة موجودة في جدول purchase_items');
+      }
+    } catch (e) {
+      log('❌ خطأ في التحقق من هيكل قاعدة البيانات: $e');
     }
   }
 }
