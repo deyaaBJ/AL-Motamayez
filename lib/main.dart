@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:motamayez/providers/product_batch_provider.dart';
+import 'package:motamayez/providers/batch_provider.dart';
 import 'package:motamayez/providers/temporary_invoice_provider.dart';
+import 'package:motamayez/screens/batches_screen.dart';
 import 'package:motamayez/services/activation_service.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -78,7 +79,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => SupplierProvider()),
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => TemporaryInvoiceProvider()),
-        ChangeNotifierProvider(create: (_) => ProductBatchProvider()),
+        ChangeNotifierProvider(create: (_) => BatchProvider()),
       ],
       child: const MotamayezApp(),
     ),
@@ -130,6 +131,7 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
         '/expenses': (_) => const ExpensesPage(),
         '/activation': (_) => const ActivationPage(),
         '/invalidSignature': (_) => const InvalidSignatureScreen(),
+        '/batches': (_) => const BatchesScreen(),
       },
     );
   }

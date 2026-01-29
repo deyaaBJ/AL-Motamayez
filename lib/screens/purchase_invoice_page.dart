@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart' show DateFormat;
 import 'package:motamayez/db/db_helper.dart';
+import 'package:motamayez/providers/batch_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/product.dart';
@@ -13,7 +14,6 @@ import '../providers/supplier_provider.dart';
 import '../providers/purchase_invoice_provider.dart';
 import '../providers/purchase_item_provider.dart';
 import '../providers/product_provider.dart';
-import '../providers/product_batch_provider.dart';
 import '../utils/formatters.dart';
 import 'dart:developer';
 
@@ -674,7 +674,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
             onTap: () async {
               final selectedDate = await showDatePicker(
                 context: context,
-                initialDate: DateTime.now().add(const Duration(days: 365)),
+                initialDate: DateTime.now(),
                 firstDate: DateTime.now(),
                 lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
                 helpText: 'اختر تاريخ الانتهاء',
@@ -1591,7 +1591,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     try {
       final purchaseInvoiceProvider = context.read<PurchaseInvoiceProvider>();
       final purchaseItemProvider = context.read<PurchaseItemProvider>();
-      final productBatchProvider = context.read<ProductBatchProvider>();
+      final productBatchProvider = context.read<BatchProvider>();
 
       _invoiceId = await purchaseInvoiceProvider.addPurchaseInvoice(
         supplierId: invoiceProvider.tempSelectedSupplierId!,

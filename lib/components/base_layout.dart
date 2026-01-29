@@ -72,6 +72,9 @@ class _BaseLayoutState extends State<BaseLayout> {
       case 'المصاريف':
         Navigator.pushNamed(context, '/expenses');
         break;
+      case 'الباتشات':
+        Navigator.pushNamed(context, '/batches'); // تأكد من وجود هذه الصفحة
+        break;
       case 'pos':
         Navigator.pushNamed(context, '/pos');
         break;
@@ -98,6 +101,11 @@ class _BaseLayoutState extends State<BaseLayout> {
       'icon': Icons.account_balance_wallet_rounded,
       'label': 'المصاريف',
       'page': 'المصاريف',
+    },
+    {
+      'icon': Icons.inventory_2_rounded, // أيقونة مناسبة للباتشات
+      'label': 'الباتشات',
+      'page': 'الباتشات',
     },
   ];
 
@@ -149,20 +157,20 @@ class _BaseLayoutState extends State<BaseLayout> {
       ),
       child: Column(
         children: [
-          // أيقونة البرنامج في الأعلى - بدون حدود
+          // أيقونة البرنامج في الأعلى - تقليل الارتفاع
           Container(
-            height: 100,
+            height: 80, // تقليل من 100 إلى 80
             child: Center(
               child: Container(
-                width: 60,
-                height: 60,
+                width: 55, // تقليل من 60 إلى 55
+                height: 55,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
+                      blurRadius: 8,
                       spreadRadius: 1,
                     ),
                   ],
@@ -181,7 +189,9 @@ class _BaseLayoutState extends State<BaseLayout> {
           // قائمة العناصر الرئيسية
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                vertical: 5,
+              ), // تقليل من 10 إلى 5
               itemCount: _rightSidebarItems.length,
               itemBuilder: (context, index) {
                 final item = _rightSidebarItems[index];
@@ -213,7 +223,7 @@ class _BaseLayoutState extends State<BaseLayout> {
                 onTap: () => _handlePageChange('logout'),
                 color: Colors.redAccent,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8), // تقليل من 10 إلى 8
             ],
           ),
         ],
@@ -229,7 +239,10 @@ class _BaseLayoutState extends State<BaseLayout> {
     Color? color,
   }) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      margin: const EdgeInsets.symmetric(
+        horizontal: 6,
+        vertical: 3,
+      ), // تقليل الهوامش
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
@@ -246,19 +259,26 @@ class _BaseLayoutState extends State<BaseLayout> {
                     ? Border.all(color: Colors.white.withOpacity(0.3), width: 1)
                     : null,
           ),
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          padding: const EdgeInsets.symmetric(
+            vertical: 12,
+            horizontal: 6,
+          ), // تقليل الحشو
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: color ?? Colors.white, size: 28),
-              const SizedBox(height: 6),
+              Icon(
+                icon,
+                color: color ?? Colors.white,
+                size: 24,
+              ), // تقليل من 28 إلى 24
+              const SizedBox(height: 4), // تقليل من 6 إلى 4
               Text(
                 label,
                 style: TextStyle(
                   color: color ?? Colors.white,
-                  fontSize: 11,
+                  fontSize: 10, // تقليل من 11 إلى 10
                   fontWeight: FontWeight.w500,
-                  height: 1.2,
+                  height: 1.1, // تقليل من 1.2 إلى 1.1
                 ),
                 textAlign: TextAlign.center,
                 maxLines: 2,
