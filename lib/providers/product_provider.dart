@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:motamayez/models/cart_item.dart';
 import 'package:motamayez/models/product.dart';
@@ -13,6 +15,7 @@ import 'dart:developer';
 class ProductProvider with ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
 
+  // ========== متغيرات المنتجات ==========
   int _page = 0;
   final int _limit = 20;
   bool _hasMore = true;
@@ -28,7 +31,21 @@ class ProductProvider with ChangeNotifier {
 
   ProductFilter? _currentActiveFilter;
 
-  // ✅ إعادة تعيين حالة الـ pagination
+  // ========== متغيرات الفواتير ==========
+  List<Sale> _allSales = [];
+  List<Sale> get allSales => _allSales;
+
+  List<Sale> _displayedSales = [];
+  List<Sale> get displayedSales => _displayedSales;
+
+  DateTime? _currentStartDate;
+  DateTime? _currentEndDate;
+
+  int lowStockCount = 0;
+  int outOfStockCount = 0;
+
+  // ========== دوال المنتجات ==========
+
   void resetPagination() {
     _page = 0;
     _hasMore = true;
@@ -36,7 +53,6 @@ class ProductProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // ✅ تحميل عدد المنتجات الإجمالي
   Future<void> loadTotalProducts() async {
     final db = await _dbHelper.db;
     final res = await db.rawQuery("SELECT COUNT(*) as count FROM products");
@@ -44,40 +60,28 @@ class ProductProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  int lowStockCount = 0;
-  int outOfStockCount = 0;
-
   Future<void> loadStockCounts(int threshold) async {
     lowStockCount = await loadLowStockProductsCount(threshold);
     outOfStockCount = await loadOutOfStockProductsCount();
     notifyListeners();
   }
 
-  //تحميل عدد المنتجات المنخفضة
   Future<int> loadLowStockProductsCount(int lowStockThreshold) async {
     final db = await _dbHelper.db;
-
     final res = await db.rawQuery(
       "SELECT COUNT(*) as count FROM products WHERE quantity <= ? AND quantity > 0",
       [lowStockThreshold],
     );
-
     return Sqflite.firstIntValue(res) ?? 0;
   }
 
-  //تحميل عدد المنتجات الغير متوفرة
   Future<int> loadOutOfStockProductsCount() async {
     final db = await _dbHelper.db;
-
     final res = await db.rawQuery(
       "SELECT COUNT(*) as count FROM products WHERE quantity <= 0",
     );
-
     return Sqflite.firstIntValue(res) ?? 0;
   }
-
-  // ✅ التحميل التدريجي للمنتجات مع تحسين الأداء
-  // في ProductProvider.dart - تحديث دالة loadProducts
 
   Future<List<Product>> loadProducts({bool reset = false, bool? active}) async {
     if (!reset && !_hasMore) return [];
@@ -92,15 +96,10 @@ class ProductProvider with ChangeNotifier {
       String whereClause = '';
       List<Object?> whereArgs = [];
 
-      // بناء الـ WHERE clause بناءً على حالة active
       if (active != null) {
         whereClause = 'active = ?';
         whereArgs.add(active ? 1 : 0);
       }
-
-      print(
-        'Loading products with filter: active=$active, where: $whereClause',
-      );
 
       final result = await db.query(
         'products',
@@ -111,14 +110,11 @@ class ProductProvider with ChangeNotifier {
         orderBy: 'id DESC',
       );
 
-      print('Found ${result.length} products');
-
       if (result.isEmpty) {
         _hasMore = false;
         return [];
       }
 
-      // تحويل النتائج إلى كائنات Product
       final newProducts =
           result.map((map) {
             try {
@@ -148,23 +144,18 @@ class ProductProvider with ChangeNotifier {
             }
           }).toList();
 
-      // تحديث الحالة
       _page++;
-
       if (newProducts.length < _limit) {
         _hasMore = false;
       }
 
-      // إضافة المنتجات الجديدة للقائمة
       if (reset) {
         _products = newProducts;
       } else {
         _products.addAll(newProducts);
       }
 
-      // تحميل العدد الإجمالي
       await _loadTotalProductsByFilter(active);
-
       notifyListeners();
       return newProducts;
     } catch (e) {
@@ -173,11 +164,9 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
-  // دالة جديدة: تحميل العدد الإجمالي بناءً على الفلتر
   Future<void> _loadTotalProductsByFilter(bool? active) async {
     try {
       final db = await _dbHelper.db;
-
       String whereClause = '';
       List<Object?> whereArgs = [];
 
@@ -198,7 +187,6 @@ class ProductProvider with ChangeNotifier {
       } else {
         _totalProducts = 0;
       }
-
       notifyListeners();
     } catch (e) {
       log('Error loading total products: $e');
@@ -207,32 +195,28 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
-  // تحديث دالة loadProductsByFilter
   Future<void> loadProductsByFilter(
     ProductFilter filter, {
     bool reset = true,
   }) async {
     bool? active;
-
     switch (filter) {
       case ProductFilter.inactive:
         active = false;
         break;
       case ProductFilter.all:
-        active = null; // جميع المنتجات
+        active = null;
         break;
       case ProductFilter.available:
       case ProductFilter.unavailable:
       case ProductFilter.lowStock:
-        active = true; // المنتجات النشطة فقط
+        active = true;
         break;
     }
-
     _currentActiveFilter = filter;
     await loadProducts(reset: reset, active: active);
   }
 
-  // البحث عن المنتجات (لا يستخدم التحميل التدريجي)
   Future<List<Product>> searchProducts(String query, {bool? active}) async {
     final db = await _dbHelper.db;
     if (query.trim().isEmpty) {
@@ -244,7 +228,6 @@ class ProductProvider with ChangeNotifier {
           'LOWER(name) LIKE LOWER(?) OR LOWER(barcode) LIKE LOWER(?)';
       List<Object?> whereArgs = ['%$query%', '%$query%'];
 
-      // إضافة شرط active إذا تم تمريره
       if (active != null) {
         whereClause += ' AND active = ?';
         whereArgs.add(active ? 1 : 0);
@@ -266,9 +249,7 @@ class ProductProvider with ChangeNotifier {
 
   Future<void> loadMoreProducts() async {
     if (!_hasMore) return;
-
     bool? active;
-
     if (_currentActiveFilter != null) {
       switch (_currentActiveFilter!) {
         case ProductFilter.inactive:
@@ -278,17 +259,12 @@ class ProductProvider with ChangeNotifier {
           active = true;
       }
     }
-
     await loadProducts(reset: false, active: active);
   }
-
-  // في ProductProvider.dart أضف هذه الدالة:
 
   Future<void> toggleProductActive(int productId) async {
     try {
       final db = await _dbHelper.db;
-
-      // الحصول على الحالة الحالية
       final result = await db.query(
         'products',
         columns: ['active', 'name'],
@@ -301,7 +277,6 @@ class ProductProvider with ChangeNotifier {
         final productName = result.first['name'] as String;
         final newActive = !currentActive;
 
-        // تحديث الحالة
         await db.update(
           'products',
           {'active': newActive ? 1 : 0},
@@ -309,11 +284,6 @@ class ProductProvider with ChangeNotifier {
           whereArgs: [productId],
         );
 
-        log(
-          '✅ تم ${newActive ? 'تفعيل' : 'تعطيل'} المنتج: $productName (ID: $productId)',
-        );
-
-        // تحديث القائمة المحلية
         final index = _products.indexWhere((p) => p.id == productId);
         if (index != -1) {
           _products[index].active = newActive;
@@ -326,10 +296,8 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
-  // ✅ البحث عن منتج بواسطة الباركود (بحث دقيق)
   Future<List<Product>> searchProductsByBarcode(String barcode) async {
     final db = await _dbHelper.db;
-
     try {
       final result = await db.query(
         'products',
@@ -358,17 +326,14 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
-  // أضف هذه الدالة في ProductProvider
   Future<List<ProductUnit>> searchProductUnitsByBarcode(String barcode) async {
     final db = await _dbHelper.db;
-
     try {
       final result = await db.query(
         'product_units',
         where: 'barcode = ?',
         whereArgs: [barcode],
       );
-
       return result.map((map) => ProductUnit.fromMap(map)).toList();
     } catch (e) {
       log('Error searching unit by barcode: $e');
@@ -376,14 +341,11 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
-  // إضافة وحدة جديدة للمنتج
   Future<void> addProductUnit(ProductUnit unit) async {
     final db = await _dbHelper.db;
     await db.insert('product_units', unit.toMap());
   }
 
-  // جلب جميع وحدات منتج معين
-  // في ProductProvider.dart
   Future<List<ProductUnit>> getProductUnits(int productId) async {
     try {
       final db = await _dbHelper.db;
@@ -392,8 +354,6 @@ class ProductProvider with ChangeNotifier {
         where: 'product_id = ?',
         whereArgs: [productId],
       );
-
-      // تحويل النتائج وإزالة التكرار
       final units = result.map((map) => ProductUnit.fromMap(map)).toList();
       return _removeDuplicateUnits(units);
     } catch (e) {
@@ -402,7 +362,6 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
-  // دالة مساعدة لإزالة التكرار
   List<ProductUnit> _removeDuplicateUnits(List<ProductUnit> units) {
     final seen = <int>{};
     return units.where((unit) {
@@ -413,7 +372,6 @@ class ProductProvider with ChangeNotifier {
     }).toList();
   }
 
-  // تحديث وحدة منتج
   Future<void> updateProductUnit(ProductUnit unit) async {
     final db = await _dbHelper.db;
     await db.update(
@@ -424,27 +382,19 @@ class ProductProvider with ChangeNotifier {
     );
   }
 
-  // حذف وحدة منتج
   Future<void> deleteProductUnit(int unitId) async {
     final db = await _dbHelper.db;
     await db.delete('product_units', where: 'id = ?', whereArgs: [unitId]);
   }
 
-  // البحث عن وحدة بالباركود
-
   Future<void> addProduct(Product product) async {
     final db = await _dbHelper.db;
-
-    // حماية القيم من NaN
     final safeQuantity = product.quantity.isNaN ? 0.0 : product.quantity;
     final safeCostPrice = product.costPrice.isNaN ? 0.0 : product.costPrice;
     final safePrice = product.price.isNaN ? 0.0 : product.price;
-
-    // نحدد إذا المنتج عنده باركود
     final hasBarcode = product.barcode != null && product.barcode!.isNotEmpty;
 
     if (hasBarcode) {
-      // تحقق إذا المنتج موجود مسبقًا حسب الباركود
       final existing = await db.query(
         'products',
         where: 'barcode = ?',
@@ -452,12 +402,10 @@ class ProductProvider with ChangeNotifier {
       );
 
       if (existing.isNotEmpty) {
-        // المنتج موجود مسبقًا → تحديثه
         final oldProduct = existing.first;
         final oldQuantity = (oldProduct['quantity'] as num?)?.toDouble() ?? 0.0;
         final oldCostPrice =
             (oldProduct['cost_price'] as num?)?.toDouble() ?? 0.0;
-
         final newQuantity = oldQuantity + safeQuantity;
 
         double newCostPrice;
@@ -477,7 +425,6 @@ class ProductProvider with ChangeNotifier {
             'quantity': newQuantity,
             'cost_price': newCostPriceFixed,
             'price': safePrice,
-            // ⬅️ تحديث حقول active و has_expiry_date
             'active': product.active ? 1 : 0,
             'has_expiry_date': product.hasExpiryDate ? 1 : 0,
           },
@@ -485,14 +432,12 @@ class ProductProvider with ChangeNotifier {
           whereArgs: [oldProduct['id']],
         );
 
-        // إعادة تحميل البيانات
         await loadProducts(reset: true);
         notifyListeners();
-        return; // خلصنا التحديث
+        return;
       }
     }
 
-    // إضافة منتج جديد سواء عنده باركود أو لا
     final productMap = {
       'name': product.name,
       'barcode': hasBarcode ? product.barcode : null,
@@ -501,16 +446,11 @@ class ProductProvider with ChangeNotifier {
       'quantity': safeQuantity,
       'cost_price': safeCostPrice,
       'added_date': product.addedDate,
-      // ⬅️ إضافة حقول active و has_expiry_date
       'active': product.active ? 1 : 0,
       'has_expiry_date': product.hasExpiryDate ? 1 : 0,
     };
 
-    print('إضافة منتج جديد: $productMap'); // للتصحيح
-
     await db.insert('products', productMap);
-
-    // إعادة تحميل البيانات
     await loadProducts(reset: true);
     notifyListeners();
   }
@@ -521,8 +461,6 @@ class ProductProvider with ChangeNotifier {
     }
 
     final db = await _dbHelper.db;
-
-    // تحديث جميع الحقول بشكل كامل
     final updateData = <String, dynamic>{
       'name': updatedProduct.name,
       'barcode': updatedProduct.barcode,
@@ -532,7 +470,6 @@ class ProductProvider with ChangeNotifier {
       'quantity': updatedProduct.quantity,
     };
 
-    // استخدام ID للتحديث
     await db.update(
       'products',
       updateData,
@@ -540,14 +477,12 @@ class ProductProvider with ChangeNotifier {
       whereArgs: [updatedProduct.id],
     );
 
-    // تحديث القائمة المحلية
     final index = _products.indexWhere((p) => p.id == updatedProduct.id);
     if (index != -1) {
       _products[index] = updatedProduct;
       notifyListeners();
     }
 
-    // تحديث العدد الإجمالي
     await loadTotalProducts();
   }
 
@@ -556,212 +491,6 @@ class ProductProvider with ChangeNotifier {
     await db.delete('products', where: 'id = ?', whereArgs: [idProduct]);
   }
 
-  Future<void> addSale({
-    required List<CartItem> cartItems,
-    required double totalAmount,
-    String paymentType = 'cash',
-    int? customerId,
-    required String userRole,
-  }) async {
-    final db = await _dbHelper.db;
-
-    // 🔹 تحديد قيمة showForTax بناءً على المنطق المطلوب
-    int showForTax;
-
-    if (userRole == 'tax') {
-      showForTax = 1;
-      log('🎯 مستخدم ضريبي - الفاتورة مضمنة بالضرائب');
-    } else {
-      final settings = await db.query('settings', limit: 1);
-      if (settings.isNotEmpty) {
-        dynamic taxSetting = settings.first['defaultTaxSetting'];
-        if (taxSetting is String) {
-          showForTax = int.tryParse(taxSetting) ?? 0;
-        } else if (taxSetting is int) {
-          showForTax = taxSetting;
-        } else {
-          showForTax = 0;
-        }
-      } else {
-        showForTax = 0;
-      }
-      log('🎯 إعداد افتراضي - showForTax: $showForTax');
-    }
-
-    // التحقق من الكميات قبل بدء المعاملة (للمنتجات فقط، ليس للخدمات)
-    for (var item in cartItems) {
-      // تخطي الخدمات (ليس لها مخزون)
-      if (item.isService) {
-        continue;
-      }
-
-      final product = item.product;
-      if (product == null) {
-        throw Exception('المنتج غير موجود');
-      }
-
-      // جلب الكمية الحالية من قاعدة البيانات كـ REAL
-      final List<Map<String, dynamic>> result = await db.query(
-        'products',
-        columns: ['quantity', 'name'],
-        where: 'id = ?',
-        whereArgs: [product.id],
-      );
-
-      if (result.isNotEmpty) {
-        // التعامل مع الكمية كـ REAL
-        final dynamic quantityValue = result.first['quantity'];
-        final double currentQuantity =
-            (quantityValue is int)
-                ? quantityValue.toDouble()
-                : quantityValue as double;
-
-        final String productName = result.first['name'] as String;
-
-        // حساب الكمية المطلوبة بالوحدة الأساسية
-        double requiredQuantity = item.quantity;
-        if (item.selectedUnit != null) {
-          requiredQuantity = item.quantity * item.selectedUnit!.containQty;
-        }
-
-        if (currentQuantity < requiredQuantity) {
-          throw Exception(
-            'المنتج "$productName" لا يوجد به كمية كافية. '
-            'الكمية المتاحة: ${currentQuantity.toStringAsFixed(2)} ${translateUnit(product.baseUnit)}',
-          );
-        }
-      } else {
-        throw Exception('المنتج غير موجود في قاعدة البيانات');
-      }
-    }
-
-    // إذا كل المنتجات كافية، نكمل العملية
-    await db.transaction((txn) async {
-      // 1️⃣ إضافة صف في جدول sales مع حقل showForTax
-      final saleId = await txn.insert('sales', {
-        'date': DateTime.now().toIso8601String(),
-        'total_amount': totalAmount,
-        'total_profit': 0.0,
-        'customer_id': customerId,
-        'payment_type': paymentType,
-        'show_for_tax': showForTax,
-      });
-
-      double totalProfit = 0.0;
-
-      // 2️⃣ إضافة العناصر المرتبطة في sale_items
-      for (var item in cartItems) {
-        if (item.isService) {
-          // معالجة الخدمة
-          final double actualPrice = item.unitPrice;
-          final double subtotal = item.totalPrice;
-          final double profit = 0.0; // الخدمات ليس لها ربح
-
-          totalProfit += profit;
-
-          // إدراج الخدمة في sale_items
-          await txn.insert('sale_items', {
-            'sale_id': saleId,
-            'product_id': null, // الخدمات ليس لها product_id
-            'unit_id': null,
-            'quantity': item.quantity,
-            'unit_type': 'service', // نوع خاص للخدمات
-            'custom_unit_name': item.serviceName, // اسم الخدمة
-            'price': actualPrice,
-            'cost_price': 0.0, // الخدمات ليس لها تكلفة
-            'subtotal': subtotal,
-            'profit': profit, // ربح = 0
-          });
-
-          log(
-            '✅ تم إضافة خدمة: ${item.serviceName} - السعر: $actualPrice (ربح: 0)',
-          );
-        } else {
-          // معالجة المنتج (الكود الأصلي)
-          final product = item.product;
-          if (product == null) {
-            throw Exception('المنتج غير موجود');
-          }
-
-          final double costPrice = product.costPrice;
-
-          // استخدام سعر الوحدة المختارة إذا كانت موجودة
-          double actualPrice = item.unitPrice;
-          int? unitId = item.selectedUnit?.id;
-
-          // تحديد نوع الوحدة واسمها
-          String unitType;
-          String? customUnitName;
-
-          if (item.selectedUnit != null) {
-            // إذا كانت وحدة مخصصة
-            unitType = 'custom';
-            customUnitName = item.selectedUnit!.unitName;
-          } else {
-            // إذا كانت الوحدة الأساسية
-            unitType = product.baseUnit;
-            customUnitName = null;
-          }
-
-          final double subtotal = item.totalPrice;
-          final double profit = (actualPrice - costPrice) * item.quantity;
-
-          totalProfit += profit;
-
-          // إدراج العنصر مع معلومات الوحدة
-          await txn.insert('sale_items', {
-            'sale_id': saleId,
-            'product_id': product.id,
-            'unit_id': unitId,
-            'quantity': item.quantity,
-            'unit_type': unitType,
-            'custom_unit_name': customUnitName,
-            'price': actualPrice,
-            'cost_price': costPrice,
-            'subtotal': subtotal,
-            'profit': profit,
-          });
-
-          // 3️⃣ خصم الكمية من المخزون بالوحدة الأساسية (للمنتجات فقط)
-          double quantityToDeduct = item.quantity;
-
-          if (item.selectedUnit != null) {
-            // تحويل الكمية إلى الوحدة الأساسية
-            quantityToDeduct = item.quantity * item.selectedUnit!.containQty;
-          }
-
-          await txn.rawUpdate(
-            '''
-        UPDATE products 
-        SET quantity = quantity - ?
-        WHERE id = ?
-        ''',
-            [quantityToDeduct, product.id],
-          );
-
-          log(
-            '📦 تم خصم ${quantityToDeduct.toStringAsFixed(2)} ${product.baseUnit} من منتج ${product.name}',
-          );
-        }
-      }
-
-      // 4️⃣ تحديث إجمالي الربح في جدول sales
-      await txn.update(
-        'sales',
-        {'total_profit': totalProfit},
-        where: 'id = ?',
-        whereArgs: [saleId],
-      );
-
-      log('💰 إجمالي الربح في الفاتورة: $totalProfit');
-    });
-
-    log('✅ تم إضافة الفاتورة بنجاح - showForTax: $showForTax');
-    notifyListeners();
-  }
-
-  // جلب منتج بواسطة الـ ID
-  // في ProductProvider.dart - تحديث دالة getProductById
   Future<Product?> getProductById(int id) async {
     try {
       final db = await _dbHelper.db;
@@ -771,12 +500,10 @@ class ProductProvider with ChangeNotifier {
         whereArgs: [id],
       );
 
-      if (result.isEmpty) {
-        return null;
-      }
+      if (result.isEmpty) return null;
 
       final map = result.first;
-      final product = Product(
+      return Product(
         id: map['id'] as int?,
         name: map['name'] as String,
         barcode: map['barcode'] as String?,
@@ -786,19 +513,15 @@ class ProductProvider with ChangeNotifier {
         costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
         addedDate: map['added_date'] as String?,
         hasExpiry: map['has_expiry'] == 1,
-        // ⬅️ إضافة الحقول الجديدة
         hasExpiryDate: (map['has_expiry_date'] as int?) == 1,
-        active: (map['active'] as int?) != 0, // Default to true if null
+        active: (map['active'] as int?) != 0,
       );
-
-      return product;
     } catch (e) {
       log('Error getting product by ID: $e');
       return null;
     }
   }
 
-  // في ProductProvider.dart
   Future<List<Product>> searchProductsByName(String name) async {
     try {
       final db = await _dbHelper.db;
@@ -814,7 +537,6 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
-  // في ProductProvider.dart
   Future<List<ProductUnit>> searchProductUnitsByName(String name) async {
     try {
       final db = await _dbHelper.db;
@@ -838,12 +560,320 @@ class ProductProvider with ChangeNotifier {
         where: 'sale_id = ?',
         whereArgs: [saleId],
       );
-
       return maps.map((map) => SaleItem.fromMap(map)).toList();
     } catch (e) {
       log('Error getting sale items: $e');
       return [];
     }
+  }
+
+  // ========== دوال الفواتير مع نظام FIFO ==========
+
+  Future<void> addSale({
+    required List<CartItem> cartItems,
+    required double totalAmount,
+    String paymentType = 'cash',
+    int? customerId,
+    required String userRole,
+  }) async {
+    final db = await _dbHelper.db;
+
+    log('🛒 بدء عملية بيع جديدة');
+
+    await db.transaction((txn) async {
+      // 🔹 تحديد قيمة showForTax
+      int showForTax;
+      if (userRole == 'tax') {
+        showForTax = 1;
+        log('🎯 مستخدم ضريبي - الفاتورة مضمنة بالضرائب');
+      } else {
+        final settings = await txn.query('settings', limit: 1);
+        if (settings.isNotEmpty) {
+          dynamic taxSetting = settings.first['defaultTaxSetting'];
+          if (taxSetting is int) {
+            showForTax = taxSetting;
+          } else if (taxSetting is String) {
+            showForTax = int.tryParse(taxSetting) ?? 0;
+          } else {
+            showForTax = 0;
+          }
+        } else {
+          showForTax = 0;
+        }
+      }
+
+      // 🔹 التحقق من توفر الكميات في الدفعات
+      for (var item in cartItems) {
+        if (item.isService) continue;
+
+        final product = item.product!;
+        double requiredQty = item.quantity;
+
+        if (item.selectedUnit != null) {
+          requiredQty = item.quantity * item.selectedUnit!.containQty;
+        }
+
+        if (requiredQty <= 0) continue;
+
+        final batchResult = await txn.rawQuery(
+          '''
+          SELECT SUM(remaining_quantity) as total_available
+          FROM product_batches 
+          WHERE product_id = ? AND remaining_quantity > 0 AND active = 1
+        ''',
+          [product.id],
+        );
+
+        final double totalAvailable =
+            (batchResult.first['total_available'] as num?)?.toDouble() ?? 0;
+
+        if (totalAvailable < requiredQty) {
+          throw Exception(
+            'المنتج "${product.name}" لا يوجد به كمية كافية في الدفعات. '
+            'المتاح: ${totalAvailable.toStringAsFixed(2)}، '
+            'المطلوب: ${requiredQty.toStringAsFixed(2)}',
+          );
+        }
+      }
+
+      // 🔹 إضافة الفاتورة الرئيسية
+      final saleId = await txn.insert('sales', {
+        'date': DateTime.now().toIso8601String(),
+        'total_amount': totalAmount,
+        'total_profit': 0.0,
+        'customer_id': customerId,
+        'payment_type': paymentType,
+        'show_for_tax': showForTax,
+      });
+
+      double totalProfit = 0.0;
+      List<Map<String, dynamic>> allBatchDeductions = [];
+
+      // 🔹 معالجة كل عنصر في السلة
+      for (var item in cartItems) {
+        if (item.isService) {
+          // معالجة الخدمة
+          final double actualPrice = item.unitPrice;
+          final double subtotal = item.totalPrice;
+
+          await txn.insert('sale_items', {
+            'sale_id': saleId,
+            'item_type': 'service',
+            'product_id': null,
+            'unit_id': null,
+            'quantity': item.quantity,
+            'unit_type': 'service',
+            'custom_unit_name': item.serviceName,
+            'price': actualPrice,
+            'cost_price': 0.0,
+            'subtotal': subtotal,
+            'profit': 0.0,
+          });
+          continue;
+        }
+
+        // معالجة المنتج
+        final product = item.product!;
+        double requiredQtyInBaseUnit = item.quantity;
+
+        if (item.selectedUnit != null) {
+          requiredQtyInBaseUnit = item.quantity * item.selectedUnit!.containQty;
+        }
+
+        // 🔹 خصم من الدفعات الأقدم أولاً (FIFO)
+        final batches = await txn.rawQuery(
+          '''
+          SELECT * FROM product_batches 
+          WHERE product_id = ? 
+            AND remaining_quantity > 0 
+            AND active = 1
+          ORDER BY 
+            CASE 
+              WHEN expiry_date IS NOT NULL AND expiry_date != '' 
+              THEN expiry_date 
+              ELSE '9999-12-31' 
+            END ASC,
+            created_at ASC
+        ''',
+          [product.id],
+        );
+
+        if (batches.isEmpty) {
+          throw Exception('لا توجد دفعات متاحة للمنتج ${product.name}');
+        }
+
+        double remainingToDeduct = requiredQtyInBaseUnit;
+        List<Map<String, dynamic>> itemDeductions = [];
+        double itemTotalCost = 0.0;
+        double itemProfit = 0.0;
+
+        for (var batch in batches) {
+          if (remainingToDeduct <= 0) break;
+
+          final batchId = batch['id'] as int;
+          final double batchQty =
+              (batch['remaining_quantity'] as num).toDouble();
+          final double batchCost = (batch['cost_price'] as num).toDouble();
+          final String? batchExpiry = batch['expiry_date'] as String?;
+
+          final double toDeduct =
+              batchQty >= remainingToDeduct ? remainingToDeduct : batchQty;
+
+          // تحديث الدفعة
+          final double newQty = batchQty - toDeduct;
+          await txn.update(
+            'product_batches',
+            {
+              'remaining_quantity': newQty,
+              'active': newQty > 0 ? 1 : 0, // استخدام 1 و0 بدلاً من bool
+            },
+            where: 'id = ?',
+            whereArgs: [batchId],
+          );
+
+          itemDeductions.add({
+            'batchId': batchId,
+            'quantity': toDeduct,
+            'costPrice': batchCost,
+            'expiryDate': batchExpiry,
+          });
+
+          // حساب التكلفة والربح
+          final double batchCostAmount = toDeduct * batchCost;
+          itemTotalCost += batchCostAmount;
+
+          final double unitPrice =
+              item.selectedUnit?.sellPrice ?? product.price;
+          double soldQtyInUnit;
+
+          if (item.selectedUnit != null) {
+            soldQtyInUnit = toDeduct / item.selectedUnit!.containQty;
+          } else {
+            soldQtyInUnit = toDeduct;
+          }
+
+          final double batchRevenue = unitPrice * soldQtyInUnit;
+          final double batchProfit = batchRevenue - (batchCost * soldQtyInUnit);
+          itemProfit += batchProfit;
+
+          remainingToDeduct -= toDeduct;
+        }
+
+        if (remainingToDeduct > 0) {
+          throw Exception('كمية غير كافية للمنتج ${product.name}');
+        }
+
+        // حفظ تفاصيل الخصم
+        allBatchDeductions.addAll(
+          itemDeductions.map(
+            (d) => {
+              ...d,
+              'productId': product.id,
+              'productName': product.name,
+              'saleId': saleId,
+            },
+          ),
+        );
+
+        // 🔹 إضافة عنصر الفاتورة
+        final double actualPrice =
+            item.selectedUnit?.sellPrice ?? product.price;
+        final double subtotal = actualPrice * item.quantity;
+        final double avgCost =
+            requiredQtyInBaseUnit > 0
+                ? itemTotalCost / requiredQtyInBaseUnit
+                : 0;
+
+        await txn.insert('sale_items', {
+          'sale_id': saleId,
+          'item_type': 'product',
+          'product_id': product.id,
+          'unit_id': item.selectedUnit?.id,
+          'quantity': item.quantity,
+          'unit_type': item.selectedUnit != null ? 'custom' : product.baseUnit,
+          'custom_unit_name': item.selectedUnit?.unitName,
+          'price': actualPrice,
+          'cost_price': avgCost,
+          'subtotal': subtotal,
+          'profit': itemProfit,
+          'batch_details': jsonEncode(itemDeductions),
+        });
+
+        totalProfit += itemProfit;
+
+        // 🔹 تحديث كمية المنتج الإجمالية
+        await txn.rawUpdate(
+          'UPDATE products SET quantity = quantity - ? WHERE id = ?',
+          [requiredQtyInBaseUnit, product.id],
+        );
+
+        log(
+          '📦 تم معالجة المنتج ${product.name} - الكمية: $requiredQtyInBaseUnit',
+        );
+      }
+
+      // 🔹 تحديث الربح الإجمالي في الفاتورة
+      await txn.update(
+        'sales',
+        {'total_profit': totalProfit},
+        where: 'id = ?',
+        whereArgs: [saleId],
+      );
+
+      // 🔹 حفظ سجل الدفعات (اختياري)
+      try {
+        await txn.execute('''
+          CREATE TABLE IF NOT EXISTS sale_batch_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            batch_id INTEGER NOT NULL,
+            deducted_quantity REAL NOT NULL,
+            cost_price REAL NOT NULL,
+            expiry_date TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        ''');
+
+        for (var deduction in allBatchDeductions) {
+          await txn.insert('sale_batch_log', {
+            'sale_id': saleId,
+            'product_id': deduction['productId'],
+            'batch_id': deduction['batchId'],
+            'deducted_quantity': deduction['quantity'],
+            'cost_price': deduction['costPrice'],
+            'expiry_date': deduction['expiryDate'],
+          });
+        }
+      } catch (e) {
+        log('⚠️ ملاحظة: لم يتم حفظ سجل الدفعات - $e');
+      }
+
+      // 🔹 تحديث رصيد الزبون إذا كانت فاتورة آجلة
+      if (paymentType == 'credit' && customerId != null) {
+        await txn.rawUpdate(
+          '''
+          INSERT OR REPLACE INTO customer_balance 
+          (customer_id, balance, last_updated)
+          VALUES (
+            ?,
+            COALESCE((SELECT balance FROM customer_balance WHERE customer_id = ?), 0) + ?,
+            ?
+          )
+          ''',
+          [
+            customerId,
+            customerId,
+            totalAmount,
+            DateTime.now().toIso8601String(),
+          ],
+        );
+      }
+
+      log('✅ تم إتمام الفاتورة رقم: $saleId - الربح: $totalProfit');
+    });
+
+    notifyListeners();
   }
 
   Future<void> updateSale({
@@ -854,171 +884,585 @@ class ProductProvider with ChangeNotifier {
   }) async {
     final db = await _dbHelper.db;
 
-    int showForTax = await _determineShowForTax(userRole, db);
-
-    final double oldTotal = originalSale.totalAmount;
-    final double difference = totalAmount - oldTotal;
+    log('🔄 بدء تحديث الفاتورة ID: ${originalSale.id}');
 
     await db.transaction((txn) async {
-      // 1️⃣ تحديث بيانات الفاتورة الرئيسية مبدئيًا
-      await txn.update(
+      // 🔹 1️⃣ جلب الفاتورة الأصلية
+      final saleResult = await txn.query(
         'sales',
-        {
-          'total_amount': totalAmount,
-          'total_profit': 0.0,
-          'show_for_tax': showForTax,
-        },
+        columns: ['id', 'total_amount', 'customer_id', 'payment_type'],
         where: 'id = ?',
         whereArgs: [originalSale.id],
+        limit: 1,
       );
 
-      // 2️⃣ جلب العناصر الأصلية من الفاتورة
-      final originalItems = await txn.query(
+      if (saleResult.isEmpty) {
+        throw Exception('الفاتورة الأصلية غير موجودة');
+      }
+
+      final oldSale = saleResult.first;
+      final double oldTotalAmount = (oldSale['total_amount'] as num).toDouble();
+      final int? oldCustomerId = oldSale['customer_id'] as int?;
+      final String oldPaymentType = oldSale['payment_type'] as String;
+
+      // 🔹 2️⃣ تحديد showForTax الجديدة
+      int newShowForTax;
+      if (userRole == 'tax') {
+        newShowForTax = 1;
+      } else {
+        final settings = await txn.query('settings', limit: 1);
+        if (settings.isNotEmpty) {
+          dynamic taxSetting = settings.first['defaultTaxSetting'];
+          if (taxSetting is int) {
+            newShowForTax = taxSetting;
+          } else if (taxSetting is String) {
+            newShowForTax = int.tryParse(taxSetting) ?? 0;
+          } else {
+            newShowForTax = 0;
+          }
+        } else {
+          newShowForTax = 0;
+        }
+      }
+
+      // 🔹 3️⃣ التحقق من توفر الكميات الجديدة
+      for (var item in cartItems) {
+        if (item.isService) continue;
+
+        final product = item.product!;
+        double requiredQty = item.quantity;
+
+        if (item.selectedUnit != null) {
+          requiredQty = item.quantity * item.selectedUnit!.containQty;
+        }
+
+        if (requiredQty <= 0) continue;
+
+        final batchResult = await txn.rawQuery(
+          '''
+          SELECT SUM(remaining_quantity) as total_available
+          FROM product_batches 
+          WHERE product_id = ? AND remaining_quantity > 0 AND active = 1
+        ''',
+          [product.id],
+        );
+
+        final double totalAvailable =
+            (batchResult.first['total_available'] as num?)?.toDouble() ?? 0;
+
+        if (requiredQty > totalAvailable) {
+          throw Exception(
+            'المنتج "${product.name}" لا يوجد به كمية كافية. '
+            'المتاح: ${totalAvailable.toStringAsFixed(2)}، '
+            'المطلوب: ${requiredQty.toStringAsFixed(2)}',
+          );
+        }
+      }
+
+      // 🔹 4️⃣ جلب عناصر الفاتورة القديمة
+      final oldItems = await txn.query(
         'sale_items',
         where: 'sale_id = ?',
         whereArgs: [originalSale.id],
       );
 
-      // 3️⃣ إرجاع الكميات القديمة إلى المخزون أولاً
-      for (var originalItem in originalItems) {
-        final int productId = originalItem['product_id'] as int;
-        final double originalQuantity =
-            (originalItem['quantity'] is int)
-                ? (originalItem['quantity'] as int).toDouble()
-                : originalItem['quantity'] as double;
-        final String unitType = originalItem['unit_type'] as String;
-        final int? unitId = originalItem['unit_id'] as int?;
+      // 🔹 5️⃣ إرجاع الكميات القديمة من الدفعات أولاً
+      for (var oldItem in oldItems) {
+        final int? productId = oldItem['product_id'] as int?;
+        if (productId == null) continue;
 
-        double quantityToReturn = originalQuantity;
+        final double oldQuantity = (oldItem['quantity'] as num).toDouble();
+        final int? oldUnitId = oldItem['unit_id'] as int?;
 
-        if (unitType == 'custom' && unitId != null) {
+        double oldQtyInBaseUnit = oldQuantity;
+
+        if (oldUnitId != null) {
           final unitResult = await txn.query(
             'product_units',
             columns: ['contain_qty'],
             where: 'id = ?',
-            whereArgs: [unitId],
+            whereArgs: [oldUnitId],
           );
+
           if (unitResult.isNotEmpty) {
             final double containQty =
-                (unitResult.first['contain_qty'] is int)
-                    ? (unitResult.first['contain_qty'] as int).toDouble()
-                    : unitResult.first['contain_qty'] as double;
-            quantityToReturn = originalQuantity * containQty;
+                (unitResult.first['contain_qty'] as num).toDouble();
+            oldQtyInBaseUnit = oldQuantity * containQty;
           }
         }
 
+        // محاولة إرجاع الكمية للدفعات القديمة
+        if (oldItem['batch_details'] != null &&
+            oldItem['batch_details'].toString().isNotEmpty) {
+          try {
+            final oldBatchDetails = jsonDecode(
+              oldItem['batch_details'] as String,
+            );
+            final List<Map<String, dynamic>> oldDeductions =
+                List<Map<String, dynamic>>.from(oldBatchDetails);
+
+            for (var deduction in oldDeductions) {
+              final batchId = deduction['batchId'] as int;
+              final double quantity = (deduction['quantity'] as num).toDouble();
+
+              final batch = await txn.query(
+                'product_batches',
+                where: 'id = ?',
+                whereArgs: [batchId],
+              );
+
+              if (batch.isNotEmpty) {
+                final double currentQty =
+                    (batch.first['remaining_quantity'] as num).toDouble();
+                await txn.update(
+                  'product_batches',
+                  {'remaining_quantity': currentQty + quantity, 'active': 1},
+                  where: 'id = ?',
+                  whereArgs: [batchId],
+                );
+              }
+            }
+          } catch (e) {
+            log('⚠️ خطأ في إرجاع تفاصيل الدفعات القديمة: $e');
+          }
+        }
+
+        // إرجاع الكمية للمنتج الإجمالي
         await txn.rawUpdate(
           'UPDATE products SET quantity = quantity + ? WHERE id = ?',
-          [quantityToReturn, productId],
+          [oldQtyInBaseUnit, productId],
         );
       }
 
-      // 3.1️⃣ تحقق من المخزون بعد إرجاع القديم
-      await _validateStockQuantities(cartItems, txn);
-
-      double totalProfit = 0.0;
-
-      // 4️⃣ حذف العناصر القديمة
+      // 🔹 6️⃣ حذف العناصر القديمة
       await txn.delete(
         'sale_items',
         where: 'sale_id = ?',
         whereArgs: [originalSale.id],
       );
 
-      // 5️⃣ إضافة العناصر الجديدة وخصم المخزون
+      // 🔹 7️⃣ حذف سجل الدفعات القديم
+      try {
+        await txn.delete(
+          'sale_batch_log',
+          where: 'sale_id = ?',
+          whereArgs: [originalSale.id],
+        );
+      } catch (e) {
+        // تجاهل الخطأ إذا الجدول غير موجود
+      }
+
+      // 🔹 8️⃣ إضافة العناصر الجديدة مع خصم من الدفعات
+      double totalProfit = 0.0;
+      List<Map<String, dynamic>> allBatchDeductions = [];
+
       for (var item in cartItems) {
         if (item.quantity == 0) continue;
 
-        final product = item.product;
-        final double costPrice = product!.costPrice;
-        double actualPrice = item.selectedUnit?.sellPrice ?? product.price;
-        int? unitId = item.selectedUnit?.id;
+        if (item.isService) {
+          final double actualPrice = item.unitPrice;
+          final double subtotal = item.totalPrice;
 
-        String unitType;
-        String? customUnitName;
-
-        if (item.selectedUnit != null) {
-          unitType = 'custom';
-          customUnitName = item.selectedUnit!.unitName;
-        } else {
-          unitType = product!.baseUnit;
-          customUnitName = null;
+          await txn.insert('sale_items', {
+            'sale_id': originalSale.id,
+            'item_type': 'service',
+            'product_id': null,
+            'unit_id': null,
+            'quantity': item.quantity,
+            'unit_type': 'service',
+            'custom_unit_name': item.serviceName,
+            'price': actualPrice,
+            'cost_price': 0.0,
+            'subtotal': subtotal,
+            'profit': 0.0,
+          });
+          continue;
         }
 
+        final product = item.product!;
+        double requiredQtyInBaseUnit = item.quantity;
+
+        if (item.selectedUnit != null) {
+          requiredQtyInBaseUnit = item.quantity * item.selectedUnit!.containQty;
+        }
+
+        // خصم من الدفعات الأقدم أولاً
+        final batches = await txn.rawQuery(
+          '''
+          SELECT * FROM product_batches 
+          WHERE product_id = ? 
+            AND remaining_quantity > 0 
+            AND active = 1
+          ORDER BY 
+            CASE 
+              WHEN expiry_date IS NOT NULL AND expiry_date != '' 
+              THEN expiry_date 
+              ELSE '9999-12-31' 
+            END ASC,
+            created_at ASC
+        ''',
+          [product.id],
+        );
+
+        if (batches.isEmpty && requiredQtyInBaseUnit > 0) {
+          throw Exception('لا توجد دفعات متاحة للمنتج ${product.name}');
+        }
+
+        double remainingToDeduct = requiredQtyInBaseUnit;
+        List<Map<String, dynamic>> itemDeductions = [];
+        double itemTotalCost = 0.0;
+        double itemProfit = 0.0;
+
+        for (var batch in batches) {
+          if (remainingToDeduct <= 0) break;
+
+          final batchId = batch['id'] as int;
+          final double batchQty =
+              (batch['remaining_quantity'] as num).toDouble();
+          final double batchCost = (batch['cost_price'] as num).toDouble();
+          final String? batchExpiry = batch['expiry_date'] as String?;
+
+          final double toDeduct =
+              batchQty >= remainingToDeduct ? remainingToDeduct : batchQty;
+
+          // تحديث الدفعة
+          final double newQty = batchQty - toDeduct;
+          await txn.update(
+            'product_batches',
+            {'remaining_quantity': newQty, 'active': newQty > 0 ? 1 : 0},
+            where: 'id = ?',
+            whereArgs: [batchId],
+          );
+
+          itemDeductions.add({
+            'batchId': batchId,
+            'quantity': toDeduct,
+            'costPrice': batchCost,
+            'expiryDate': batchExpiry,
+          });
+
+          final double batchCostAmount = toDeduct * batchCost;
+          itemTotalCost += batchCostAmount;
+
+          final double unitPrice =
+              item.selectedUnit?.sellPrice ?? product.price;
+          double soldQtyInUnit;
+
+          if (item.selectedUnit != null) {
+            soldQtyInUnit = toDeduct / item.selectedUnit!.containQty;
+          } else {
+            soldQtyInUnit = toDeduct;
+          }
+
+          final double batchRevenue = unitPrice * soldQtyInUnit;
+          final double batchProfit = batchRevenue - (batchCost * soldQtyInUnit);
+          itemProfit += batchProfit;
+
+          remainingToDeduct -= toDeduct;
+        }
+
+        if (remainingToDeduct > 0) {
+          throw Exception('كمية غير كافية للمنتج ${product.name}');
+        }
+
+        allBatchDeductions.addAll(
+          itemDeductions.map(
+            (d) => {
+              ...d,
+              'productId': product.id,
+              'productName': product.name,
+              'saleId': originalSale.id,
+            },
+          ),
+        );
+
+        final double actualPrice =
+            item.selectedUnit?.sellPrice ?? product.price;
         final double subtotal = actualPrice * item.quantity;
-        final double profit = (actualPrice - costPrice) * item.quantity;
-        totalProfit += profit;
+        final double avgCost =
+            requiredQtyInBaseUnit > 0
+                ? itemTotalCost / requiredQtyInBaseUnit
+                : 0;
 
-        Map<String, dynamic> saleItemData = {
+        await txn.insert('sale_items', {
           'sale_id': originalSale.id,
-          'product_id': product?.id,
-          'unit_id': unitId,
+          'item_type': 'product',
+          'product_id': product.id,
+          'unit_id': item.selectedUnit?.id,
           'quantity': item.quantity,
-          'unit_type': unitType,
-          'custom_unit_name': customUnitName,
+          'unit_type': item.selectedUnit != null ? 'custom' : product.baseUnit,
+          'custom_unit_name': item.selectedUnit?.unitName,
           'price': actualPrice,
-          'cost_price': costPrice,
+          'cost_price': avgCost,
           'subtotal': subtotal,
-          'profit': profit,
-        };
-        saleItemData.removeWhere((key, value) => value == null);
+          'profit': itemProfit,
+          'batch_details': jsonEncode(itemDeductions),
+        });
 
-        await txn.insert('sale_items', saleItemData);
+        totalProfit += itemProfit;
 
-        // خصم المخزون
-        double quantityToDeduct = item.quantity;
-        if (item.selectedUnit != null) {
-          quantityToDeduct = item.quantity * item.selectedUnit!.containQty;
-        }
         await txn.rawUpdate(
           'UPDATE products SET quantity = quantity - ? WHERE id = ?',
-          [quantityToDeduct, product?.id],
+          [requiredQtyInBaseUnit, product.id],
         );
       }
 
-      // 6️⃣ تحديث إجمالي الربح
+      // 🔹 9️⃣ تحديث بيانات الفاتورة الرئيسية
       await txn.update(
         'sales',
-        {'total_profit': totalProfit},
+        {
+          'total_amount': totalAmount,
+          'total_profit': totalProfit,
+          'show_for_tax': newShowForTax,
+          'date': DateTime.now().toIso8601String(),
+        },
         where: 'id = ?',
         whereArgs: [originalSale.id],
       );
 
-      // 7️⃣ تعديل دين الزبون بالفرق فقط
-      if (originalSale.paymentType == 'credit' &&
-          originalSale.customerId != null &&
+      // 🔹 🔟 حفظ سجل الدفعات الجديد
+      try {
+        await txn.execute('''
+          CREATE TABLE IF NOT EXISTS sale_batch_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            batch_id INTEGER NOT NULL,
+            deducted_quantity REAL NOT NULL,
+            cost_price REAL NOT NULL,
+            expiry_date TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        ''');
+
+        for (var deduction in allBatchDeductions) {
+          await txn.insert('sale_batch_log', {
+            'sale_id': originalSale.id,
+            'product_id': deduction['productId'],
+            'batch_id': deduction['batchId'],
+            'deducted_quantity': deduction['quantity'],
+            'cost_price': deduction['costPrice'],
+            'expiry_date': deduction['expiryDate'],
+          });
+        }
+      } catch (e) {
+        log('⚠️ ملاحظة: لم يتم حفظ سجل الدفعات - $e');
+      }
+
+      // 🔹 1️⃣1️⃣ تحديث رصيد الزبون إذا تغير المبلغ
+      final double difference = totalAmount - oldTotalAmount;
+
+      if (oldPaymentType == 'credit' &&
+          oldCustomerId != null &&
           difference != 0) {
         await txn.rawUpdate(
           '''
-        UPDATE customer_balance
-        SET balance = balance + ?, last_updated = ?
-        WHERE customer_id = ?
-        ''',
-          [
-            difference,
-            DateTime.now().toIso8601String(),
-            originalSale.customerId,
-          ],
+          UPDATE customer_balance 
+          SET balance = balance + ?, last_updated = ?
+          WHERE customer_id = ?
+          ''',
+          [difference, DateTime.now().toIso8601String(), oldCustomerId],
         );
       }
+
+      log('✅ تم تحديث الفاتورة رقم: ${originalSale.id} - الفرق: $difference');
     });
 
+    // تحديث القوائم المحلية
+    _refreshSalesInLists(originalSale.id, totalAmount);
     notifyListeners();
   }
 
-  // الدوال المساعدة التي تعمل مع Database فقط (ليس Transaction)
+  Future<void> deleteSale(int saleId) async {
+    final db = await _dbHelper.db;
+
+    await db.transaction((txn) async {
+      // 1️⃣ جلب الفاتورة
+      final sale = await txn.query(
+        'sales',
+        where: 'id = ?',
+        whereArgs: [saleId],
+        limit: 1,
+      );
+
+      if (sale.isEmpty) {
+        throw Exception('الفاتورة غير موجودة');
+      }
+
+      final saleData = sale.first;
+      final double totalAmount = (saleData['total_amount'] as num).toDouble();
+      final String paymentType = saleData['payment_type'] as String;
+      final int? customerId = saleData['customer_id'] as int?;
+
+      // 2️⃣ جلب تفاصيل خصم الدفعات
+      List<Map<String, dynamic>> batchReturns = [];
+
+      try {
+        final batchLog = await txn.query(
+          'sale_batch_log',
+          where: 'sale_id = ?',
+          whereArgs: [saleId],
+        );
+
+        if (batchLog.isNotEmpty) {
+          for (var log in batchLog) {
+            batchReturns.add({
+              'batchId': log['batch_id'] as int,
+              'quantity': log['deducted_quantity'] as double,
+              'costPrice': log['cost_price'] as double,
+              'productId': log['product_id'] as int,
+              'expiryDate': log['expiry_date'] as String?,
+            });
+          }
+        } else {
+          final items = await txn.query(
+            'sale_items',
+            where: 'sale_id = ? AND product_id IS NOT NULL',
+            whereArgs: [saleId],
+          );
+
+          for (var item in items) {
+            if (item['batch_details'] != null) {
+              final details = jsonDecode(item['batch_details'] as String);
+              final List<Map<String, dynamic>> itemDeductions =
+                  List<Map<String, dynamic>>.from(details);
+
+              for (var deduction in itemDeductions) {
+                batchReturns.add({
+                  ...deduction,
+                  'productId': item['product_id'] as int,
+                });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        log('⚠️ لم يتم العثور على سجل الدفعات: $e');
+      }
+
+      // 3️⃣ إرجاع الكميات للدفعات
+      for (var returnItem in batchReturns) {
+        final batchId = returnItem['batchId'] as int;
+        final double quantity = (returnItem['quantity'] as num).toDouble();
+        final int productId = returnItem['productId'] as int;
+
+        final batch = await txn.query(
+          'product_batches',
+          where: 'id = ?',
+          whereArgs: [batchId],
+        );
+
+        if (batch.isNotEmpty) {
+          final double currentQty =
+              (batch.first['remaining_quantity'] as num).toDouble();
+          await txn.update(
+            'product_batches',
+            {'remaining_quantity': currentQty + quantity, 'active': 1},
+            where: 'id = ?',
+            whereArgs: [batchId],
+          );
+        } else {
+          await txn.insert('product_batches', {
+            'product_id': productId,
+            'quantity': quantity,
+            'remaining_quantity': quantity,
+            'cost_price': returnItem['costPrice'] ?? 0,
+            'expiry_date':
+                returnItem['expiryDate'] ??
+                DateTime.now().add(Duration(days: 365)).toIso8601String(),
+            'production_date': DateTime.now().toIso8601String(),
+            'active': 1,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        }
+
+        await txn.rawUpdate(
+          'UPDATE products SET quantity = quantity + ? WHERE id = ?',
+          [quantity, productId],
+        );
+      }
+
+      // 4️⃣ إذا لم تكن هناك تفاصيل دفعات، نرجع الكميات العادية
+      if (batchReturns.isEmpty) {
+        final saleItems = await txn.query(
+          'sale_items',
+          where: 'sale_id = ?',
+          whereArgs: [saleId],
+        );
+
+        for (var item in saleItems) {
+          final int? productId = item['product_id'] as int?;
+          if (productId == null) continue;
+
+          final double quantity = (item['quantity'] as num).toDouble();
+          final int? unitId = item['unit_id'] as int?;
+
+          double qtyToReturn = quantity;
+
+          if (unitId != null) {
+            final unit = await txn.query(
+              'product_units',
+              where: 'id = ?',
+              whereArgs: [unitId],
+            );
+
+            if (unit.isNotEmpty) {
+              final double containQty =
+                  (unit.first['contain_qty'] as num).toDouble();
+              qtyToReturn = quantity * containQty;
+            }
+          }
+
+          await txn.rawUpdate(
+            'UPDATE products SET quantity = quantity + ? WHERE id = ?',
+            [qtyToReturn, productId],
+          );
+        }
+      }
+
+      // 5️⃣ تعديل رصيد الزبون إذا كانت فاتورة آجلة
+      if (paymentType == 'credit' && customerId != null) {
+        await txn.rawUpdate(
+          '''
+          UPDATE customer_balance 
+          SET balance = balance - ?, last_updated = ?
+          WHERE customer_id = ?
+          ''',
+          [totalAmount, DateTime.now().toIso8601String(), customerId],
+        );
+      }
+
+      // 6️⃣ حذف السجلات
+      await txn.delete(
+        'sale_batch_log',
+        where: 'sale_id = ?',
+        whereArgs: [saleId],
+      );
+      await txn.delete('sale_items', where: 'sale_id = ?', whereArgs: [saleId]);
+      await txn.delete('sales', where: 'id = ?', whereArgs: [saleId]);
+
+      log('🗑️ تم حذف الفاتورة $saleId');
+    });
+
+    // تحديث القوائم المحلية
+    _allSales.removeWhere((sale) => sale.id == saleId);
+    _displayedSales.removeWhere((sale) => sale.id == saleId);
+    notifyListeners();
+  }
+
+  // ========== دوال مساعدة ==========
+
   Future<int> _determineShowForTax(String userRole, Database db) async {
     if (userRole == 'tax') {
-      log('🎯 مستخدم ضريبي - الفاتورة مضمنة بالضرائب');
       return 1;
     } else {
       final settings = await db.query('settings', limit: 1);
       if (settings.isNotEmpty) {
         dynamic taxSetting = settings.first['defaultTaxSetting'];
-        if (taxSetting is String) {
-          return int.tryParse(taxSetting) ?? 0;
-        } else if (taxSetting is int) {
+        if (taxSetting is int) {
           return taxSetting;
+        } else if (taxSetting is String) {
+          return int.tryParse(taxSetting) ?? 0;
         }
       }
       return 0;
@@ -1027,11 +1471,10 @@ class ProductProvider with ChangeNotifier {
 
   Future<void> _validateStockQuantities(
     List<CartItem> cartItems,
-    DatabaseExecutor db, // ✅ بدل Database
+    DatabaseExecutor db,
   ) async {
     for (var item in cartItems) {
       final product = item.product;
-
       final List<Map<String, dynamic>> result = await db.query(
         'products',
         columns: ['quantity', 'name'],
@@ -1065,5 +1508,95 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
-  // في ProductProvider.dart
+  void _refreshSalesInLists(int saleId, double newTotalAmount) {
+    final allIndex = _allSales.indexWhere((s) => s.id == saleId);
+    if (allIndex != -1) {
+      _allSales[allIndex] = Sale(
+        id: saleId,
+        date: DateTime.now().toIso8601String(),
+        totalAmount: newTotalAmount,
+        totalProfit: _allSales[allIndex].totalProfit,
+        customerId: _allSales[allIndex].customerId,
+        paymentType: _allSales[allIndex].paymentType,
+        showForTax: _allSales[allIndex].showForTax,
+      );
+    }
+
+    final displayedIndex = _displayedSales.indexWhere((s) => s.id == saleId);
+    if (displayedIndex != -1) {
+      _displayedSales[displayedIndex] = Sale(
+        id: saleId,
+        date: DateTime.now().toIso8601String(),
+        totalAmount: newTotalAmount,
+        totalProfit: _displayedSales[displayedIndex].totalProfit,
+        customerId: _displayedSales[displayedIndex].customerId,
+        paymentType: _displayedSales[displayedIndex].paymentType,
+        showForTax: _displayedSales[displayedIndex].showForTax,
+      );
+    }
+  }
+
+  // دالة لتحميل الفواتير حسب التاريخ
+  Future<void> loadSalesByDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    try {
+      final db = await _dbHelper.db;
+
+      final results = await db.rawQuery(
+        '''
+        SELECT 
+          s.*,
+          c.name as customer_name,
+          COALESCE(cb.balance, 0) as customer_balance
+        FROM sales s
+        LEFT JOIN customers c ON s.customer_id = c.id
+        LEFT JOIN customer_balance cb ON s.customer_id = cb.customer_id
+        WHERE DATE(s.date) BETWEEN DATE(?) AND DATE(?)
+        ORDER BY s.date DESC
+      ''',
+        [
+          startDate.toIso8601String().split('T').first,
+          endDate.toIso8601String().split('T').first,
+        ],
+      );
+
+      _displayedSales = results.map((map) => Sale.fromMap(map)).toList();
+      _currentStartDate = startDate;
+      _currentEndDate = endDate;
+      notifyListeners();
+
+      log('📊 تم تحميل ${_displayedSales.length} فاتورة للفترة المحددة');
+    } catch (e) {
+      log('❌ خطأ في تحميل الفواتير: $e');
+    }
+  }
+
+  // دالة لتحميل جميع الفواتير
+  Future<void> loadAllSales() async {
+    try {
+      final db = await _dbHelper.db;
+
+      final results = await db.rawQuery('''
+        SELECT 
+          s.*,
+          c.name as customer_name,
+          COALESCE(cb.balance, 0) as customer_balance
+        FROM sales s
+        LEFT JOIN customers c ON s.customer_id = c.id
+        LEFT JOIN customer_balance cb ON s.customer_id = cb.customer_id
+        ORDER BY s.date DESC
+        LIMIT 100
+      ''');
+
+      _allSales = results.map((map) => Sale.fromMap(map)).toList();
+      _displayedSales = List.from(_allSales);
+      notifyListeners();
+
+      log('📊 تم تحميل ${_allSales.length} فاتورة');
+    } catch (e) {
+      log('❌ خطأ في تحميل الفواتير: $e');
+    }
+  }
 }

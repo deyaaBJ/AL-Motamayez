@@ -5,7 +5,7 @@ import 'dart:developer';
 
 class DBHelper {
   static Database? _db;
-  static const int _version = 4; // ⬅️ غير من 3 ل 4
+  static const int _version = 1; // ⬅️ رجعه ل 1 لأنك ستخلي الداتا وتعيدها
 
   Future<Database> get db async {
     if (_db != null) return _db!;
@@ -29,233 +29,30 @@ class DBHelper {
       path,
       version: _version,
       onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
     );
 
-    await _archiveOldInvoices(database);
     return database;
   }
 
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      // إضافة الفهارس في الترقية
-      await _createIndexes(db);
-    }
-    if (oldVersion < 3) {
-      // أي تحديثات أخرى
-    }
-
-    // ⬅️ إضافة هذا الجزء الجديد للإصدار 4
-    if (oldVersion < 4) {
-      try {
-        // إضافة فهرس لباركود الوحدات
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_product_units_barcode ON product_units (barcode)',
-        );
-
-        log('✅ تم إضافة فهرس باركود الوحدات');
-
-        // ⬅️ إضافة الأعمدة المفقودة لجدول purchase_items
-        try {
-          await db.execute(
-            'ALTER TABLE purchase_items ADD COLUMN unit_id INTEGER',
-          );
-          log('✅ تم إضافة عمود unit_id لجدول purchase_items');
-        } catch (e) {
-          log('ℹ️ العمود unit_id موجود بالفعل: $e');
-        }
-
-        try {
-          await db.execute(
-            'ALTER TABLE purchase_items ADD COLUMN display_quantity REAL',
-          );
-          log('✅ تم إضافة عمود display_quantity لجدول purchase_items');
-        } catch (e) {
-          log('ℹ️ العمود display_quantity موجود بالفعل: $e');
-        }
-      } catch (e) {
-        log('❌ خطأ في إضافة الفهرس: $e');
-      }
-    }
-  }
-
-  // دالة لإنشاء الفهارس
-  Future<void> _createIndexes(Database db) async {
-    try {
-      // فهارس للموردين
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers (name)',
-      );
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_suppliers_phone ON suppliers (phone)',
-      );
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_suppliers_created ON suppliers (created_at)',
-      );
-
-      // فهارس للمنتجات
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_products_name ON products (name)',
-      );
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_products_barcode ON products (barcode)',
-      );
-
-      // فهارس للزبائن
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_customers_name ON customers (name)',
-      );
-
-      // فهارس للفواتير
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_sales_date ON sales (date)',
-      );
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales (customer_id)',
-      );
-
-      // فهارس لفواتير الشراء
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_purchase_invoices_date ON purchase_invoices (date)',
-      );
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_purchase_invoices_supplier ON purchase_invoices (supplier_id)',
-      );
-
-      // فهارس للأرصدة
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_supplier_balance_supplier ON supplier_balance (supplier_id)',
-      );
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_customer_balance_customer ON customer_balance (customer_id)',
-      );
-
-      // فهارس للمعاملات
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier ON supplier_transactions (supplier_id)',
-      );
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions (customer_id)',
-      );
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_supplier_transactions_date ON supplier_transactions (date)',
-      );
-
-      // ⬅️ إضافة هذا الفهرس الجديد
-      // فهرس لباركود الوحدات (هام للبحث السريع)
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_product_units_barcode ON product_units (barcode)',
-      );
-
-      log('✅ تم إنشاء الفهارس بنجاح!');
-    } catch (e) {
-      log('❌ خطأ في إنشاء الفهارس: $e');
-    }
-  }
-
-  Future<void> _archiveOldInvoices(Database db) async {
-    try {
-      // 1️⃣ خزن IDs الفواتير القديمة (أقدم من سنة)
-      final oldSales = await db.query(
-        'sales',
-        columns: ['id'],
-        where: "date < DATE('now', '-1 year')",
-      );
-      final oldSaleIds = oldSales.map((row) => row['id']).toList();
-
-      if (oldSaleIds.isNotEmpty) {
-        final idsString = oldSaleIds.join(',');
-
-        // 2️⃣ أرشيف عناصر الفواتير القديمة
-        await db.execute('''
-        INSERT INTO sale_items_archive (
-  id,
-  sale_id,
-  item_type,
-  product_id,
-  unit_id,
-  quantity,
-  unit_type,
-  custom_unit_name,
-  price,
-  cost_price,
-  subtotal,
-  profit
-)
-SELECT
-  id,
-  sale_id,
-  item_type,
-  product_id,
-  unit_id,
-  quantity,
-  unit_type,
-  custom_unit_name,
-  price,
-  cost_price,
-  subtotal,
-  profit
-FROM sale_items
-WHERE sale_id IN ($idsString);
-
-      ''');
-
-        // 3️⃣ أرشيف الفواتير القديمة
-        await db.execute('''
-        INSERT INTO sales_archive (id, date, total_amount, total_profit, customer_id, payment_type, show_for_tax)
-        SELECT id, date, total_amount, total_profit, customer_id, payment_type, show_for_tax
-        FROM sales
-        WHERE id IN ($idsString);
-      ''');
-
-        // 4️⃣ حذف الفواتير القديمة من sales
-        await db.execute('''
-        DELETE FROM sales
-        WHERE id IN ($idsString);
-      ''');
-
-        // 5️⃣ حذف عناصر الفواتير القديمة من sale_items
-        await db.execute('''
-        DELETE FROM sale_items
-        WHERE sale_id IN ($idsString);
-      ''');
-      }
-
-      // 6️⃣ حذف الأرشيف الأقدم من 3 سنوات من sales_archive
-      await db.execute('''
-      DELETE FROM sales_archive
-      WHERE date < DATE('now', '-3 years');
-    ''');
-
-      // 7️⃣ حذف عناصر الأرشيف القديمة من sale_items_archive
-      await db.execute('''
-      DELETE FROM sale_items_archive
-      WHERE sale_id NOT IN (SELECT id FROM sales_archive);
-    ''');
-    } catch (e) {
-      log('❌ خطأ في أرشفة الفواتير: $e');
-    }
-  }
-
   Future _onCreate(Database db, int version) async {
-    // جدول المنتجات
+    // ========== جدول المنتجات ==========
     await db.execute('''
-  CREATE TABLE products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    barcode TEXT UNIQUE,
-    base_unit TEXT NOT NULL DEFAULT 'piece',
-    price REAL NOT NULL,
-    quantity REAL NOT NULL,
-    cost_price REAL NOT NULL,
-    has_expiry BOOLEAN DEFAULT 1,
-    has_expiry_date BOOLEAN DEFAULT 0, -- ⬅️ جديد: لتحديد إذا كان للمنتج تاريخ صلاحية
-    active BOOLEAN DEFAULT 1, -- ⬅️ جديد: حالة المنتج (نشط/غير نشط)
-    added_date DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-''');
+      CREATE TABLE products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        barcode TEXT UNIQUE,
+        base_unit TEXT NOT NULL DEFAULT 'piece',
+        price REAL NOT NULL,
+        quantity REAL NOT NULL,
+        cost_price REAL NOT NULL,
+        has_expiry INTEGER DEFAULT 1,
+        has_expiry_date INTEGER DEFAULT 0,
+        active INTEGER DEFAULT 1,
+        added_date DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    ''');
 
-    // وحدات المنتجات
+    // ========== وحدات المنتجات ==========
     await db.execute('''
       CREATE TABLE product_units (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -268,43 +65,32 @@ WHERE sale_id IN ($idsString);
       );
     ''');
 
+    // ========== جدول الدفعات (Batches) ==========
     await db.execute('''
-      CREATE TABLE expenses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT NOT NULL,            -- كهرباء، ماء، صيانة...
-      amount REAL NOT NULL,
-      date TEXT NOT NULL,
-      payment_type TEXT,             -- cash / transfer / check
-      note TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-        ''');
+      CREATE TABLE product_batches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER NOT NULL,
+        purchase_item_id INTEGER, 
+        quantity REAL NOT NULL,
+        remaining_quantity REAL NOT NULL,
+        cost_price REAL NOT NULL,
+        production_date TEXT,   
+        expiry_date TEXT NOT NULL,
+        active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+      );
+    ''');
 
+    // ========== جدول المستخدمين ==========
     await db.execute('''
-  CREATE TABLE product_batches (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    product_id INTEGER NOT NULL,
-    purchase_item_id INTEGER, 
-    quantity REAL NOT NULL,
-    remaining_quantity REAL NOT NULL,
-    cost_price REAL NOT NULL,
-    production_date TEXT,   
-    expiry_date TEXT NOT NULL,
-    active BOOLEAN DEFAULT 0, -- ⬅️ جديد: تفعيل تاريخ الصلاحية
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
-  );  
-''');
-
-    // جدول المستخدمين
-    await db.execute('''
-    CREATE TABLE users(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      role TEXT NOT NULL,
-      phone TEXT
+      CREATE TABLE users(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL,
+        phone TEXT
       )
     ''');
 
@@ -328,7 +114,7 @@ WHERE sale_id IN ($idsString);
       'role': 'tax',
     });
 
-    // جدول الزبائن
+    // ========== جدول الزبائن ==========
     await db.execute('''
       CREATE TABLE customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -337,7 +123,7 @@ WHERE sale_id IN ($idsString);
       );
     ''');
 
-    // جدول رصيد الزبائن (الدين)
+    // ========== جدول رصيد الزبائن ==========
     await db.execute('''
       CREATE TABLE customer_balance (
         customer_id INTEGER PRIMARY KEY,
@@ -347,7 +133,7 @@ WHERE sale_id IN ($idsString);
       );
     ''');
 
-    // جدول الدفعات
+    // ========== جدول الدفعات (المدفوعات) ==========
     await db.execute('''
       CREATE TABLE IF NOT EXISTS transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -361,7 +147,7 @@ WHERE sale_id IN ($idsString);
       );
     ''');
 
-    // جدول الفواتير
+    // ========== جدول الفواتير ==========
     await db.execute('''
       CREATE TABLE sales (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -370,39 +156,51 @@ WHERE sale_id IN ($idsString);
         total_profit REAL NOT NULL DEFAULT 0,
         customer_id INTEGER, 
         payment_type TEXT NOT NULL DEFAULT 'cash', 
-        show_for_tax INTEGER,
+        show_for_tax INTEGER DEFAULT 0,
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL
       );
     ''');
 
-    // جدول عناصر الفاتورة
+    // ========== جدول عناصر الفاتورة ==========
     await db.execute('''
-CREATE TABLE sale_items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  sale_id INTEGER NOT NULL,
-
-  item_type TEXT NOT NULL DEFAULT 'product', -- product / service
-
-  product_id INTEGER,        -- NULL للخدمة
-  unit_id INTEGER,
-
-  quantity REAL NOT NULL DEFAULT 1,
-  unit_type TEXT NOT NULL,
-  custom_unit_name TEXT,
-
-  price REAL NOT NULL,
-  cost_price REAL NOT NULL DEFAULT 0,
-  subtotal REAL NOT NULL,
-  profit REAL NOT NULL DEFAULT 0,
-
-  FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
-  FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
-  FOREIGN KEY (unit_id) REFERENCES product_units (id) ON DELETE SET NULL
-);
-
+      CREATE TABLE sale_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_id INTEGER NOT NULL,
+        item_type TEXT NOT NULL DEFAULT 'product',
+        product_id INTEGER,
+        unit_id INTEGER,
+        quantity REAL NOT NULL DEFAULT 1,
+        unit_type TEXT NOT NULL,
+        custom_unit_name TEXT,
+        price REAL NOT NULL,
+        cost_price REAL NOT NULL DEFAULT 0,
+        subtotal REAL NOT NULL,
+        profit REAL NOT NULL DEFAULT 0,
+        batch_details TEXT,
+        FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+        FOREIGN KEY (unit_id) REFERENCES product_units (id) ON DELETE SET NULL
+      );
     ''');
 
-    // أرشيف الفواتير
+    // ========== ⬅️ جدول سجل خصم الدفعات (الجديد) ==========
+    await db.execute('''
+      CREATE TABLE sale_batch_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        batch_id INTEGER NOT NULL,
+        deducted_quantity REAL NOT NULL,
+        cost_price REAL NOT NULL,
+        expiry_date TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+        FOREIGN KEY (batch_id) REFERENCES product_batches (id) ON DELETE CASCADE
+      );
+    ''');
+
+    // ========== أرشيف الفواتير ==========
     await db.execute('''
       CREATE TABLE sales_archive (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -415,30 +213,39 @@ CREATE TABLE sale_items (
       );
     ''');
 
-    // أرشيف عناصر الفواتير
+    // ========== أرشيف عناصر الفواتير ==========
     await db.execute('''
-    CREATE TABLE sale_items_archive (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  sale_id INTEGER NOT NULL,
-
-  item_type TEXT NOT NULL DEFAULT 'product',
-
-  product_id INTEGER,
-  unit_id INTEGER,
-
-  quantity REAL NOT NULL DEFAULT 1,
-  unit_type TEXT NOT NULL,
-  custom_unit_name TEXT,
-
-  price REAL NOT NULL,
-  cost_price REAL NOT NULL DEFAULT 0,
-  subtotal REAL NOT NULL,
-  profit REAL NOT NULL DEFAULT 0
-);
-
+      CREATE TABLE sale_items_archive (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_id INTEGER NOT NULL,
+        item_type TEXT NOT NULL DEFAULT 'product',
+        product_id INTEGER,
+        unit_id INTEGER,
+        quantity REAL NOT NULL DEFAULT 1,
+        unit_type TEXT NOT NULL,
+        custom_unit_name TEXT,
+        price REAL NOT NULL,
+        cost_price REAL NOT NULL DEFAULT 0,
+        subtotal REAL NOT NULL,
+        profit REAL NOT NULL DEFAULT 0,
+        batch_details TEXT
+      );
     ''');
 
-    // جدول الموردين
+    // ========== جدول المصاريف ==========
+    await db.execute('''
+      CREATE TABLE expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        amount REAL NOT NULL,
+        date TEXT NOT NULL,
+        payment_type TEXT,
+        note TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    ''');
+
+    // ========== جدول الموردين ==========
     await db.execute('''
       CREATE TABLE suppliers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -450,7 +257,7 @@ CREATE TABLE sale_items (
       );
     ''');
 
-    // جدول فواتير الشراء
+    // ========== جدول فواتير الشراء ==========
     await db.execute('''
       CREATE TABLE purchase_invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -469,15 +276,15 @@ CREATE TABLE sale_items (
       );
     ''');
 
-    // ⬅️ جدول عناصر فاتورة الشراء المعدل ⬅️
+    // ========== جدول عناصر فاتورة الشراء ==========
     await db.execute('''
       CREATE TABLE purchase_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         purchase_id INTEGER NOT NULL,
         product_id INTEGER NOT NULL,
-        unit_id INTEGER, -- ⬅️ جديد: معرف الوحدة إذا كان الشراء بوحدة
-        display_quantity REAL, -- ⬅️ جديد: الكمية المعروضة (عدد الوحدات)
-        quantity REAL NOT NULL, -- الكمية الفعلية (القطع)
+        unit_id INTEGER,
+        display_quantity REAL,
+        quantity REAL NOT NULL,
         cost_price REAL NOT NULL,
         subtotal REAL NOT NULL,
         FOREIGN KEY (purchase_id) REFERENCES purchase_invoices (id) ON DELETE CASCADE,
@@ -486,7 +293,7 @@ CREATE TABLE sale_items (
       );
     ''');
 
-    // جدول رصيد الموردين
+    // ========== جدول رصيد الموردين ==========
     await db.execute('''
       CREATE TABLE supplier_balance (
         supplier_id INTEGER PRIMARY KEY,
@@ -496,7 +303,7 @@ CREATE TABLE sale_items (
       );
     ''');
 
-    // جدول معاملات الموردين
+    // ========== جدول معاملات الموردين ==========
     await db.execute('''
       CREATE TABLE supplier_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -512,7 +319,7 @@ CREATE TABLE sale_items (
       );
     ''');
 
-    // جدول الإعدادات
+    // ========== جدول الإعدادات ==========
     await db.execute('''
       CREATE TABLE settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -527,6 +334,7 @@ CREATE TABLE sale_items (
       );
     ''');
 
+    // إعدادات افتراضية
     await db.insert('settings', {
       'lowStockThreshold': 5,
       'marketName': null,
@@ -538,24 +346,11 @@ CREATE TABLE sale_items (
       'numberOfCopies': 1,
     });
 
-    // إنشاء الفهارس بعد إنشاء الجداول
-    await _createIndexes(db);
+    log('✅ تم إنشاء جميع الجداول بنجاح!');
   }
 
-  // دالة مساعدة للتحقق من وجود فهرس
-  Future<bool> indexExists(Database db, String indexName) async {
-    try {
-      final result = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='index' AND name=?",
-        [indexName],
-      );
-      return result.isNotEmpty;
-    } catch (e) {
-      return false;
-    }
-  }
+  // ========== دوال مساعدة ==========
 
-  // ⬅️ دالة جديدة: حذف قاعدة البيانات وإعادة إنشائها
   Future<void> resetDatabase() async {
     try {
       log('⚠️ بدء عملية إعادة تعيين قاعدة البيانات...');
@@ -568,14 +363,12 @@ CREATE TABLE sale_items (
       String folderPath = join(Directory.current.path, 'data');
       String path = join(folderPath, 'motamayez.db');
 
-      // حذف ملف قاعدة البيانات
       final file = File(path);
       if (await file.exists()) {
         await file.delete();
         log('✅ تم حذف ملف قاعدة البيانات القديم');
       }
 
-      // إعادة إنشاء قاعدة البيانات
       _db = await initDb();
       log('🎉 تم إعادة إنشاء قاعدة البيانات بنجاح!');
     } catch (e) {
@@ -584,38 +377,44 @@ CREATE TABLE sale_items (
     }
   }
 
-  // ⬅️ دالة جديدة: التحقق من هيكل قاعدة البيانات
   Future<void> checkDatabaseStructure() async {
     try {
       final database = await db;
       log('🔍 التحقق من هيكل قاعدة البيانات...');
 
-      // التحقق من جدول purchase_items
-      final purchaseItemsColumns = await database.rawQuery(
-        'PRAGMA table_info(purchase_items)',
-      );
-      log('📊 أعمدة جدول purchase_items:');
+      // التحقق من الجداول الرئيسية
+      final tables = [
+        'products',
+        'product_batches',
+        'sales',
+        'sale_items',
+        'sale_batch_log',
+        'customers',
+        'product_units',
+      ];
 
-      for (var column in purchaseItemsColumns) {
-        log('   - ${column['name']} (${column['type']})');
+      for (var table in tables) {
+        final result = await database.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+          [table],
+        );
+
+        if (result.isNotEmpty) {
+          log('✅ جدول $table موجود');
+
+          // عرض أعمدة الجدول
+          final columns = await database.rawQuery('PRAGMA table_info($table)');
+
+          log('   أعمدة جدول $table:');
+          for (var column in columns) {
+            log('   - ${column['name']} (${column['type']})');
+          }
+        } else {
+          log('❌ جدول $table غير موجود!');
+        }
       }
 
-      // التحقق من وجود الأعمدة المطلوبة
-      final columnNames =
-          purchaseItemsColumns.map((col) => col['name'] as String).toList();
-
-      if (!columnNames.contains('unit_id')) {
-        log('⚠️ عمود unit_id غير موجود في جدول purchase_items');
-      }
-
-      if (!columnNames.contains('display_quantity')) {
-        log('⚠️ عمود display_quantity غير موجود في جدول purchase_items');
-      }
-
-      if (columnNames.contains('unit_id') &&
-          columnNames.contains('display_quantity')) {
-        log('✅ جميع الأعمدة المطلوبة موجودة في جدول purchase_items');
-      }
+      log('✅ انتهى التحقق من هيكل قاعدة البيانات');
     } catch (e) {
       log('❌ خطأ في التحقق من هيكل قاعدة البيانات: $e');
     }

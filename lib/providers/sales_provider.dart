@@ -1,5 +1,6 @@
 // providers/sales_provider.dart
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
 import '../models/sale.dart';
@@ -872,87 +873,193 @@ class SalesProvider extends ChangeNotifier {
     final db = await _dbHelper.db;
 
     await db.transaction((txn) async {
-      final saleResult = await txn.query(
+      // 1️⃣ جلب الفاتورة
+      final sale = await txn.query(
         'sales',
         where: 'id = ?',
         whereArgs: [saleId],
         limit: 1,
       );
 
-      if (saleResult.isEmpty) {
+      if (sale.isEmpty) {
         throw Exception('الفاتورة غير موجودة');
       }
 
-      final sale = saleResult.first;
-      final double totalAmount =
-          (sale['total_amount'] is int)
-              ? (sale['total_amount'] as int).toDouble()
-              : sale['total_amount'] as double;
+      final saleData = sale.first;
+      final double totalAmount = (saleData['total_amount'] as num).toDouble();
+      final String paymentType = saleData['payment_type'] as String;
+      final int? customerId = saleData['customer_id'] as int?;
 
-      final String paymentType = sale['payment_type'] as String;
-      final int? customerId = sale['customer_id'] as int?;
+      // 2️⃣ جلب تفاصيل خصم الدفعات من سجل الدفعات أو من sale_items
+      List<Map<String, dynamic>> batchReturns = [];
 
-      final saleItems = await txn.query(
-        'sale_items',
-        where: 'sale_id = ?',
-        whereArgs: [saleId],
-      );
+      try {
+        // جلب من sale_batch_log إذا موجود
+        final batchLog = await txn.query(
+          'sale_batch_log',
+          where: 'sale_id = ?',
+          whereArgs: [saleId],
+        );
 
-      for (var item in saleItems) {
-        final int productId = item['product_id'] as int;
-        final double quantity =
-            (item['quantity'] is int)
-                ? (item['quantity'] as int).toDouble()
-                : item['quantity'] as double;
-
-        final String unitType = item['unit_type'] as String;
-        final int? unitId = item['unit_id'] as int?;
-
-        double quantityToReturn = quantity;
-
-        if (unitType == 'custom' && unitId != null) {
-          final unitResult = await txn.query(
-            'product_units',
-            columns: ['contain_qty'],
-            where: 'id = ?',
-            whereArgs: [unitId],
+        if (batchLog.isNotEmpty) {
+          for (var log in batchLog) {
+            batchReturns.add({
+              'batchId': log['batch_id'] as int,
+              'quantity': log['deducted_quantity'] as double,
+              'costPrice': log['cost_price'] as double,
+              'productId': log['product_id'] as int,
+              'expiryDate': log['expiry_date'] as String?,
+            });
+          }
+        } else {
+          // جلب من sale_items إذا لم يكن هناك سجل
+          final items = await txn.query(
+            'sale_items',
+            where: 'sale_id = ? AND product_id IS NOT NULL',
+            whereArgs: [saleId],
           );
 
-          if (unitResult.isNotEmpty) {
-            final double containQty =
-                (unitResult.first['contain_qty'] is int)
-                    ? (unitResult.first['contain_qty'] as int).toDouble()
-                    : unitResult.first['contain_qty'] as double;
+          for (var item in items) {
+            if (item['batch_details'] != null) {
+              final details = jsonDecode(item['batch_details'] as String);
+              final List<Map<String, dynamic>> itemDeductions =
+                  List<Map<String, dynamic>>.from(details);
 
-            quantityToReturn = quantity * containQty;
+              for (var deduction in itemDeductions) {
+                batchReturns.add({
+                  ...deduction,
+                  'productId': item['product_id'] as int,
+                });
+              }
+            }
           }
         }
+      } catch (e) {
+        log('⚠️ لم يتم العثور على سجل الدفعات: $e');
+      }
 
+      // 3️⃣ إرجاع الكميات للدفعات
+      for (var returnItem in batchReturns) {
+        final batchId = returnItem['batchId'] as int;
+        final double quantity = (returnItem['quantity'] as num).toDouble();
+        final int productId = returnItem['productId'] as int;
+
+        // التحقق من وجود الدفعة
+        final batch = await txn.query(
+          'product_batches',
+          where: 'id = ?',
+          whereArgs: [batchId],
+        );
+
+        if (batch.isNotEmpty) {
+          // الدفعة موجودة - إضافة الكمية
+          final double currentQty =
+              (batch.first['remaining_quantity'] as num).toDouble();
+          await txn.update(
+            'product_batches',
+            {
+              'remaining_quantity': currentQty + quantity,
+              'active': 1, // إعادة تفعيل
+            },
+            where: 'id = ?',
+            whereArgs: [batchId],
+          );
+
+          log(
+            '✅ إرجاع $quantity للدفعة $batchId (أصبحت: ${currentQty + quantity})',
+          );
+        } else {
+          // الدفعة محذوفة - إنشاء دفعة جديدة
+          await txn.insert('product_batches', {
+            'product_id': productId,
+            'quantity': quantity,
+            'remaining_quantity': quantity,
+            'cost_price': returnItem['costPrice'] ?? 0,
+            'expiry_date':
+                returnItem['expiryDate'] ??
+                DateTime.now().add(Duration(days: 365)).toIso8601String(),
+            'production_date': DateTime.now().toIso8601String(),
+            'active': 1,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+
+          log('✅ إنشاء دفعة جديدة للمنتج $productId بكمية $quantity');
+        }
+
+        // 4️⃣ إرجاع الكمية للمنتج الإجمالي
         await txn.rawUpdate(
           'UPDATE products SET quantity = quantity + ? WHERE id = ?',
-          [quantityToReturn, productId],
+          [quantity, productId],
         );
       }
 
+      // 5️⃣ إذا لم تكن هناك تفاصيل دفعات، نرجع الكميات العادية
+      if (batchReturns.isEmpty) {
+        final saleItems = await txn.query(
+          'sale_items',
+          where: 'sale_id = ?',
+          whereArgs: [saleId],
+        );
+
+        for (var item in saleItems) {
+          final int? productId = item['product_id'] as int?;
+          if (productId == null) continue;
+
+          final double quantity = (item['quantity'] as num).toDouble();
+          final int? unitId = item['unit_id'] as int?;
+
+          double qtyToReturn = quantity;
+
+          if (unitId != null) {
+            final unit = await txn.query(
+              'product_units',
+              where: 'id = ?',
+              whereArgs: [unitId],
+            );
+
+            if (unit.isNotEmpty) {
+              final double containQty =
+                  (unit.first['contain_qty'] as num).toDouble();
+              qtyToReturn = quantity * containQty;
+            }
+          }
+
+          await txn.rawUpdate(
+            'UPDATE products SET quantity = quantity + ? WHERE id = ?',
+            [qtyToReturn, productId],
+          );
+        }
+      }
+
+      // 6️⃣ تعديل رصيد الزبون إذا كانت فاتورة آجلة
       if (paymentType == 'credit' && customerId != null) {
         await txn.rawUpdate(
           '''
-        UPDATE customer_balance
+        UPDATE customer_balance 
         SET balance = balance - ?, last_updated = ?
         WHERE customer_id = ?
         ''',
           [totalAmount, DateTime.now().toIso8601String(), customerId],
         );
+
+        log('💳 تعديل رصيد الزبون ID: $customerId بمقدار: -$totalAmount');
       }
 
+      // 7️⃣ حذف السجلات
+      await txn.delete(
+        'sale_batch_log',
+        where: 'sale_id = ?',
+        whereArgs: [saleId],
+      );
       await txn.delete('sale_items', where: 'sale_id = ?', whereArgs: [saleId]);
       await txn.delete('sales', where: 'id = ?', whereArgs: [saleId]);
+
+      log('🗑️ تم حذف الفاتورة $saleId بنجاح');
     });
 
+    // تحديث الواجهة
     _allSales.removeWhere((sale) => sale.id == saleId);
     _displayedSales.removeWhere((sale) => sale.id == saleId);
-
-    _updateCache();
     notifyListeners();
   }
 

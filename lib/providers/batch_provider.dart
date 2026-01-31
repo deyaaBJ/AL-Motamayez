@@ -631,4 +631,271 @@ class BatchProvider with ChangeNotifier {
       return 0;
     }
   }
+
+  Future<List<Map<String, dynamic>>> deductFromBatches(
+    int productId,
+    double requiredQuantity,
+  ) async {
+    try {
+      final db = await _dbHelper.db;
+
+      // جلب الدفعات الأقدم أولاً (Order by oldest)
+      final batches = await db.rawQuery(
+        '''
+        SELECT * FROM product_batches 
+        WHERE product_id = ? 
+          AND remaining_quantity > 0 
+          AND active = 1
+        ORDER BY 
+          CASE WHEN expiry_date IS NOT NULL THEN expiry_date ELSE '9999-12-31' END ASC,
+          created_at ASC
+      ''',
+        [productId],
+      );
+
+      if (batches.isEmpty) {
+        throw Exception('لا توجد دفعات متاحة للمنتج ID: $productId');
+      }
+
+      double remainingToDeduct = requiredQuantity;
+      List<Map<String, dynamic>> deductedDetails = [];
+
+      for (var batch in batches) {
+        if (remainingToDeduct <= 0) break;
+
+        final batchId = batch['id'] as int;
+        final double batchQty = (batch['remaining_quantity'] as num).toDouble();
+        final double batchCost = (batch['cost_price'] as num).toDouble();
+
+        // الكمية التي سنخصمها من هذه الدفعة
+        final double toDeduct =
+            batchQty >= remainingToDeduct ? remainingToDeduct : batchQty;
+
+        // تحديث الدفعة في قاعدة البيانات
+        final double newQty = batchQty - toDeduct;
+        await db.update(
+          'product_batches',
+          {
+            'remaining_quantity': newQty,
+            'active': newQty > 0 ? 1 : 0, // تعطيل إذا صارت 0
+          },
+          where: 'id = ?',
+          whereArgs: [batchId],
+        );
+
+        // تسجيل التفاصيل للإرجاع لاحقاً إذا لزم
+        deductedDetails.add({
+          'batchId': batchId,
+          'deductedQty': toDeduct,
+          'batchCost': batchCost,
+          'originalQty': batchQty,
+        });
+
+        remainingToDeduct -= toDeduct;
+
+        log('✅ خصم $toDeduct من الدفعة $batchId (المتبقي: $newQty)');
+      }
+
+      if (remainingToDeduct > 0) {
+        throw Exception(
+          'الكمية غير كافية. المطلوب: $requiredQuantity، المتبقي بعد الخصم: $remainingToDeduct',
+        );
+      }
+
+      return deductedDetails;
+    } catch (e) {
+      log('❌ خطأ في deductFromBatches: $e');
+      rethrow;
+    }
+  }
+
+  // دالة لإرجاع الكمية إلى الدفعات (عند حذف فاتورة أو إرجاع)
+  Future<void> returnToBatches(
+    int productId,
+    List<Map<String, dynamic>> returnDetails,
+  ) async {
+    try {
+      final db = await _dbHelper.db;
+
+      for (var detail in returnDetails) {
+        final batchId = detail['batchId'] as int;
+        final double quantity = detail['quantity'] as double;
+
+        if (quantity <= 0) continue;
+
+        // جلب الدفعة الحالية
+        final batch = await db.query(
+          'product_batches',
+          where: 'id = ?',
+          whereArgs: [batchId],
+        );
+
+        if (batch.isEmpty) {
+          log('⚠️ الدفعة $batchId غير موجودة، سيتم إنشاؤها');
+
+          // إذا الدفعة حُذفت، نعيد إنشائها
+          await db.insert('product_batches', {
+            'product_id': productId,
+            'remaining_quantity': quantity,
+            'quantity': quantity,
+            'cost_price': detail['costPrice'] ?? 0,
+            'expiry_date':
+                detail['expiryDate'] ??
+                DateTime.now().add(Duration(days: 365)).toIso8601String(),
+            'production_date': DateTime.now().toIso8601String(),
+            'active': 1,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } else {
+          // تحديث الدفعة الموجودة
+          final double currentQty =
+              (batch.first['remaining_quantity'] as num).toDouble();
+          final double newQty = currentQty + quantity;
+
+          await db.update(
+            'product_batches',
+            {
+              'remaining_quantity': newQty,
+              'active': 1, // إعادة تفعيل
+            },
+            where: 'id = ?',
+            whereArgs: [batchId],
+          );
+
+          log('✅ إرجاع $quantity للدفعة $batchId (أصبحت: $newQty)');
+        }
+      }
+    } catch (e) {
+      log('❌ خطأ في returnToBatches: $e');
+      rethrow;
+    }
+  }
+
+  Future<int> getExpiredBatchesCount() async {
+    try {
+      final db = await _dbHelper.db;
+
+      final result = await db.rawQuery('''
+        SELECT COUNT(*) as count 
+        FROM product_batches 
+        WHERE active = 1 
+          AND expiry_date IS NOT NULL 
+          AND expiry_date != '' 
+          AND expiry_date < DATE('now')
+      ''');
+
+      return result.first['count'] as int? ?? 0;
+    } catch (e) {
+      log('❌ خطأ في جلب عدد الدفعات المنتهية: $e');
+      return 0;
+    }
+  }
+
+  // 🔴 دالة لجلب عدد الدفعات المتبقي لها 7 أيام أو أقل
+  Future<int> getBatchesExpiringIn7DaysOrLess() async {
+    try {
+      final db = await _dbHelper.db;
+
+      final result = await db.rawQuery('''
+        SELECT COUNT(*) as count 
+        FROM product_batches 
+        WHERE active = 1 
+          AND expiry_date IS NOT NULL 
+          AND expiry_date != '' 
+          AND expiry_date >= DATE('now') 
+          AND expiry_date <= DATE('now', '+7 days')
+      ''');
+
+      return result.first['count'] as int? ?? 0;
+    } catch (e) {
+      log('❌ خطأ في جلب عدد الدفعات القريبة: $e');
+      return 0;
+    }
+  }
+
+  // 🔴 دالة واحدة لجلب كلا الإحصاءين
+  Future<Map<String, int>> getBatchesAlerts() async {
+    try {
+      final expiredCount = await getExpiredBatchesCount();
+      final expiringSoonCount = await getBatchesExpiringIn7DaysOrLess();
+
+      return {'expired': expiredCount, 'expiring_7_days': expiringSoonCount};
+    } catch (e) {
+      log('❌ خطأ في جلب إشعارات الدفعات: $e');
+      return {'expired': 0, 'expiring_7_days': 0};
+    }
+  }
+
+  // 🔴 دالة لتحميل الدفعات مع فلتر بسيط
+  Future<void> loadBatchesWithFilter(String filterType) async {
+    try {
+      final db = await _dbHelper.db;
+
+      String whereClause = 'pb.active = 1';
+
+      if (filterType == 'expired') {
+        whereClause += '''
+          AND pb.expiry_date IS NOT NULL 
+          AND pb.expiry_date != '' 
+          AND pb.expiry_date < DATE('now')
+        ''';
+      } else if (filterType == 'expiring_7_days') {
+        whereClause += '''
+          AND pb.expiry_date IS NOT NULL 
+          AND pb.expiry_date != '' 
+          AND pb.expiry_date >= DATE('now') 
+          AND pb.expiry_date <= DATE('now', '+7 days')
+        ''';
+      }
+
+      // إعادة تعيين الباجات
+      resetPagination();
+
+      final query = '''
+        SELECT 
+          pb.*,
+          p.name as product_name,
+          p.barcode as product_barcode,
+          CASE 
+            WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' THEN 9999
+            ELSE julianday(pb.expiry_date) - julianday('now')
+          END as days_remaining
+        FROM product_batches pb
+        LEFT JOIN products p ON pb.product_id = p.id
+        WHERE $whereClause
+        ORDER BY 
+          CASE 
+            WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' THEN '9999-12-31'
+            ELSE pb.expiry_date
+          END ASC
+        LIMIT $_limit OFFSET ${_page * _limit}
+      ''';
+
+      final result = await db.rawQuery(query);
+
+      if (result.isEmpty) {
+        _hasMore = false;
+        _batches = [];
+      } else {
+        _batches =
+            result.map((map) {
+              return Batch.fromMap(
+                map,
+                productName: map['product_name'] as String?,
+                productBarcode: map['product_barcode'] as String?,
+              );
+            }).toList();
+
+        _page++;
+        if (_batches.length < _limit) {
+          _hasMore = false;
+        }
+      }
+
+      notifyListeners();
+      log('✅ تم تحميل ${_batches.length} دفعة مع فلتر: $filterType');
+    } catch (e) {
+      log('❌ خطأ في تحميل الدفعات مع الفلتر: $e');
+    }
+  }
 }
