@@ -1,28 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:motamayez/components/LoginCard.dart';
 import 'package:provider/provider.dart';
 import 'dart:math';
 
-import 'package:motamayez/components/LoginCard.dart';
 import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/providers/auth_provider.dart';
-
-void main() {
-  runApp(const MotamayezApp());
-}
-
-class MotamayezApp extends StatelessWidget {
-  const MotamayezApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'المتميز',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.purple, fontFamily: 'Poppins'),
-      home: const LoginScreen(),
-    );
-  }
-}
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -41,6 +23,8 @@ class _LoginScreenState extends State<LoginScreen>
   late final AuthProvider authProvider;
 
   bool _isLoading = false;
+  bool _rememberMe = false;
+  bool _isLoadingCredentials = true;
 
   @override
   void initState() {
@@ -60,6 +44,29 @@ class _LoginScreenState extends State<LoginScreen>
         curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
       ),
     );
+
+    // ✅ جلب آخر مستخدم محفوظ
+    _loadSavedCredentials();
+  }
+
+  /// ✅ جلب آخر مستخدم دخل واختر "تذكرني"
+  Future<void> _loadSavedCredentials() async {
+    final savedCreds = await authProvider.getSavedCredentialsForLogin();
+
+    if (savedCreds != null) {
+      setState(() {
+        _emailController.text = savedCreds['email'] ?? '';
+        _passwordController.text = savedCreds['password'] ?? '';
+        _rememberMe = true; // ✅ فعل الـ checkbox لأن في بيانات محفوظة
+      });
+      print('✅ Auto-filled last user: ${savedCreds['email']}');
+    } else {
+      print('ℹ️ No saved user found');
+    }
+
+    setState(() {
+      _isLoadingCredentials = false;
+    });
   }
 
   @override
@@ -76,8 +83,9 @@ class _LoginScreenState extends State<LoginScreen>
     });
 
     bool success = await authProvider.login(
-      _emailController.text,
+      _emailController.text.trim(),
       _passwordController.text,
+      rememberMe: _rememberMe, // ✅ يحفظ هذا المستخدم كـ "آخر مستخدم"
     );
 
     if (mounted) {
@@ -87,8 +95,6 @@ class _LoginScreenState extends State<LoginScreen>
 
       if (success) {
         showAppToast(context, 'تم تسجيل الدخول بنجاح!', ToastType.success);
-
-        // مثال: انتقل للشاشة الرئيسية
         Navigator.pushReplacementNamed(context, '/home');
       } else {
         showAppToast(context, 'البريد أو كلمة السر خاطئة', ToastType.error);
@@ -132,16 +138,16 @@ class _LoginScreenState extends State<LoginScreen>
                         children: [
                           // الشعار
                           Container(
-                            width: 120, // عرض الصورة
-                            height: 120, // ارتفاع الصورة
-                            decoration: BoxDecoration(
+                            width: 120,
+                            height: 120,
+                            decoration: const BoxDecoration(
                               color: Colors.white,
                               shape: BoxShape.circle,
                             ),
                             child: ClipOval(
                               child: Image.asset(
-                                'assets/images/shop_logo.png', // مسار الصورة
-                                fit: BoxFit.fill, // تغطية كاملة للدائرة
+                                'assets/images/shop_logo.png',
+                                fit: BoxFit.fill,
                               ),
                             ),
                           ),
@@ -149,10 +155,9 @@ class _LoginScreenState extends State<LoginScreen>
                           Text(
                             'المتميز',
                             style: TextStyle(
-                              fontFamily: 'Amiri', // اسم family الصحيح
-                              fontWeight:
-                                  FontWeight.bold, // لاختيار Bold أو BoldItalic
-                              fontStyle: FontStyle.italic, // لتفعيل الـ Italic
+                              fontFamily: 'Amiri',
+                              fontWeight: FontWeight.bold,
+                              fontStyle: FontStyle.italic,
                               letterSpacing: 1.0,
                               fontSize: 50,
                               color: Colors.white,
@@ -176,12 +181,31 @@ class _LoginScreenState extends State<LoginScreen>
 
                     const SizedBox(height: 20),
 
-                    LoginCard(
-                      emailController: _emailController,
-                      passwordController: _passwordController,
-                      isLoading: _isLoading,
-                      onLogin: _login,
-                    ),
+                    // ✅ إظهار loading أو الـ LoginCard مع البيانات المعبأة
+                    _isLoadingCredentials
+                        ? const Column(
+                          children: [
+                            CircularProgressIndicator(color: Colors.white),
+                            SizedBox(height: 10),
+                            Text(
+                              'جاري تحميل البيانات...',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ],
+                        )
+                        : LoginCard(
+                          emailController: _emailController, // ✅ معبأ تلقائياً
+                          passwordController:
+                              _passwordController, // ✅ معبأ تلقائياً
+                          isLoading: _isLoading,
+                          onLogin: _login,
+                          rememberMe: _rememberMe,
+                          onRememberMeChanged: (value) {
+                            setState(() {
+                              _rememberMe = value;
+                            });
+                          },
+                        ),
 
                     const SizedBox(height: 30),
 
@@ -214,21 +238,17 @@ class BackgroundPainter extends CustomPainter {
           ..color = Colors.white.withOpacity(0.05)
           ..style = PaintingStyle.fill;
 
-    // دوائر متحركة في الخلفية
     final centerX = size.width / 2;
     final centerY = size.height / 2;
 
-    // دائرة كبيرة تتحرك ببطء
     final circle1X = centerX + cos(animationValue) * 100;
     final circle1Y = centerY + sin(animationValue) * 80;
     canvas.drawCircle(Offset(circle1X, circle1Y), 120, paint);
 
-    // دائرة متوسطة تتحرك في اتجاه معاكس
     final circle2X = centerX + cos(animationValue + pi) * 150;
     final circle2Y = centerY + sin(animationValue + pi) * 100;
     canvas.drawCircle(Offset(circle2X, circle2Y), 80, paint);
 
-    // دوائر صغيرة
     final circle3X = centerX + cos(animationValue * 1.5) * 200;
     final circle3Y = centerY + sin(animationValue * 1.5) * 150;
     canvas.drawCircle(Offset(circle3X, circle3Y), 60, paint);

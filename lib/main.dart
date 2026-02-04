@@ -1,49 +1,47 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:motamayez/providers/batch_provider.dart';
-import 'package:motamayez/providers/temporary_invoice_provider.dart';
-import 'package:motamayez/screens/batches_screen.dart';
-import 'package:motamayez/services/activation_service.dart';
+import 'package:motamayez/providers/DebtProvider.dart';
+import 'package:motamayez/screens/PurchaseInvoicesListPage.dart';
+import 'package:motamayez/screens/SalesHistoryScreen.dart';
+import 'package:motamayez/screens/csuppliers_list_page.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'dart:developer';
 
-import 'package:motamayez/db/db_helper.dart';
-import 'package:motamayez/providers/auth_provider.dart';
-import 'package:motamayez/providers/customer_provider.dart';
-import 'package:motamayez/providers/sales_provider.dart';
-import 'package:motamayez/providers/reports_provider.dart';
-import 'package:motamayez/providers/settings_provider.dart';
-import 'package:motamayez/providers/product_provider.dart';
-import 'package:motamayez/providers/sidebar_provider.dart';
-import 'package:motamayez/providers/DebtProvider.dart';
-import 'package:motamayez/providers/purchase_invoice_provider.dart';
-import 'package:motamayez/providers/purchase_item_provider.dart';
-import 'package:motamayez/providers/supplier_provider.dart';
-import 'package:motamayez/providers/expense_provider.dart';
+import 'db/db_helper.dart';
+import 'providers/auth_provider.dart';
+import 'providers/customer_provider.dart';
+import 'providers/sales_provider.dart';
+import 'providers/reports_provider.dart';
+import 'providers/settings_provider.dart';
+import 'providers/product_provider.dart';
+import 'providers/sidebar_provider.dart';
+import 'providers/purchase_invoice_provider.dart';
+import 'providers/purchase_item_provider.dart';
+import 'providers/supplier_provider.dart';
+import 'providers/expense_provider.dart';
+import 'providers/temporary_invoice_provider.dart';
+import 'providers/batch_provider.dart';
 
-import 'package:motamayez/screens/auth/login.dart';
-import 'package:motamayez/screens/home.dart';
-import 'package:motamayez/screens/products.dart';
-import 'package:motamayez/screens/pos_screen.dart';
-import 'package:motamayez/screens/customers_screen.dart';
-import 'package:motamayez/screens/SalesHistoryScreen.dart';
-import 'package:motamayez/screens/reports_screen.dart';
-import 'package:motamayez/screens/settings_screen.dart';
-import 'package:motamayez/screens/purchase_invoice_page.dart';
-import 'package:motamayez/screens/PurchaseInvoicesListPage.dart';
-import 'package:motamayez/screens/csuppliers_list_page.dart';
-import 'package:motamayez/screens/expenses_page.dart';
-import 'package:motamayez/screens/activation_page.dart';
-import 'package:motamayez/screens/invalid_signature_screen.dart';
+import 'screens/auth/login.dart';
+import 'screens/home.dart';
+import 'screens/products.dart';
+import 'screens/pos_screen.dart';
+import 'screens/customers_screen.dart';
+import 'screens/reports_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/purchase_invoice_page.dart';
 
-// Navigator Key
+import 'screens/expenses_page.dart';
+import 'screens/activation_page.dart';
+import 'screens/invalid_signature_screen.dart';
+import 'screens/batches_screen.dart';
+import 'services/activation_service.dart';
+
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// Global AuthProvider reference
-AuthProvider? globalAuthProvider;
-
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -51,22 +49,19 @@ Future<void> main() async {
     databaseFactory = databaseFactoryFfi;
 
     await windowManager.ensureInitialized();
-    windowManager.setTitle('المتميز');
-    windowManager.setMinimumSize(const Size(1000, 700));
+    await windowManager.setTitle('المتميز');
+    await windowManager.setMinimumSize(const Size(1000, 700));
   }
 
   final dbHelper = DBHelper();
   await dbHelper.db;
 
+  final authProvider = AuthProvider();
+
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(
-          create: (_) {
-            globalAuthProvider = AuthProvider();
-            return globalAuthProvider!;
-          },
-        ),
+        ChangeNotifierProvider.value(value: authProvider),
         ChangeNotifierProvider(create: (_) => CustomerProvider()),
         ChangeNotifierProvider(create: (_) => SalesProvider()),
         ChangeNotifierProvider(create: (_) => ReportsProvider()),
@@ -94,8 +89,6 @@ class MotamayezApp extends StatefulWidget {
 }
 
 class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
-  bool _isClosing = false;
-
   @override
   void initState() {
     super.initState();
@@ -106,6 +99,18 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
   void dispose() {
     windowManager.removeListener(this);
     super.dispose();
+  }
+
+  @override
+  void onWindowClose() async {
+    final authProvider = context.read<AuthProvider>();
+
+    if (authProvider.isLoggedIn) {
+      log('🔄 Creating backup before window close...');
+      await authProvider.backupAndCleanOnClose();
+    }
+
+    await windowManager.destroy();
   }
 
   @override
@@ -138,7 +143,7 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
 }
 
 /// =================================================
-/// 🔐 App Entry - نقطة الدخول الرئيسية مع فحص التفعيل
+/// App Entry - نقطة الدخول مع فحص التفعيل
 /// =================================================
 class AppEntry extends StatefulWidget {
   const AppEntry({super.key});
@@ -159,11 +164,8 @@ class _AppEntryState extends State<AppEntry> {
   Future<Map<String, dynamic>> _checkActivation() async {
     try {
       final activationService = ActivationService();
-
-      // محاولة الحصول على معلومات التفعيل
       final info = await activationService.getActivationInfo();
 
-      // فحص التوقيع
       if (info['has_activation'] == true) {
         try {
           final isValid = await activationService.isActivated();
@@ -194,12 +196,10 @@ class _AppEntryState extends State<AppEntry> {
     return FutureBuilder<Map<String, dynamic>>(
       future: _activationCheck,
       builder: (context, snapshot) {
-        // حالة التحميل
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoadingScreen();
         }
 
-        // حالة الخطأ
         if (snapshot.hasError) {
           return _buildErrorScreen(snapshot.error.toString());
         }
@@ -209,11 +209,9 @@ class _AppEntryState extends State<AppEntry> {
 
         switch (status) {
           case 'valid':
-            // التفعيل صحيح - الانتقال لشاشة تسجيل الدخول
             return const LoginScreen();
 
           case 'invalid':
-            // توقيع غير صحيح - عرض شاشة الخطأ
             return InvalidSignatureScreen(
               storedSignature: data['stored_signature']?.toString(),
               expectedSignature: data['expected_signature']?.toString(),
@@ -221,7 +219,6 @@ class _AppEntryState extends State<AppEntry> {
             );
 
           case 'not_activated':
-            // لا يوجد تفعيل - الذهاب لصفحة التفعيل
             return const ActivationPage();
 
           default:
@@ -232,21 +229,16 @@ class _AppEntryState extends State<AppEntry> {
   }
 
   Widget _buildLoadingScreen() {
-    return Scaffold(
+    return const Scaffold(
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(
+            CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(Colors.purple),
             ),
-            const SizedBox(height: 20),
-            const Text('جاري فحص التفعيل...', style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 10),
-            Text(
-              'رقم الجهاز: ${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-              style: const TextStyle(color: Colors.grey),
-            ),
+            SizedBox(height: 20),
+            Text('جاري فحص التفعيل...', style: TextStyle(fontSize: 18)),
           ],
         ),
       ),

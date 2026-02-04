@@ -6,6 +6,8 @@ class LoginCard extends StatefulWidget {
   final TextEditingController passwordController;
   final bool isLoading;
   final Function() onLogin;
+  final bool rememberMe;
+  final ValueChanged<bool>? onRememberMeChanged;
 
   const LoginCard({
     super.key,
@@ -13,6 +15,8 @@ class LoginCard extends StatefulWidget {
     required this.passwordController,
     required this.isLoading,
     required this.onLogin,
+    this.rememberMe = false,
+    this.onRememberMeChanged,
   });
 
   @override
@@ -53,7 +57,7 @@ class _LoginCardState extends State<LoginCard> {
           ),
           const SizedBox(height: 30),
 
-          // حقل اسم المستخدم
+          // ✅ حقل الإيميل - معبأ تلقائياً
           CustomTextField(
             controller: widget.emailController,
             label: 'اسم المستخدم',
@@ -62,7 +66,7 @@ class _LoginCardState extends State<LoginCard> {
 
           const SizedBox(height: 20),
 
-          // حقل كلمة المرور
+          // ✅ حقل الباسورد - معبأ تلقائياً
           CustomTextField(
             controller: widget.passwordController,
             label: 'كلمة المرور',
@@ -81,9 +85,28 @@ class _LoginCardState extends State<LoginCard> {
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
 
-          // زر تسجيل الدخول
+          // ✅ تذكرني
+          Row(
+            children: [
+              Checkbox(
+                value: widget.rememberMe,
+                onChanged: (value) {
+                  widget.onRememberMeChanged?.call(value ?? false);
+                },
+                activeColor: const Color(0xFF8B5FBF),
+              ),
+              const Text(
+                'تذكرني',
+                style: TextStyle(fontSize: 14, color: Color(0xFF6A3093)),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // ✅ زر تسجيل الدخول - أنت بس بتكبس
           SizedBox(
             width: double.infinity,
             height: 56,

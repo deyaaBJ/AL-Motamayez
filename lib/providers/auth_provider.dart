@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:motamayez/utils/app_config.dart';
 import 'package:path/path.dart' as p;
 import '../db/db_helper.dart';
+import '../services/secure_storage_service.dart';
 import 'package:archive/archive_io.dart';
 import 'dart:developer';
 
@@ -12,11 +13,16 @@ class AuthProvider with ChangeNotifier {
   Map<String, dynamic>? _currentUser;
   Map<String, dynamic>? get currentUser => _currentUser;
   String? get role => _currentUser?['role'];
-
-  // دالة للتحقق إذا كان المستخدم مسجل دخول
   bool get isLoggedIn => _currentUser != null;
 
-  Future<bool> login(String email, String password) async {
+  // ================================
+  // LOGIN مع "تذكرني"
+  // ================================
+  Future<bool> login(
+    String email,
+    String password, {
+    bool rememberMe = false,
+  }) async {
     try {
       final db = await _dbHelper.db;
       final result = await db.query(
@@ -27,6 +33,13 @@ class AuthProvider with ChangeNotifier {
 
       if (result.isNotEmpty) {
         _currentUser = result.first;
+
+        // ✅ حفظ البيانات إذا اختار "تذكرني"
+        if (rememberMe) {
+          await SecureStorageService.saveCredentials(email, password);
+          log('✅ Saved credentials for: $email');
+        }
+
         notifyListeners();
         return true;
       } else {
@@ -36,6 +49,13 @@ class AuthProvider with ChangeNotifier {
       log('Login error: $e');
       return false;
     }
+  }
+
+  // ================================
+  // جلب البيانات المحفوظة للـ UI
+  // ================================
+  Future<Map<String, String>?> getSavedCredentialsForLogin() async {
+    return await SecureStorageService.getSavedCredentials();
   }
 
   // ================================
@@ -56,7 +76,6 @@ class AuthProvider with ChangeNotifier {
   // ================================
   Future<void> backupAndCleanOnClose() async {
     try {
-      // تحقق إذا كان المستخدم مسجل دخول
       if (_currentUser == null) {
         log('⚠️ لا يمكن النسخ: المستخدم غير مسجل دخول');
         return;
@@ -66,7 +85,6 @@ class AuthProvider with ChangeNotifier {
       log('✅ تم النسخ والحذف للإغلاق بنجاح');
     } catch (e) {
       log('❌ خطأ في النسخ للإغلاق: $e');
-      // حاول نسخة سريعة بدون حذف كخطة بديلة
       await _createQuickBackupOnly();
     }
   }
@@ -78,16 +96,12 @@ class AuthProvider with ChangeNotifier {
     final Stopwatch stopwatch = Stopwatch()..start();
 
     try {
-      // تحقق من تسجيل الدخول
       if (_currentUser == null) {
         log('⚠️ لا يمكن إنشاء نسخة: لم يتم تسجيل الدخول');
         return;
       }
 
-      // 1️⃣ قاعدة البيانات
       final db = await _dbHelper.db;
-
-      // تنظيف داخلي لتقليل الحجم (مهم)
       await db.execute('VACUUM');
 
       final dbPath = db.path;
@@ -98,7 +112,7 @@ class AuthProvider with ChangeNotifier {
         return;
       }
 
-      // 2️⃣ مسار النسخ من config.json
+      // ✅ مسار النسخ من config.json فقط
       final appConfig = AppConfig(
         configFilePath: p.join(p.current, 'config.json'),
       );
@@ -109,7 +123,6 @@ class AuthProvider with ChangeNotifier {
         backupDir.createSync(recursive: true);
       }
 
-      // 3️⃣ اسم النسخة
       final timestamp = DateTime.now()
           .toIso8601String()
           .replaceAll(':', '-')
@@ -120,7 +133,6 @@ class AuthProvider with ChangeNotifier {
         'motamayez_backup_$timestamp.db',
       );
 
-      // 4️⃣ نسخ قاعدة البيانات
       try {
         sourceFile.copySync(dbBackupPath);
       } catch (_) {
@@ -134,7 +146,6 @@ class AuthProvider with ChangeNotifier {
 
       log('✅ تم إنشاء نسخة DB: ${p.basename(dbBackupPath)}');
 
-      // 5️⃣ ضغط النسخة إلى ZIP
       final zipPath = p.join(backupDir.path, 'motamayez_backup_$timestamp.zip');
 
       final encoder = ZipFileEncoder();
@@ -150,13 +161,11 @@ class AuthProvider with ChangeNotifier {
 
       log('📦 تم ضغط النسخة: ${p.basename(zipPath)}');
 
-      // حذف ملف DB بعد الضغط
       await dbBackupFile.delete();
 
-      // 6️⃣ الحصول على عدد النسخ من SettingsProvider (باستخدام الطريقة الجديدة)
+      // ✅ عدد النسخ من قاعدة البيانات فقط
       final int numberOfCopiesToKeep = await _getNumberOfCopiesFromSettings();
 
-      // تنظيف النسخ القديمة (الاحتفاظ بآخر عدد النسخ المحدد)
       final backups =
           backupDir
               .listSync()
@@ -171,7 +180,6 @@ class AuthProvider with ChangeNotifier {
               (a, b) => a.statSync().modified.compareTo(b.statSync().modified),
             );
 
-      // استخدام عدد النسخ من SettingsProvider
       while (backups.length > numberOfCopiesToKeep) {
         final oldest = backups.removeAt(0);
         await oldest.delete();
@@ -189,13 +197,12 @@ class AuthProvider with ChangeNotifier {
   }
 
   // ================================
-  // دالة للحصول على عدد النسخ من قاعدة البيانات مباشرة
+  // دالة للحصول على عدد النسخ من قاعدة البيانات
   // ================================
   Future<int> _getNumberOfCopiesFromSettings() async {
     try {
       final db = await _dbHelper.db;
 
-      // استعلام مباشر للحصول على عدد النسخ من جدول settings
       final result = await db.query(
         'settings',
         columns: ['numberOfCopies'],
@@ -207,7 +214,6 @@ class AuthProvider with ChangeNotifier {
       if (result.isNotEmpty) {
         final numberOfCopies = result.first['numberOfCopies'];
 
-        // معالجة القيمة
         if (numberOfCopies is int) {
           return numberOfCopies;
         } else if (numberOfCopies is String) {
@@ -217,18 +223,18 @@ class AuthProvider with ChangeNotifier {
         }
       }
 
-      // القيمة الافتراضية إذا لم توجد
-      return 1;
+      return 1; // قيمة افتراضية فقط إذا ما لقينا شي في الـ DB
     } catch (e) {
-      log('❌ خطأ في قراءة numberOfCopies من قاعدة البيانات: $e');
-      return 1; // القيمة الافتراضية
+      log('❌ خطأ في قراءة numberOfCopies: $e');
+      return 1;
     }
   }
 
-  // باقي الدوال بدون تغيير...
+  // ================================
+  // نسخة طارئة سريعة - بنفس الطريقة
+  // ================================
   Future<void> _createQuickBackupOnly() async {
     try {
-      // تحقق إذا كان المستخدم مسجل دخول
       if (_currentUser == null) {
         log('⚠️ لا يمكن إنشاء نسخة طارئة: المستخدم غير مسجل دخول');
         return;
@@ -237,21 +243,24 @@ class AuthProvider with ChangeNotifier {
       final db = await _dbHelper.db;
       final dbPath = db.path;
 
-      final backupDir = Directory(r"H:\My Drive\ShopMate_Backups");
+      // ✅ من config.json
+      final appConfig = AppConfig(
+        configFilePath: p.join(p.current, 'config.json'),
+      );
+      final backupDirPath = await appConfig.getBackupFolderPath();
+
+      final backupDir = Directory(backupDirPath);
       if (!backupDir.existsSync()) {
         backupDir.createSync(recursive: true);
       }
 
-      // اسم سريع للنسخة
       final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
       final backupFilePath = '${backupDir.path}/motamayez_backup_$timestamp.db';
 
-      // نسخ فوري
       File(dbPath).copySync(backupFilePath);
 
       log('⚡ تم إنشاء نسخة طارئة: ${p.basename(backupFilePath)}');
 
-      // تسجيل العملية
       final logFile = File('${backupDir.path}/backup_log.txt');
       final logEntry =
           '[${DateTime.now()}] ⚡ نسخة طارئة: ${p.basename(backupFilePath)}\n';
@@ -263,6 +272,9 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  // ================================
+  // باقي الدوال
+  // ================================
   Future<List<Map<String, dynamic>>> getUsersByRole(String role) async {
     try {
       final db = await _dbHelper.db;

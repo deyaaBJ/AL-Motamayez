@@ -24,11 +24,11 @@ class BaseLayout extends StatefulWidget {
 }
 
 class _BaseLayoutState extends State<BaseLayout> {
-  final ScrollController _scrollController = ScrollController();
+  final ScrollController _rightSidebarController = ScrollController();
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _rightSidebarController.dispose();
     super.dispose();
   }
 
@@ -73,7 +73,7 @@ class _BaseLayoutState extends State<BaseLayout> {
         Navigator.pushNamed(context, '/expenses');
         break;
       case 'الباتشات':
-        Navigator.pushNamed(context, '/batches'); // تأكد من وجود هذه الصفحة
+        Navigator.pushNamed(context, '/batches');
         break;
       case 'pos':
         Navigator.pushNamed(context, '/pos');
@@ -88,7 +88,6 @@ class _BaseLayoutState extends State<BaseLayout> {
     }
   }
 
-  // العناصر التي ستظهر في الشريط الجانبي الأيمن
   final List<Map<String, dynamic>> _rightSidebarItems = [
     {'icon': Icons.home_filled, 'label': 'الرئيسية', 'page': 'home'},
     {'icon': Icons.people_alt_rounded, 'label': 'العملاء', 'page': 'العملاء'},
@@ -103,13 +102,12 @@ class _BaseLayoutState extends State<BaseLayout> {
       'page': 'المصاريف',
     },
     {
-      'icon': Icons.inventory_2_rounded, // أيقونة مناسبة للباتشات
+      'icon': Icons.inventory_2_rounded,
       'label': 'الباتشات',
       'page': 'الباتشات',
     },
   ];
 
-  // العناصر التي ستظهر في الشريط العلوي مع إضافة نقاط البيع أولاً
   final List<Map<String, dynamic>> _topSidebarItems = [
     {
       'icon': Icons.point_of_sale_rounded,
@@ -136,19 +134,24 @@ class _BaseLayoutState extends State<BaseLayout> {
     {'icon': Icons.receipt_rounded, 'label': 'الفواتير', 'page': 'الفواتير'},
   ];
 
-  // بناء الشريط الجانبي الأيمن - يبدأ من بداية الشاشة
+  // ✅ بناء الشريط الجانبي الأيمن - items أصغر
   Widget _buildRightSidebar() {
     return Container(
-      width: 100,
+      width: 110,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF7C4DFF), Color(0xFF651FFF), Color(0xFF6200EA)],
+          colors: [
+            Color(0xFF8B5FBF),
+            Color(0xFF7C4DFF),
+            Color(0xFF6A3093),
+            Color(0xFF4A1C6D),
+          ],
         ),
         boxShadow: [
           BoxShadow(
-            color: Color.fromRGBO(98, 0, 234, 0.3),
+            color: Color.fromRGBO(74, 28, 109, 0.4),
             blurRadius: 15,
             spreadRadius: 2,
             offset: Offset(-3, 0),
@@ -157,13 +160,14 @@ class _BaseLayoutState extends State<BaseLayout> {
       ),
       child: Column(
         children: [
-          // أيقونة البرنامج في الأعلى - تقليل الارتفاع
+          // اللوقو
           Container(
-            height: 80, // تقليل من 100 إلى 80
+            height: 85,
+            padding: const EdgeInsets.all(10),
             child: Center(
               child: Container(
-                width: 55, // تقليل من 60 إلى 55
-                height: 55,
+                width: 60,
+                height: 60,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -171,7 +175,7 @@ class _BaseLayoutState extends State<BaseLayout> {
                     BoxShadow(
                       color: Colors.black.withOpacity(0.1),
                       blurRadius: 8,
-                      spreadRadius: 1,
+                      spreadRadius: 2,
                     ),
                   ],
                 ),
@@ -185,52 +189,63 @@ class _BaseLayoutState extends State<BaseLayout> {
               ),
             ),
           ),
-
-          // قائمة العناصر الرئيسية
+          const SizedBox(height: 8),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(
-                vertical: 5,
-              ), // تقليل من 10 إلى 5
-              itemCount: _rightSidebarItems.length,
-              itemBuilder: (context, index) {
-                final item = _rightSidebarItems[index];
-                final isSelected = widget.currentPage == item['page'];
+            child: Scrollbar(
+              controller: _rightSidebarController,
+              thumbVisibility: true,
+              child: ListView.separated(
+                controller: _rightSidebarController,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                itemCount: _rightSidebarItems.length,
+                separatorBuilder:
+                    (context, index) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final item = _rightSidebarItems[index];
+                  final isSelected = widget.currentPage == item['page'];
 
-                return _buildSidebarItem(
-                  icon: item['icon'],
-                  label: item['label'],
-                  isSelected: isSelected,
-                  onTap: () => _handlePageChange(item['page']),
-                );
-              },
+                  return _buildSidebarItem(
+                    icon: item['icon'],
+                    label: item['label'],
+                    isSelected: isSelected,
+                    onTap: () => _handlePageChange(item['page']),
+                  );
+                },
+              ),
             ),
           ),
-
-          // قسم الإعدادات وتسجيل الخروج
-          Column(
-            children: [
-              _buildSidebarItem(
-                icon: Icons.settings_rounded,
-                label: 'الإعدادات',
-                isSelected: widget.currentPage == 'settings',
-                onTap: () => _handlePageChange('settings'),
-              ),
-              _buildSidebarItem(
-                icon: Icons.logout_rounded,
-                label: 'تسجيل خروج',
-                isSelected: false,
-                onTap: () => _handlePageChange('logout'),
-                color: Colors.redAccent,
-              ),
-              const SizedBox(height: 8), // تقليل من 10 إلى 8
-            ],
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSidebarItem(
+                  icon: Icons.settings_rounded,
+                  label: 'الإعدادات',
+                  isSelected: widget.currentPage == 'settings',
+                  onTap: () => _handlePageChange('settings'),
+                ),
+                const SizedBox(height: 10),
+                _buildSidebarItem(
+                  icon: Icons.logout_rounded,
+                  label: 'خروج',
+                  isSelected: false,
+                  onTap: () => _handlePageChange('logout'),
+                  color: Colors.redAccent,
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
+  // ✅ items أصغر في السايد بار
   Widget _buildSidebarItem({
     required IconData icon,
     required String label,
@@ -238,165 +253,132 @@ class _BaseLayoutState extends State<BaseLayout> {
     required VoidCallback onTap,
     Color? color,
   }) {
-    return Container(
-      margin: const EdgeInsets.symmetric(
-        horizontal: 6,
-        vertical: 3,
-      ), // تقليل الهوامش
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        hoverColor: Colors.white.withOpacity(0.1),
-        child: Container(
-          decoration: BoxDecoration(
-            color:
-                isSelected
-                    ? Colors.white.withOpacity(0.15)
-                    : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            border:
-                isSelected
-                    ? Border.all(color: Colors.white.withOpacity(0.3), width: 1)
-                    : null,
-          ),
-          padding: const EdgeInsets.symmetric(
-            vertical: 12,
-            horizontal: 6,
-          ), // تقليل الحشو
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      hoverColor: Colors.white.withOpacity(0.15),
+      child: Container(
+        decoration: BoxDecoration(
+          color:
+              isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border:
+              isSelected
+                  ? Border.all(color: Colors.white.withOpacity(0.4), width: 1.5)
+                  : null,
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color ?? Colors.white, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
                 color: color ?? Colors.white,
-                size: 24,
-              ), // تقليل من 28 إلى 24
-              const SizedBox(height: 4), // تقليل من 6 إلى 4
-              Text(
-                label,
-                style: TextStyle(
-                  color: color ?? Colors.white,
-                  fontSize: 10, // تقليل من 11 إلى 10
-                  fontWeight: FontWeight.w500,
-                  height: 1.1, // تقليل من 1.2 إلى 1.1
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                height: 1.1,
               ),
-            ],
-          ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // بناء عنصر في الشريط العلوي مع تأثير Hover محسن
+  // ✅ بناء عنصر في الشريط العلوي
   Widget _buildTopSidebarItem({
     required Map<String, dynamic> item,
     required bool isSelected,
     required VoidCallback onTap,
-    required double itemWidth,
-    bool showText = true,
   }) {
     final isPrimary = item['isPrimary'] == true;
 
-    return Container(
-      width: itemWidth,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          decoration: BoxDecoration(
-            color:
-                isSelected
-                    ? const Color(0xFF7C4DFF).withOpacity(0.1)
-                    : (isPrimary
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            height: 48,
+            decoration: BoxDecoration(
+              color:
+                  isSelected
+                      ? const Color(0xFF8B5FBF).withOpacity(0.1)
+                      : (isPrimary
+                          ? const Color(0xFF8B5FBF)
+                          : Colors.transparent),
+              borderRadius: BorderRadius.circular(10),
+              border:
+                  isSelected
+                      ? Border.all(
+                        color: const Color(0xFF8B5FBF).withOpacity(0.4),
+                        width: 2,
+                      )
+                      : (isPrimary
+                          ? Border.all(color: const Color(0xFF8B5FBF), width: 2)
+                          : Border.all(color: Colors.transparent, width: 2)),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(10),
+                hoverColor:
+                    isPrimary
                         ? const Color(0xFF7C4DFF)
-                        : Colors.transparent),
-            borderRadius: BorderRadius.circular(12),
-            border:
-                isSelected
-                    ? Border.all(
-                      color: const Color(0xFF7C4DFF).withOpacity(0.3),
-                      width: 1.5,
-                    )
-                    : (isPrimary
-                        ? Border.all(color: const Color(0xFF7C4DFF), width: 1.5)
-                        : Border.all(color: Colors.transparent, width: 1.5)),
-            boxShadow:
-                isSelected || isPrimary
-                    ? [
-                      BoxShadow(
-                        color: const Color(0xFF7C4DFF).withOpacity(0.15),
-                        blurRadius: 10,
-                        spreadRadius: 1,
-                        offset: const Offset(0, 2),
-                      ),
-                    ]
-                    : null,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(12),
-              hoverColor:
-                  isPrimary
-                      ? const Color(0xFF651FFF)
-                      : const Color(0xFF7C4DFF).withOpacity(0.08),
-              splashColor: const Color(0xFF7C4DFF).withOpacity(0.2),
-              highlightColor: const Color(0xFF7C4DFF).withOpacity(0.1),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color:
-                            (isSelected || isPrimary)
-                                ? Colors.white.withOpacity(0.9)
-                                : const Color(0xFF7C4DFF).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        item['icon'],
-                        color:
-                            isSelected || isPrimary
-                                ? const Color(0xFF7C4DFF)
-                                : const Color(0xFF666666),
-                        size: 20,
-                      ),
-                    ),
-                    if (showText) const SizedBox(width: 8),
-                    if (showText)
-                      Flexible(
-                        child: AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 200),
-                          style: TextStyle(
+                        : const Color(0xFF8B5FBF).withOpacity(0.08),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final canShowText = constraints.maxWidth > 70;
+                    final canShowIcon = constraints.maxWidth > 40;
+
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (canShowIcon)
+                          Icon(
+                            item['icon'],
                             color:
                                 isSelected || isPrimary
                                     ? (isPrimary
                                         ? Colors.white
-                                        : const Color(0xFF7C4DFF))
-                                    : const Color(0xFF444444),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
+                                        : const Color(0xFF8B5FBF))
+                                    : const Color(0xFF666666),
+                            size: constraints.maxWidth > 90 ? 20 : 18,
                           ),
-                          child: Text(
-                            item['label'],
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
+                        if (canShowText && canShowIcon)
+                          const SizedBox(width: 6),
+                        if (canShowText)
+                          Flexible(
+                            child: Text(
+                              item['label'],
+                              style: TextStyle(
+                                color:
+                                    isSelected || isPrimary
+                                        ? (isPrimary
+                                            ? Colors.white
+                                            : const Color(0xFF8B5FBF))
+                                        : const Color(0xFF444444),
+                                fontWeight: FontWeight.w600,
+                                fontSize: constraints.maxWidth > 90 ? 12 : 11,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                            ),
                           ),
-                        ),
-                      ),
-                  ],
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -406,83 +388,66 @@ class _BaseLayoutState extends State<BaseLayout> {
     );
   }
 
-  // بناء الشريط العلوي
+  // ✅ بناء الشريط العلوي
   Widget _buildTopSidebar() {
     return Container(
-      height: 75,
+      height: 65,
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
+            color: Colors.grey.withOpacity(0.1),
             blurRadius: 20,
-            spreadRadius: 1,
+            spreadRadius: 2,
             offset: const Offset(0, 3),
           ),
         ],
         border: const Border(
-          bottom: BorderSide(color: Color(0xFFF5F5F5), width: 1),
+          bottom: BorderSide(color: Color(0xFFE0E0E0), width: 1),
         ),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final screenWidth = constraints.maxWidth;
-          final isMobile = screenWidth < 768;
-          final isSmallMobile = screenWidth < 480;
-          final isVerySmallMobile = screenWidth < 360;
 
-          // حساب عرض العنوان
           final double titleWidth =
-              isVerySmallMobile
-                  ? 100.0
-                  : (isSmallMobile ? 140.0 : (isMobile ? 180.0 : 200.0));
+              screenWidth < 400 ? 100.0 : (screenWidth < 600 ? 140.0 : 180.0);
 
-          // حساب المساحة المتبقية للعناصر
-          final double actionsWidth =
-              (widget.actions != null && !isSmallMobile) ? 60 : 0;
-          final double availableSpaceForItems =
-              screenWidth - titleWidth - actionsWidth - 20; // 20 للهامش
+          final double actionsWidth = (widget.actions != null) ? 50 : 0;
 
           return Row(
             children: [
-              // العنوان
+              // ✅ "المتميز" فاخر بدون container بنفسجي
               Container(
                 width: titleWidth,
-                padding: EdgeInsets.symmetric(
-                  horizontal: isVerySmallMobile ? 8 : (isMobile ? 16 : 24),
-                ),
-                child: Text(
-                  widget.title ?? 'المتميز',
-                  style: TextStyle(
-                    fontSize:
-                        isVerySmallMobile
-                            ? 12
-                            : (isSmallMobile ? 14 : (isMobile ? 16 : 18)),
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF333333),
-                    letterSpacing: -0.3,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: _buildFancyTitle(screenWidth),
               ),
 
-              // العناصر في الشريط العلوي
+              // ✅ الـ 6 items
               Expanded(
-                child: _buildResponsiveTopItems(
-                  availableWidth: availableSpaceForItems,
-                  isMobile: isMobile,
-                  isSmallMobile: isSmallMobile,
-                  isVerySmallMobile: isVerySmallMobile,
+                child: Row(
+                  children:
+                      _topSidebarItems.map((item) {
+                        final isSelected = widget.currentPage == item['page'];
+                        return _buildTopSidebarItem(
+                          item: item,
+                          isSelected: isSelected,
+                          onTap: () => _handlePageChange(item['page']),
+                        );
+                      }).toList(),
                 ),
               ),
 
-              // الإجراءات الإضافية
-              if (widget.actions != null && !isSmallMobile)
+              // ✅ الإجراءات
+              if (widget.actions != null)
                 Container(
                   width: actionsWidth,
-                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20),
-                  child: Row(children: widget.actions!),
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: widget.actions!,
+                  ),
                 ),
             ],
           );
@@ -491,70 +456,55 @@ class _BaseLayoutState extends State<BaseLayout> {
     );
   }
 
-  // بناء العناصر العلوية المتجاوبة
-  Widget _buildResponsiveTopItems({
-    required double availableWidth,
-    required bool isMobile,
-    required bool isSmallMobile,
-    required bool isVerySmallMobile,
-  }) {
-    // تحديد عرض كل عنصر بناءً على حجم الشاشة
-    double itemWidth;
-    bool showText = true;
+  // ✅ "المتميز" فاخر بدون container - نص عادي بستايل مميز
+  Widget _buildFancyTitle(double screenWidth) {
+    final double fontSize =
+        screenWidth < 400
+            ? 20 // ✅ أكبر
+            : (screenWidth < 600 ? 24 : 28); // ✅ أكبر وأوضح
 
-    if (isVerySmallMobile) {
-      itemWidth = 60; // أيقونة فقط
-      showText = false;
-    } else if (isSmallMobile) {
-      itemWidth = 90; // أيقونة مع نص مختصر
-    } else if (isMobile) {
-      itemWidth = 120; // أيقونة مع نص كامل
-    } else {
-      itemWidth = 140; // عرض كامل
-    }
-
-    // حساب إجمالي العرض المطلوب
-    final double totalItemsWidth = _topSidebarItems.length * itemWidth;
-
-    // إذا كان هناك مساحة كافية، نعرض كل العناصر في صف واحد
-    if (availableWidth >= totalItemsWidth) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children:
-              _topSidebarItems.map((item) {
-                final isSelected = widget.currentPage == item['page'];
-                return _buildTopSidebarItem(
-                  item: item,
-                  isSelected: isSelected,
-                  onTap: () => _handlePageChange(item['page']),
-                  itemWidth: itemWidth,
-                  showText: showText,
-                );
-              }).toList(),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // ✅ أيقونة صغيرة قبل الاسم (اختياري)
+        const SizedBox(width: 4),
+        // ✅ النص بستايل فاخر
+        Text(
+          'المتميز',
+          style: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w900,
+            fontFamily: 'Amiri',
+            // ✅ gradient text بدون container
+            foreground:
+                Paint()
+                  ..shader = const LinearGradient(
+                    colors: [
+                      Color(0xFF8B5FBF),
+                      Color(0xFF6A3093),
+                      Color(0xFF4A1C6D),
+                    ],
+                  ).createShader(const Rect.fromLTWH(0, 0, 200, 70)),
+            letterSpacing: 2, // ✅ تباعد أكبر
+            shadows: [
+              Shadow(
+                color: const Color(0xFF8B5FBF).withOpacity(0.4),
+                blurRadius: 12,
+                offset: const Offset(2, 2),
+              ),
+              Shadow(
+                color: Colors.white.withOpacity(0.8),
+                blurRadius: 4,
+                offset: const Offset(-1, -1),
+              ),
+            ],
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
         ),
-      );
-    } else {
-      // إذا لم تكن هناك مساحة كافية، نستخدم تمريراً أفقياً
-      return ListView.builder(
-        controller: _scrollController,
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        itemCount: _topSidebarItems.length,
-        itemBuilder: (context, index) {
-          final item = _topSidebarItems[index];
-          final isSelected = widget.currentPage == item['page'];
-          return _buildTopSidebarItem(
-            item: item,
-            isSelected: isSelected,
-            onTap: () => _handlePageChange(item['page']),
-            itemWidth: itemWidth,
-            showText: showText,
-          );
-        },
-      );
-    }
+      ],
+    );
   }
 
   @override
@@ -563,17 +513,17 @@ class _BaseLayoutState extends State<BaseLayout> {
       backgroundColor: const Color(0xFFF8F9FF),
       body: Row(
         children: [
-          // الشريط الجانبي الأيمن - يبدأ من بداية الشاشة
+          // الشريط الجانبي الأيمن
           _buildRightSidebar(),
 
-          // المحتوى الرئيسي مع الشريط العلوي
+          // المحتوى الرئيسي
           Expanded(
             child: Column(
               children: [
                 // الشريط العلوي
                 _buildTopSidebar(),
 
-                // المحتوى الرئيسي
+                // المحتوى
                 Expanded(
                   child: SafeArea(
                     left: false,
@@ -583,13 +533,13 @@ class _BaseLayoutState extends State<BaseLayout> {
                       decoration: const BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(20),
+                          topLeft: Radius.circular(16),
                         ),
                       ),
-                      margin: const EdgeInsets.only(left: 2, top: 2, bottom: 2),
+                      margin: const EdgeInsets.only(left: 1, top: 1),
                       child: ClipRRect(
                         borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(20),
+                          topLeft: Radius.circular(16),
                         ),
                         child: widget.child,
                       ),
