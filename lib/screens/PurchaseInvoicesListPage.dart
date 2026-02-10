@@ -847,20 +847,17 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
               );
             },
           ),
-          floatingActionButton: Hero(
-            tag: 'purchase_invoices_fab',
-            child: FloatingActionButton(
-              onPressed: () {
-                Navigator.pushNamed(context, '/purchase-invoice');
-              },
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(50),
-              ),
-              elevation: 4,
-              child: const Icon(Icons.add, size: 28),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/purchase-invoice');
+            },
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(50),
             ),
+            elevation: 4,
+            child: const Icon(Icons.add, size: 28),
           ),
         ),
       ),

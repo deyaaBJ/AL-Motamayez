@@ -127,7 +127,6 @@ class ProductProvider with ChangeNotifier {
                 quantity: ((map['quantity'] ?? 0) as num).toDouble(),
                 costPrice: ((map['cost_price'] ?? 0) as num).toDouble(),
                 addedDate: map['added_date'] as String?,
-                hasExpiry: (map['has_expiry'] as int?) == 1,
                 hasExpiryDate: (map['has_expiry_date'] as int?) == 1,
                 active: (map['active'] as int?) != 0,
               );
@@ -315,7 +314,6 @@ class ProductProvider with ChangeNotifier {
           quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
           costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
           addedDate: map['added_date'] as String?,
-          hasExpiry: map['has_expiry'] == 1,
           hasExpiryDate: (map['has_expiry_date'] as int?) == 1,
           active: (map['active'] as int?) != 0,
         );
@@ -512,7 +510,6 @@ class ProductProvider with ChangeNotifier {
         quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
         costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
         addedDate: map['added_date'] as String?,
-        hasExpiry: map['has_expiry'] == 1,
         hasExpiryDate: (map['has_expiry_date'] as int?) == 1,
         active: (map['active'] as int?) != 0,
       );
@@ -602,41 +599,6 @@ class ProductProvider with ChangeNotifier {
         }
       }
 
-      // 🔹 التحقق من توفر الكميات في الدفعات
-      for (var item in cartItems) {
-        if (item.isService) continue;
-
-        final product = item.product!;
-        double requiredQty = item.quantity;
-
-        if (item.selectedUnit != null) {
-          requiredQty = item.quantity * item.selectedUnit!.containQty;
-        }
-
-        if (requiredQty <= 0) continue;
-
-        final batchResult = await txn.rawQuery(
-          '''
-          SELECT SUM(remaining_quantity) as total_available
-          FROM product_batches 
-          WHERE product_id = ? AND remaining_quantity > 0 AND active = 1
-        ''',
-          [product.id],
-        );
-
-        final double totalAvailable =
-            (batchResult.first['total_available'] as num?)?.toDouble() ?? 0;
-
-        if (totalAvailable < requiredQty) {
-          throw Exception(
-            'المنتج "${product.name}" لا يوجد به كمية كافية في الدفعات. '
-            'المتاح: ${totalAvailable.toStringAsFixed(2)}، '
-            'المطلوب: ${requiredQty.toStringAsFixed(2)}',
-          );
-        }
-      }
-
-      // 🔹 إضافة الفاتورة الرئيسية
       final saleId = await txn.insert('sales', {
         'date': DateTime.now().toIso8601String(),
         'total_amount': totalAmount,
@@ -680,7 +642,7 @@ class ProductProvider with ChangeNotifier {
           requiredQtyInBaseUnit = item.quantity * item.selectedUnit!.containQty;
         }
 
-        // 🔹 خصم من الدفعات الأقدم أولاً (FIFO)
+        // 🔹 خصم من الدفعات الأقدم أولاً (FIFO) - إذا كانت موجودة فقط
         final batches = await txn.rawQuery(
           '''
           SELECT * FROM product_batches 
@@ -698,69 +660,82 @@ class ProductProvider with ChangeNotifier {
           [product.id],
         );
 
-        if (batches.isEmpty) {
-          throw Exception('لا توجد دفعات متاحة للمنتج ${product.name}');
-        }
-
-        double remainingToDeduct = requiredQtyInBaseUnit;
         List<Map<String, dynamic>> itemDeductions = [];
         double itemTotalCost = 0.0;
         double itemProfit = 0.0;
 
-        for (var batch in batches) {
-          if (remainingToDeduct <= 0) break;
+        // إذا في دفعات، نخصم منها
+        if (batches.isNotEmpty) {
+          double remainingToDeduct = requiredQtyInBaseUnit;
 
-          final batchId = batch['id'] as int;
-          final double batchQty =
-              (batch['remaining_quantity'] as num).toDouble();
-          final double batchCost = (batch['cost_price'] as num).toDouble();
-          final String? batchExpiry = batch['expiry_date'] as String?;
+          for (var batch in batches) {
+            if (remainingToDeduct <= 0) break;
 
-          final double toDeduct =
-              batchQty >= remainingToDeduct ? remainingToDeduct : batchQty;
+            final batchId = batch['id'] as int;
+            final double batchQty =
+                (batch['remaining_quantity'] as num).toDouble();
+            final double batchCost = (batch['cost_price'] as num).toDouble();
+            final String? batchExpiry = batch['expiry_date'] as String?;
 
-          // تحديث الدفعة
-          final double newQty = batchQty - toDeduct;
-          await txn.update(
-            'product_batches',
-            {
-              'remaining_quantity': newQty,
-              'active': newQty > 0 ? 1 : 0, // استخدام 1 و0 بدلاً من bool
-            },
-            where: 'id = ?',
-            whereArgs: [batchId],
-          );
+            final double toDeduct =
+                batchQty >= remainingToDeduct ? remainingToDeduct : batchQty;
 
-          itemDeductions.add({
-            'batchId': batchId,
-            'quantity': toDeduct,
-            'costPrice': batchCost,
-            'expiryDate': batchExpiry,
-          });
+            // تحديث الدفعة
+            final double newQty = batchQty - toDeduct;
+            await txn.update(
+              'product_batches',
+              {'remaining_quantity': newQty, 'active': newQty > 0 ? 1 : 0},
+              where: 'id = ?',
+              whereArgs: [batchId],
+            );
 
-          // حساب التكلفة والربح
-          final double batchCostAmount = toDeduct * batchCost;
-          itemTotalCost += batchCostAmount;
+            itemDeductions.add({
+              'batchId': batchId,
+              'quantity': toDeduct,
+              'costPrice': batchCost,
+              'expiryDate': batchExpiry,
+            });
+
+            // حساب التكلفة والربح
+            final double batchCostAmount = toDeduct * batchCost;
+            itemTotalCost += batchCostAmount;
+
+            final double unitPrice =
+                item.selectedUnit?.sellPrice ?? product.price;
+            double soldQtyInUnit;
+
+            if (item.selectedUnit != null) {
+              soldQtyInUnit = toDeduct / item.selectedUnit!.containQty;
+            } else {
+              soldQtyInUnit = toDeduct;
+            }
+
+            final double batchRevenue = unitPrice * soldQtyInUnit;
+            final double batchProfit =
+                batchRevenue - (batchCost * soldQtyInUnit);
+            itemProfit += batchProfit;
+
+            remainingToDeduct -= toDeduct;
+          }
+
+          log('📦 تم خصم من الدفعات للمنتج ${product.name}');
+        } else {
+          // إذا ما في دفعات، نحسب التكلفة من السعر الأساسي للمنتج
+          itemTotalCost = requiredQtyInBaseUnit * product.costPrice;
 
           final double unitPrice =
               item.selectedUnit?.sellPrice ?? product.price;
-          double soldQtyInUnit;
+          double soldQtyInUnit =
+              item.selectedUnit != null
+                  ? requiredQtyInBaseUnit / item.selectedUnit!.containQty
+                  : requiredQtyInBaseUnit;
 
-          if (item.selectedUnit != null) {
-            soldQtyInUnit = toDeduct / item.selectedUnit!.containQty;
-          } else {
-            soldQtyInUnit = toDeduct;
-          }
+          final double revenue = unitPrice * soldQtyInUnit;
+          itemProfit = revenue - itemTotalCost;
 
-          final double batchRevenue = unitPrice * soldQtyInUnit;
-          final double batchProfit = batchRevenue - (batchCost * soldQtyInUnit);
-          itemProfit += batchProfit;
-
-          remainingToDeduct -= toDeduct;
-        }
-
-        if (remainingToDeduct > 0) {
-          throw Exception('كمية غير كافية للمنتج ${product.name}');
+          log(
+            '⚠️ لا توجد دفعات للمنتج ${product.name} - تم البيع بدون خصم من الدفعات',
+          );
         }
 
         // حفظ تفاصيل الخصم

@@ -10,7 +10,6 @@ import 'package:motamayez/widgets/product_filter_bar.dart';
 import 'package:motamayez/widgets/product_item.dart';
 import 'package:motamayez/widgets/product_table_header.dart';
 import 'dart:developer';
-
 import 'package:provider/provider.dart';
 
 class ProductsScreen extends StatefulWidget {
@@ -97,48 +96,85 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   // ✅ تحديث شريط البحث ليتناسب مع الفلتر
+  // ✅ Search Bar مع عدد المنتجات بجانبه
   Widget _buildSearchBar() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: Colors.transparent,
-      child: TextField(
-        onChanged: (value) async {
-          setState(() => _searchQuery = value.trim());
-
-          if (value.isEmpty) {
-            setState(() => _searchResults = []);
-            return;
-          }
-
-          // تحديد حالة active بناءً على الفلتر الحالي
-          bool? active;
-          switch (_currentFilter) {
-            case ProductFilter.inactive:
-              active = false;
-              break;
-            case ProductFilter.all:
-              active = null; // البحث في جميع المنتجات
-              break;
-            default:
-              active = true; // البحث في المنتجات النشطة فقط
-          }
-
-          final results = await _provider.searchProducts(value, active: active);
-          setState(() => _searchResults = results);
-        },
-        decoration: InputDecoration(
-          hintText: '🔍 ابحث عن منتج...',
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+      child: Row(
+        children: [
+          // ✅ عدد المنتجات (شارة صغيرة)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: _getFilterColor().withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _getFilterColor(), width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.inventory_2, size: 16, color: _getFilterColor()),
+                const SizedBox(width: 6),
+                Text(
+                  '${_provider.totalProducts}',
+                  style: TextStyle(
+                    color: _getFilterColor(),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
           ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
+
+          const SizedBox(width: 12),
+
+          // ✅ Search Bar (ياخد باقي المساحة)
+          Expanded(
+            child: TextField(
+              onChanged: (value) async {
+                setState(() => _searchQuery = value.trim());
+
+                if (value.isEmpty) {
+                  setState(() => _searchResults = []);
+                  return;
+                }
+
+                bool? active;
+                switch (_currentFilter) {
+                  case ProductFilter.inactive:
+                    active = false;
+                    break;
+                  case ProductFilter.all:
+                    active = null;
+                    break;
+                  default:
+                    active = true;
+                }
+
+                final results = await _provider.searchProducts(
+                  value,
+                  active: active,
+                );
+                setState(() => _searchResults = results);
+              },
+              decoration: InputDecoration(
+                hintText: '🔍 ابحث عن منتج...',
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -355,8 +391,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
               currentFilter: _currentFilter,
               onFilterChanged: _loadProductsByFilter,
             ),
-            _buildTotalProductsIndicator(),
-            _buildSearchBar(),
+            // ✅ شيل _buildTotalProductsIndicator() إذا بدك، أو خليه فوق
+            _buildSearchBar(), // ✅ هلأ فيه العدد بجانبه
             ProductTableHeader(columns: productTableColumns),
             Expanded(child: _buildProductsList()),
           ],

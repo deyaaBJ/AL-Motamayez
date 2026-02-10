@@ -202,14 +202,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
             icon: const Icon(Icons.picture_as_pdf),
             tooltip: 'تصدير التقرير PDF',
           ),
+
           // زر تحديث البيانات
-          IconButton(
-            onPressed: () {
-              context.read<ReportsProvider>().loadReportsData();
-            },
-            icon: const Icon(Icons.refresh),
-            tooltip: 'تحديث البيانات',
-          ),
         ],
         floatingActionButton: null,
         child: Consumer<ReportsProvider>(
