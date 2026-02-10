@@ -5,7 +5,7 @@ import 'dart:developer';
 
 class DBHelper {
   static Database? _db;
-  static const int _version = 1; // ⬅️ رجعه ل 1 لأنك ستخلي الداتا وتعيدها
+  static const int _version = 2; // ⬅️ رفعنا من 1 لـ 2
 
   Future<Database> get db async {
     if (_db != null) return _db!;
@@ -14,7 +14,6 @@ class DBHelper {
   }
 
   Future<Database> initDb() async {
-    // تهيئة sqflite للويب أو سطح المكتب
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
@@ -29,10 +28,51 @@ class DBHelper {
       path,
       version: _version,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade, // ⬅️ جديد: دالة الترقية
     );
 
     return database;
   }
+
+  // ⬅️ جديد: دالة الترقية بين النسخ
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    log('🔄 ترقية قاعدة البيانات من النسخة $oldVersion إلى $newVersion');
+
+    if (oldVersion < 2) {
+      await _upgradeToVersion2(db);
+    }
+
+    // لو في نسخ مستقبلية:
+    // if (oldVersion < 3) {
+    //   await _upgradeToVersion3(db);
+    // }
+  }
+
+  // ⬅️ جديد: الترقية للنسخة 2 (إضافة user_id)
+  Future<void> _upgradeToVersion2(Database db) async {
+    try {
+      log('⬆️ بدء الترقية للنسخة 2...');
+
+      // التحقق إذا العمود موجود أو لا
+      final columns = await db.rawQuery('PRAGMA table_info(sales)');
+      bool hasUserId = columns.any((col) => col['name'] == 'user_id');
+
+      if (!hasUserId) {
+        // إضافة العمود الجديد
+        await db.execute('''
+          ALTER TABLE sales 
+          ADD COLUMN user_id INTEGER 
+          REFERENCES users(id) ON DELETE SET NULL
+        ''');
+        log('✅ تم إضافة عمود user_id بنجاح');
+      } else {
+        log('ℹ️ عمود user_id موجود مسبقاً');
+      }
+    } catch (e) {
+      log('❌ خطأ في الترقية للنسخة 2: $e');
+      rethrow;
+    }
+  } // ⬅️ رجعه ل 1 لأنك ستخلي الداتا وتعيدها
 
   Future _onCreate(Database db, int version) async {
     // ========== جدول المنتجات ==========

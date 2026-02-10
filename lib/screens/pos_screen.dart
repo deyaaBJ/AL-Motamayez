@@ -1311,6 +1311,7 @@ class _PosScreenState extends State<PosScreen>
     }
 
     final auth = context.read<AuthProvider>();
+    final user = auth.currentUser;
     final productProvider = context.read<ProductProvider>();
 
     try {
@@ -1335,6 +1336,7 @@ class _PosScreenState extends State<PosScreen>
         paymentType: 'cash',
         customerId: null,
         userRole: auth.role ?? 'user',
+        userId: user?["id"],
       );
 
       if (mounted) {
@@ -1598,6 +1600,7 @@ class _PosScreenState extends State<PosScreen>
 
   Future<void> _finalizeSaleWithCustomer(Customer customer) async {
     final auth = context.read<AuthProvider>();
+    final user = auth.currentUser;
     final productProvider = context.read<ProductProvider>();
     final debtProvider = context.read<DebtProvider>();
 
@@ -1623,6 +1626,7 @@ class _PosScreenState extends State<PosScreen>
         paymentType: 'credit',
         customerId: customer.id,
         userRole: auth.role ?? 'user',
+        userId: user?["id"],
       );
 
       await debtProvider.addCreditSale(

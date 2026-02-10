@@ -572,10 +572,11 @@ class ProductProvider with ChangeNotifier {
     String paymentType = 'cash',
     int? customerId,
     required String userRole,
+    required int userId, // ⬅️ جديد: معرف المستخدم
   }) async {
     final db = await _dbHelper.db;
 
-    log('🛒 بدء عملية بيع جديدة');
+    log('🛒 بدء عملية بيع جديدة - المستخدم: $userId');
 
     await db.transaction((txn) async {
       // 🔹 تحديد قيمة showForTax
@@ -606,6 +607,7 @@ class ProductProvider with ChangeNotifier {
         'customer_id': customerId,
         'payment_type': paymentType,
         'show_for_tax': showForTax,
+        'user_id': userId, // ⬅️ جديد: حفظ معرف المستخدم
       });
 
       double totalProfit = 0.0;
@@ -645,18 +647,18 @@ class ProductProvider with ChangeNotifier {
         // 🔹 خصم من الدفعات الأقدم أولاً (FIFO) - إذا كانت موجودة فقط
         final batches = await txn.rawQuery(
           '''
-          SELECT * FROM product_batches 
-          WHERE product_id = ? 
-            AND remaining_quantity > 0 
-            AND active = 1
-          ORDER BY 
-            CASE 
-              WHEN expiry_date IS NOT NULL AND expiry_date != '' 
-              THEN expiry_date 
-              ELSE '9999-12-31' 
-            END ASC,
-            created_at ASC
-        ''',
+        SELECT * FROM product_batches 
+        WHERE product_id = ? 
+          AND remaining_quantity > 0 
+          AND active = 1
+        ORDER BY 
+          CASE 
+            WHEN expiry_date IS NOT NULL AND expiry_date != '' 
+            THEN expiry_date 
+            ELSE '9999-12-31' 
+          END ASC,
+          created_at ASC
+      ''',
           [product.id],
         );
 
@@ -798,17 +800,17 @@ class ProductProvider with ChangeNotifier {
       // 🔹 حفظ سجل الدفعات (اختياري)
       try {
         await txn.execute('''
-          CREATE TABLE IF NOT EXISTS sale_batch_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sale_id INTEGER NOT NULL,
-            product_id INTEGER NOT NULL,
-            batch_id INTEGER NOT NULL,
-            deducted_quantity REAL NOT NULL,
-            cost_price REAL NOT NULL,
-            expiry_date TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-          )
-        ''');
+        CREATE TABLE IF NOT EXISTS sale_batch_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sale_id INTEGER NOT NULL,
+          product_id INTEGER NOT NULL,
+          batch_id INTEGER NOT NULL,
+          deducted_quantity REAL NOT NULL,
+          cost_price REAL NOT NULL,
+          expiry_date TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
 
         for (var deduction in allBatchDeductions) {
           await txn.insert('sale_batch_log', {
@@ -828,14 +830,14 @@ class ProductProvider with ChangeNotifier {
       if (paymentType == 'credit' && customerId != null) {
         await txn.rawUpdate(
           '''
-          INSERT OR REPLACE INTO customer_balance 
-          (customer_id, balance, last_updated)
-          VALUES (
-            ?,
-            COALESCE((SELECT balance FROM customer_balance WHERE customer_id = ?), 0) + ?,
-            ?
-          )
-          ''',
+        INSERT OR REPLACE INTO customer_balance 
+        (customer_id, balance, last_updated)
+        VALUES (
+          ?,
+          COALESCE((SELECT balance FROM customer_balance WHERE customer_id = ?), 0) + ?,
+          ?
+        )
+        ''',
           [
             customerId,
             customerId,
@@ -845,7 +847,9 @@ class ProductProvider with ChangeNotifier {
         );
       }
 
-      log('✅ تم إتمام الفاتورة رقم: $saleId - الربح: $totalProfit');
+      log(
+        '✅ تم إتمام الفاتورة رقم: $saleId - الربح: $totalProfit - المستخدم: $userId',
+      );
     });
 
     notifyListeners();

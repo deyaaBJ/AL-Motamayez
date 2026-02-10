@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:motamayez/providers/DebtProvider.dart';
+import 'package:motamayez/providers/cashier_activity_provider.dart';
 import 'package:motamayez/screens/PurchaseInvoicesListPage.dart';
 import 'package:motamayez/screens/SalesHistoryScreen.dart';
+import 'package:motamayez/screens/cashier_activity_screen.dart';
 import 'package:motamayez/screens/csuppliers_list_page.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -38,10 +40,13 @@ import 'screens/activation_page.dart';
 import 'screens/invalid_signature_screen.dart';
 import 'screens/batches_screen.dart';
 import 'services/activation_service.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
+  await ('ar', null);
+
   WidgetsFlutterBinding.ensureInitialized();
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -75,6 +80,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => TemporaryInvoiceProvider()),
         ChangeNotifierProvider(create: (_) => BatchProvider()),
+        ChangeNotifierProvider(create: (_) => CashierActivityProvider()),
       ],
       child: const MotamayezApp(),
     ),
@@ -137,6 +143,7 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
         '/activation': (_) => const ActivationPage(),
         '/invalidSignature': (_) => const InvalidSignatureScreen(),
         '/batches': (_) => const BatchesScreen(),
+        '/cashier': (_) => const CashierActivityScreen(),
       },
     );
   }

@@ -72,8 +72,11 @@ class _BaseLayoutState extends State<BaseLayout> {
       case 'المصاريف':
         Navigator.pushNamed(context, '/expenses');
         break;
-      case 'الباتشات':
+      case 'الدفعات':
         Navigator.pushNamed(context, '/batches');
+        break;
+      case 'cashier':
+        Navigator.pushNamed(context, '/cashier');
         break;
       case 'pos':
         Navigator.pushNamed(context, '/pos');
@@ -101,10 +104,11 @@ class _BaseLayoutState extends State<BaseLayout> {
       'label': 'المصاريف',
       'page': 'المصاريف',
     },
+    {'icon': Icons.inventory_2_rounded, 'label': 'الدفعات', 'page': 'الدفعات'},
     {
-      'icon': Icons.inventory_2_rounded,
-      'label': 'الباتشات',
-      'page': 'الباتشات',
+      'icon': Icons.receipt_long_rounded,
+      'label': 'نشاط الكاشير',
+      'page': 'cashier',
     },
   ];
 
