@@ -32,7 +32,7 @@ import 'screens/products.dart';
 import 'screens/pos_screen.dart';
 import 'screens/customers_screen.dart';
 import 'screens/reports_screen.dart';
-import 'screens/settings_screen.dart';
+import 'screens/settings/settings_screen.dart';
 import 'screens/purchase_invoice_page.dart';
 
 import 'screens/expenses_page.dart';

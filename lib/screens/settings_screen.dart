@@ -48,12 +48,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _printerIpController = TextEditingController();
   final TextEditingController _printerPortController = TextEditingController();
 
-  bool _isEditingAdmin = false;
-  bool _isEditingCashier = false;
-  bool _isEditingTax = false;
-  bool _isAdminPassword = true;
-  bool _isCashierPassword = true;
-
   // متغيرات لإخفاء كلمات المرور
   bool _obscureAdminPassword = true;
   bool _obscureCashierPassword = true;
@@ -162,23 +156,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl, // واجهة عربية كاملة
+      textDirection: TextDirection.rtl,
       child: BaseLayout(
-        currentPage: 'settings', // اسم الصفحة للسايدبار
+        currentPage: 'settings',
         title: 'الإعدادات',
-        actions: [
-          IconButton(
-            onPressed: () {
-              // أي عملية تحديث إذا احتجت
-            },
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: _buildResponsiveLayout(constraints.maxWidth),
+              padding: const EdgeInsets.all(24),
+              child: _buildMainGrid(constraints.maxWidth),
             );
           },
         ),
@@ -186,268 +172,313 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildResponsiveLayout(double maxWidth) {
-    if (maxWidth < 900) {
-      return _buildMobileLayout();
-    } else {
-      return _buildDesktopLayout();
-    }
-  }
+  Widget _buildMainGrid(double maxWidth) {
+    // تحديد عدد الأعمدة حسب عرض الشاشة
+    int crossAxisCount =
+        maxWidth < 600
+            ? 1
+            : maxWidth < 1200
+            ? 2
+            : 3;
 
-  Widget _buildMobileLayout() {
-    return Column(
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: crossAxisCount,
+      crossAxisSpacing: 20,
+      mainAxisSpacing: 20,
+      childAspectRatio: 1.1,
       children: [
-        _buildAdminCard(),
-        const SizedBox(height: 20),
-        _buildCashierCard(),
-
-        const SizedBox(height: 20),
-
-        _buildContactCard(),
-        const SizedBox(height: 20),
-        _buildTaxCard(),
-        const SizedBox(height: 20),
-        _buildStockSettingsCard(),
-        const SizedBox(height: 20),
-        _buildTaxSettingsCard(),
-        const SizedBox(height: 20),
-        _buildCurrencyCard(),
-        const SizedBox(height: 20),
-        _buildPrinterSettingsCard(),
-        const SizedBox(height: 20),
-        _buildBackupSettingsCard(), // الكارت الجديد
-      ],
-    );
-  }
-
-  Widget _buildDesktopLayout() {
-    return Column(
-      children: [
-        // الصف الأول: الحسابات
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                children: [
-                  _buildAdminCard(),
-                  const SizedBox(height: 20),
-                  _buildCashierCard(),
-                ],
+        _buildMainCard(
+          title: 'حساب المدير',
+          subtitle: 'إدارة بيانات المدير وكلمة المرور',
+          icon: Icons.admin_panel_settings,
+          color: const Color(0xFFFF6B35),
+          gradient: const [Color(0xFFFF6B35), Color(0xFFFF8E53)],
+          onTap:
+              () => _navigateToDetail(
+                AdminDetailScreen(
+                  nameController: _adminNameController,
+                  emailController: _adminEmailController,
+                  phoneController: _adminPhoneController,
+                  passwordController: _currentPasswordAdminController,
+                  onSave: _saveAdminChanges,
+                  onChangePassword: () => _showChangePasswordDialog('admin'),
+                ),
               ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                children: [
-                  _buildContactCard(),
-
-                  const SizedBox(height: 20),
-                  _buildTaxCard(),
-                ],
+        ),
+        _buildMainCard(
+          title: 'الكاشيرز',
+          subtitle: 'إدارة جميع الكاشيرز وإضافة جديد',
+          icon: Icons.people_alt,
+          color: const Color(0xFF4A90E2),
+          gradient: const [Color(0xFF4A90E2), Color(0xFF5BA0F2)],
+          onTap: () => _navigateToDetail(const CashiersManagementScreen()),
+        ),
+        _buildMainCard(
+          title: 'حساب الضريبة',
+          subtitle: 'إعدادات حساب الضريبة والتقارير',
+          icon: Icons.account_balance,
+          color: const Color(0xFF34C759),
+          gradient: const [Color(0xFF34C759), Color(0xFF44D769)],
+          onTap:
+              () => _navigateToDetail(
+                TaxDetailScreen(
+                  nameController: _taxNameController,
+                  emailController: _taxEmailController,
+                  passwordController: _currentPasswordTaxController,
+                  onSave: _saveTaxChanges,
+                  onChangePassword: () => _showChangePasswordDialog('tax'),
+                ),
               ),
-            ),
-          ],
         ),
-        const SizedBox(height: 20),
-
-        // الصف الثاني: الإعدادات - الثلاث كروت بنفس الحجم
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // إعدادات المخزون
-            Expanded(child: _buildStockSettingsCard()),
-            const SizedBox(width: 15),
-
-            // الإعدادات الضريبية
-            Expanded(child: _buildTaxSettingsCard()),
-            const SizedBox(width: 15),
-
-            // إعدادات العملة
-            Expanded(child: _buildCurrencyCard()),
-          ],
-        ),
-        const SizedBox(height: 20),
-        // الصف الثالث: إعدادات الطباعة والنسخ الاحتياطي
-        Row(
-          children: [
-            Expanded(child: _buildPrinterSettingsCard()),
-            const SizedBox(width: 15),
-            Expanded(child: _buildBackupSettingsCard()), // الكارت الجديد
-          ],
-        ),
-      ],
-    );
-  }
-
-  // الكارت الجديد: إعدادات النسخ الاحتياطي
-  Widget _buildBackupSettingsCard() {
-    return Consumer<SettingsProvider>(
-      builder: (context, settingsProvider, child) {
-        return _buildSettingsCard(
-          title: 'إعدادات النسخ الاحتياطي',
-          icon: Icons.backup,
+        _buildMainCard(
+          title: 'إعدادات المتجر',
+          subtitle: 'اسم المتجر والعملة والمخزون',
+          icon: Icons.store,
           color: const Color(0xFF9C27B0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          gradient: const [Color(0xFF9C27B0), Color(0xFFBA68C8)],
+          onTap:
+              () => _navigateToDetail(
+                StoreSettingsScreen(
+                  marketNameController: _marketNameController,
+                  backupFolderPath: _backupFolderPath,
+                  onSelectBackupFolder: _selectBackupFolder,
+                  onSaveMarketName: _saveMarketName,
+                ),
+              ),
+        ),
+        _buildMainCard(
+          title: 'الطابعة والفواتير',
+          subtitle: 'إعدادات الطباعة وحجم الورق',
+          icon: Icons.print,
+          color: const Color(0xFF009688),
+          gradient: const [Color(0xFF009688), Color(0xFF26A69A)],
+          onTap:
+              () => _navigateToDetail(
+                PrinterSettingsScreen(
+                  ipController: _printerIpController,
+                  portController: _printerPortController,
+                ),
+              ),
+        ),
+        _buildMainCard(
+          title: 'الدعم الفني',
+          subtitle: 'معلومات التواصل والمساعدة',
+          icon: Icons.support_agent,
+          color: const Color(0xFF6A3093),
+          gradient: const [Color(0xFF6A3093), Color(0xFF8B5FBF)],
+          onTap: () => _showSupportDialog(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMainCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required List<Color> gradient,
+    required VoidCallback onTap,
+  }) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: gradient,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Stack(
             children: [
-              // حقل إدخال اسم السوبر ماركت
-              const Text(
-                'اسم السوبر ماركت:',
-                style: TextStyle(fontSize: 15, color: Colors.grey),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _marketNameController,
-                decoration: InputDecoration(
-                  labelText: 'أدخل اسم السوبر ماركت',
-                  prefixIcon: const Icon(Icons.store, color: Color(0xFF9C27B0)),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF9C27B0),
-                      width: 2,
-                    ),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                ),
-                onSubmitted: (value) {
-                  _saveMarketName(value);
-                },
-              ),
-              const SizedBox(height: 20),
-
-              // عدد النسخ الاحتياطية
-              const Text(
-                'عدد النسخ الاحتياطية:',
-                style: TextStyle(fontSize: 15, color: Colors.grey),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: settingsProvider.numberOfCopies ?? 1,
-                    isExpanded: true,
-                    icon: const Icon(
-                      Icons.arrow_drop_down,
-                      color: Color(0xFF9C27B0),
-                    ),
-                    items: List.generate(7, (index) {
-                      final value = index + 1;
-                      return DropdownMenuItem<int>(
-                        value: value,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            '$value نسخة',
-                            style: const TextStyle(fontSize: 15),
-                          ),
-                        ),
-                      );
-                    }),
-                    onChanged: (int? newValue) {
-                      if (newValue != null) {
-                        settingsProvider.updateNumberOfCopies(newValue);
-                        showAppToast(
-                          context,
-                          'تم تعيين عدد النسخ الاحتياطية إلى $newValue',
-                          ToastType.success,
-                        );
-                      }
-                    },
+              // الدائرة الزخرفية
+              Positioned(
+                left: -30,
+                top: -30,
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.1),
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-
-              // اختيار مكان النسخ الاحتياطي
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'مكان النسخ الاحتياطي:',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF333333),
-                    ),
+              Positioned(
+                right: -20,
+                bottom: -20,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.1),
                   ),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[300]!),
+                ),
+              ),
+              // المحتوى
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(icon, color: Colors.white, size: 32),
                     ),
-                    child: Row(
+                    const SizedBox(height: 20),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.9),
+                      ),
+                    ),
+                    const Spacer(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Icon(
-                          Icons.folder,
-                          color:
-                              _backupFolderPath != null
-                                  ? const Color(0xFF4CAF50)
-                                  : Colors.grey,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _backupFolderPath ?? 'لم يتم تحديد مكان',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color:
-                                  _backupFolderPath != null
-                                      ? const Color(0xFF4CAF50)
-                                      : Colors.grey,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'إدارة',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(width: 4),
+                              Icon(
+                                Icons.arrow_forward_ios,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _navigateToDetail(Widget screen) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (context) => screen));
+  }
+
+  void _showSupportDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Container(
+              width: 500,
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6A3093).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.support_agent,
+                      size: 48,
+                      color: Color(0xFF6A3093),
+                    ),
                   ),
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'الدعم الفني',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'نحن هنا لمساعدتك',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 32),
+                  _buildContactTile(
+                    icon: Icons.person,
+                    title: 'اسم المطور',
+                    value: AppConstants.developerName,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildContactTile(
+                    icon: Icons.email,
+                    title: 'البريد الإلكتروني',
+                    value: AppConstants.developerEmail,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildContactTile(
+                    icon: Icons.phone,
+                    title: 'رقم الهاتف',
+                    value: AppConstants.developerPhone,
+                  ),
+                  const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _selectBackupFolder,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF9C27B0),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        backgroundColor: const Color(0xFF6A3093),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      icon: const Icon(
-                        Icons.folder_open,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      label: const Text(
-                        'اختر مكان النسخ الاحتياطي',
+                      child: const Text(
+                        'إغلاق',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
@@ -456,37 +487,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+            ),
+          ),
+    );
+  }
 
-              // زر حفظ اسم السوبر ماركت
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    _saveMarketName(_marketNameController.text.trim());
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF9C27B0),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.save, color: Colors.white, size: 20),
-                  label: const Text(
-                    'حفظ اسم السوبر ماركت',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+  Widget _buildContactTile({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF6A3093).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: const Color(0xFF6A3093)),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -506,778 +555,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showAppToast(context, 'تم حفظ اسم السوبر ماركت بنجاح', ToastType.success);
   }
 
-  Widget _buildAdminCard() {
-    return _buildSettingsCard(
-      title: 'حساب المدير',
-      icon: Icons.admin_panel_settings,
-      color: const Color(0xFFFF6B35),
-      child: Column(
-        children: [
-          _buildTextFieldWithIcon(
-            controller: _adminNameController,
-            label: 'اسم المدير',
-            icon: Icons.person_outline,
-            enabled: _isEditingAdmin,
-          ),
-          const SizedBox(height: 15),
-          _buildTextFieldWithIcon(
-            controller: _adminEmailController,
-            label: 'البريد الإلكتروني',
-            icon: Icons.email_outlined,
-            enabled: _isEditingAdmin,
-          ),
-          const SizedBox(height: 15),
-          _buildTextFieldWithIcon(
-            controller: _adminPhoneController,
-            label: 'رقم الهاتف',
-            icon: Icons.phone_outlined,
-            enabled: _isEditingAdmin,
-          ),
-          const SizedBox(height: 15),
-          _buildPasswordField(
-            controller: _currentPasswordAdminController,
-            label: 'كلمة المرور الحالية',
-            obscureText: _obscureAdminPassword,
-            onToggle:
-                () => setState(
-                  () => _obscureAdminPassword = !_obscureAdminPassword,
-                ),
-            enabled: false,
-          ),
-          const SizedBox(height: 20),
-          _buildCardActions(
-            isEditing: _isEditingAdmin,
-            onEdit: () => setState(() => _isEditingAdmin = true),
-            onSave: _saveAdminChanges,
-            onCancel:
-                () => setState(() {
-                  _isEditingAdmin = false;
-                  _loadUserData();
-                }),
-            onChangePassword: () {
-              setState(() {
-                _isAdminPassword = true;
-                _isCashierPassword = false;
-              });
-              _showChangePasswordDialog();
-            },
-            color: const Color(0xFFFF6B35),
-          ),
-          SizedBox(height: 10),
-        ],
-      ),
+  Future<void> _saveAdminChanges() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    await authProvider.updateUserDataByRole(
+      role: 'admin',
+      name: _adminNameController.text.trim(),
+      email: _adminEmailController.text.trim(),
+      phone: _adminPhoneController.text.trim(),
+    );
+
+    showAppToast(context, 'تم تحديث بيانات المدير بنجاح', ToastType.success);
+  }
+
+  Future<void> _saveTaxChanges() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    await authProvider.updateUserDataByRole(
+      role: 'tax',
+      name: _taxNameController.text.trim(),
+      email: _taxEmailController.text.trim(),
+    );
+
+    showAppToast(
+      context,
+      'تم تحديث بيانات حساب الضريبة بنجاح',
+      ToastType.success,
     );
   }
 
-  Widget _buildCashierCard() {
-    return _buildSettingsCard(
-      title: 'حساب الكاشير',
-      icon: Icons.person,
-      color: const Color(0xFF4A90E2),
-      child: Column(
-        children: [
-          _buildTextFieldWithIcon(
-            controller: _cashierNameController,
-            label: 'اسم الكاشير',
-            icon: Icons.person_outline,
-            enabled: _isEditingCashier,
-          ),
-          const SizedBox(height: 15),
-          _buildTextFieldWithIcon(
-            controller: _cashierEmailController,
-            label: 'البريد الإلكتروني',
-            icon: Icons.email_outlined,
-            enabled: _isEditingCashier,
-          ),
-          const SizedBox(height: 15),
-          _buildPasswordField(
-            controller: _currentPasswordCashierController,
-            label: 'كلمة المرور الحالية',
-            obscureText: _obscureCashierPassword,
-            onToggle:
-                () => setState(
-                  () => _obscureCashierPassword = !_obscureCashierPassword,
-                ),
-            enabled: false,
-          ),
-          const SizedBox(height: 20),
-          _buildCardActions(
-            isEditing: _isEditingCashier,
-            onEdit: () => setState(() => _isEditingCashier = true),
-            onSave: _saveCashierChanges,
-            onCancel:
-                () => setState(() {
-                  _isEditingCashier = false;
-                  _loadUserData();
-                }),
-            onChangePassword: () {
-              setState(() {
-                _isCashierPassword = true;
-                _isAdminPassword = false;
-              });
-              _showChangePasswordDialog();
-            },
-            color: const Color(0xFF4A90E2),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTaxCard() {
-    return _buildSettingsCard(
-      title: 'حساب الضريبة',
-      icon: Icons.account_balance,
-      color: const Color(0xFF34C759),
-      child: Column(
-        children: [
-          _buildTextFieldWithIcon(
-            controller: _taxNameController,
-            label: 'اسم حساب الضريبة',
-            icon: Icons.person_outline,
-            enabled: _isEditingTax,
-          ),
-          const SizedBox(height: 15),
-          _buildTextFieldWithIcon(
-            controller: _taxEmailController,
-            label: 'البريد الإلكتروني',
-            icon: Icons.email_outlined,
-            enabled: _isEditingTax,
-          ),
-          const SizedBox(height: 15),
-          _buildPasswordField(
-            controller: _currentPasswordTaxController,
-            label: 'كلمة المرور الحالية',
-            obscureText: _obscureTaxPassword,
-            onToggle:
-                () =>
-                    setState(() => _obscureTaxPassword = !_obscureTaxPassword),
-            enabled: false,
-          ),
-          const SizedBox(height: 20),
-          _buildCardActions(
-            isEditing: _isEditingTax,
-            onEdit: () => setState(() => _isEditingTax = true),
-            onSave: _saveTaxChanges,
-            onCancel:
-                () => setState(() {
-                  _isEditingTax = false;
-                  _loadUserData();
-                }),
-            onChangePassword: () {
-              setState(() {
-                _isAdminPassword = false;
-                _isCashierPassword = false;
-              });
-              _showChangePasswordDialog();
-            },
-            color: const Color(0xFF34C759),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContactCard() {
-    return _buildSettingsCard(
-      title: 'معلومات التواصل',
-      icon: Icons.contact_support,
-      color: const Color(0xFF6A3093),
-      child: Column(
-        children: [
-          _buildContactItem(
-            icon: Icons.person,
-            title: 'اسم المطور',
-            value: AppConstants.developerName,
-          ),
-          const SizedBox(height: 8),
-          _buildContactItem(
-            icon: Icons.email,
-            title: 'البريد الإلكتروني',
-            value: AppConstants.developerEmail,
-          ),
-          const SizedBox(height: 8),
-          _buildContactItem(
-            icon: Icons.phone,
-            title: 'رقم الهاتف',
-            value: AppConstants.developerPhone,
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF6A3093).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0xFF6A3093).withOpacity(0.2),
-              ),
-            ),
-            child: const Text(
-              'للاستفسارات والدعم الفني، لا تتردد في التواصل معنا',
-              style: TextStyle(
-                fontSize: 14,
-                color: Color(0xFF6A3093),
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStockSettingsCard() {
-    return Consumer<SettingsProvider>(
-      builder: (context, settingsProvider, child) {
-        return _buildSettingsCard(
-          title: 'إعدادات المخزون',
-          icon: Icons.inventory_2,
-          color: const Color(0xFF4A1C6D),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'حدد الحد الأدنى لكمية المنتج التي تعتبر منخفضة:',
-                style: TextStyle(fontSize: 15, color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF8B5FBF).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'الحد الحالي:',
-                      style: TextStyle(fontSize: 16, color: Color(0xFF6A3093)),
-                    ),
-                    Text(
-                      '${settingsProvider.lowStockThreshold} قطعة',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF6A3093),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Slider(
-                value: settingsProvider.lowStockThreshold.toDouble(),
-                min: 1,
-                max: 50,
-                divisions: 49,
-                label: settingsProvider.lowStockThreshold.toString(),
-                activeColor: const Color(0xFF8B5FBF),
-                inactiveColor: const Color(0xFF8B5FBF).withOpacity(0.3),
-                onChanged: (value) {
-                  settingsProvider.updateLowStockThreshold(value.round());
-                },
-                onChangeEnd: (value) {
-                  showAppToast(
-                    context,
-                    'تم حفظ الحد الأدنى للمخزون: ${value.round()}',
-                    ToastType.success,
-                  );
-                },
-              ),
-              const SizedBox(height: 10),
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('1', style: TextStyle(color: Colors.grey)),
-                  Text('25', style: TextStyle(color: Colors.grey)),
-                  Text('50', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-              SizedBox(height: 5),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildTaxSettingsCard() {
-    return Consumer<SettingsProvider>(
-      builder: (context, settingsProvider, child) {
-        return _buildSettingsCard(
-          title: 'الإعدادات الضريبية',
-          icon: Icons.receipt_long,
-          color: Colors.blue[700]!,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'الضريبة الافتراضية للمبيعات:',
-                style: TextStyle(fontSize: 15, color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: settingsProvider.defaultTaxSetting,
-                    isExpanded: true,
-                    items: [
-                      DropdownMenuItem(
-                        value: 0,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            'غير مضمنه بالضرائب',
-                            style: TextStyle(
-                              fontSize: 15,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 1,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            'مضمنه بالضرائب',
-                            style: TextStyle(
-                              fontSize: 15,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                    onChanged: (int? newValue) {
-                      settingsProvider.updateDefaultTaxSetting(newValue!);
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue[100]!),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info, color: Colors.blue[700], size: 20),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'معلومة',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'تحدد إذا كانت الضريبة مضمنة تلقائياً في الفواتير الجديدة',
-                      style: TextStyle(fontSize: 14, color: Colors.blue[700]),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCurrencyCard() {
-    final settings = Provider.of<SettingsProvider>(context);
-
-    return _buildSettingsCard(
-      title: 'إعدادات العملة',
-      icon: Icons.currency_exchange,
-      color: const Color(0xFFFFA000),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'اختر العملة الافتراضية للنظام:',
-            style: TextStyle(fontSize: 15, color: Colors.grey),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey[300]!),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: settings.currency,
-                isExpanded: true,
-                icon: const Icon(
-                  Icons.arrow_drop_down,
-                  color: Color(0xFF6A3093),
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'USD',
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        "🇺🇸 الدولار الأمريكي (USD)",
-                        style: TextStyle(fontSize: 15),
-                      ),
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'JOD',
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        "🇯🇴 الدينار الأردني (JOD)",
-                        style: TextStyle(fontSize: 15),
-                      ),
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'ILS',
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        "🇮🇱 الشيكل الإسرائيلي (ILS)",
-                        style: TextStyle(fontSize: 15),
-                      ),
-                    ),
-                  ),
-                ],
-                onChanged: (String? newValue) {
-                  if (newValue != null) {
-                    settings.updateCurrency(newValue);
-                    showAppToast(
-                      context,
-                      'تم تغيير العملة إلى $newValue',
-                      ToastType.success,
-                    );
-                  }
-                },
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.orange[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.orange[100]!),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.info, color: Colors.orange[700], size: 20),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'معلومة',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.orange,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'سيتم تطبيق العملة المحددة على جميع الفواتير والعروض',
-                  style: TextStyle(fontSize: 14, color: Colors.orange[700]),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsCard({
-    required String title,
-    required IconData icon,
-    required Color color,
-    required Widget child,
-  }) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: color, size: 24),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextFieldWithIcon({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    required bool enabled,
-  }) {
-    return TextField(
-      controller: controller,
-      enabled: enabled,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF8B5FBF)),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF8B5FBF), width: 2),
-        ),
-        filled: true,
-        fillColor: enabled ? Colors.white : Colors.grey[50],
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPasswordField({
-    required TextEditingController controller,
-    required String label,
-    required bool obscureText,
-    required VoidCallback onToggle,
-    required bool enabled,
-  }) {
-    return TextField(
-      controller: controller,
-      enabled: enabled,
-      obscureText: obscureText,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF8B5FBF)),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF8B5FBF), width: 2),
-        ),
-        filled: true,
-        fillColor: enabled ? Colors.white : Colors.grey[50],
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
-        suffixIcon: IconButton(
-          icon: Icon(
-            obscureText ? Icons.visibility_off : Icons.visibility,
-            color: const Color(0xFF8B5FBF),
-          ),
-          onPressed: onToggle,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContactItem({
-    required IconData icon,
-    required String title,
-    required String value,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF6A3093).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, size: 20, color: const Color(0xFF6A3093)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF4A1C6D),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCardActions({
-    required bool isEditing,
-    required VoidCallback onEdit,
-    required VoidCallback onSave,
-    required VoidCallback onCancel,
-    required VoidCallback onChangePassword,
-    required Color color,
-  }) {
-    if (!isEditing) {
-      return Row(
-        children: [
-          Expanded(
-            child: _buildActionButton(
-              text: 'تعديل البيانات',
-              icon: Icons.edit,
-              color: color,
-              onPressed: onEdit,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _buildActionButton(
-              text: 'تغيير كلمة المرور',
-              icon: Icons.lock_outline,
-              color: const Color(0xFF6A3093),
-              onPressed: onChangePassword,
-            ),
-          ),
-        ],
-      );
-    } else {
-      return Row(
-        children: [
-          Expanded(
-            child: _buildActionButton(
-              text: 'حفظ',
-              icon: Icons.check,
-              color: Colors.green,
-              onPressed: onSave,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _buildActionButton(
-              text: 'إلغاء',
-              icon: Icons.close,
-              color: Colors.red,
-              onPressed: onCancel,
-            ),
-          ),
-        ],
-      );
-    }
-  }
-
-  Widget _buildActionButton({
-    required String text,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onPressed,
-  }) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 2,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 20, color: Colors.white),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showChangePasswordDialog() {
+  void _showChangePasswordDialog(String role) {
     showDialog(
       context: context,
       builder: (context) {
@@ -1290,10 +597,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             String dialogTitle;
             TextEditingController currentPasswordController;
 
-            if (_isAdminPassword) {
+            if (role == 'admin') {
               dialogTitle = 'تغيير كلمة مرور المدير';
               currentPasswordController = _currentPasswordAdminController;
-            } else if (_isCashierPassword) {
+            } else if (role == 'cashier') {
               dialogTitle = 'تغيير كلمة مرور الكاشير';
               currentPasswordController = _currentPasswordCashierController;
             } else {
@@ -1302,6 +609,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             }
 
             return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               title: Row(
                 children: [
                   const Icon(Icons.lock, color: Color(0xFF6A3093)),
@@ -1378,16 +688,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 ElevatedButton(
-                  onPressed: _changePassword,
+                  onPressed: () => _changePassword(role),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF6A3093),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: Text(
-                    _isAdminPassword
-                        ? 'تغيير كلمة المدير'
-                        : _isCashierPassword
-                        ? 'تغيير كلمة الكاشير'
-                        : 'تغيير كلمة حساب الضريبة',
+                    'تغيير كلمة المرور',
                     style: const TextStyle(color: Colors.white, fontSize: 16),
                   ),
                 ),
@@ -1410,7 +719,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       obscureText: obscureText,
       decoration: InputDecoration(
         labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         suffixIcon: IconButton(
           icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility),
           onPressed: onToggle,
@@ -1419,285 +728,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildPrinterSettingsCard() {
-    return Consumer<SettingsProvider>(
-      builder: (context, settings, child) {
-        String? selectedPaperSize = settings.paperSize;
-
-        return _buildSettingsCard(
-          title: 'إعدادات الطابعة',
-          icon: Icons.print,
-          color: const Color(0xFF009688),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'إعدادات الطابعة الحرارية:',
-                style: TextStyle(fontSize: 15, color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-
-              // حقل IP
-              _buildTextFieldWithIcon(
-                controller: _printerIpController,
-                label: 'عنوان IP للطابعة',
-                icon: Icons.network_wifi,
-                enabled: true,
-              ),
-              const SizedBox(height: 15),
-
-              // حقل Port مع لوحة مفاتيح رقمية
-              TextField(
-                controller: _printerPortController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'منفذ الطابعة (مثال: 9100)',
-                  prefixIcon: const Icon(Icons.usb, color: Color(0xFF009688)),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF009688),
-                      width: 2,
-                    ),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 16,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 15),
-
-              // Dropdown لاختيار حجم الورق
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'حجم الورق:',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF333333),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: selectedPaperSize,
-                        isExpanded: true,
-                        icon: const Icon(
-                          Icons.arrow_drop_down,
-                          color: Color(0xFF009688),
-                        ),
-                        iconSize: 24,
-                        elevation: 4,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Color(0xFF333333),
-                        ),
-                        dropdownColor: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        items: [
-                          DropdownMenuItem<String>(
-                            value: '58mm',
-                            child: _buildDropdownItem(
-                              text: '58mm (فاتورة صغيرة)',
-                              isSelected: selectedPaperSize == '58mm',
-                            ),
-                          ),
-                          DropdownMenuItem<String>(
-                            value: '80mm',
-                            child: _buildDropdownItem(
-                              text: '80mm (فاتورة كبيرة)',
-                              isSelected: selectedPaperSize == '80mm',
-                            ),
-                          ),
-                        ],
-                        onChanged: (String? newValue) {
-                          if (newValue != null) {
-                            // تحديث الإعدادات في قاعدة البيانات
-                            settings.updatePaperSize(newValue);
-                            showAppToast(
-                              context,
-                              'تم تغيير حجم الورق إلى $newValue',
-                              ToastType.success,
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // زر الحفظ
-              _buildActionButton(
-                text: 'حفظ إعدادات الطابعة',
-                icon: Icons.save,
-                color: const Color(0xFF009688),
-                onPressed: () {
-                  final ip = _printerIpController.text.trim();
-                  final portText = _printerPortController.text.trim();
-
-                  if (ip.isEmpty || portText.isEmpty) {
-                    showAppToast(
-                      context,
-                      'الرجاء إدخال عنوان IP ومنفذ الطابعة',
-                      ToastType.error,
-                    );
-                    return;
-                  }
-
-                  final port = int.tryParse(portText);
-                  if (port == null) {
-                    showAppToast(
-                      context,
-                      'الرجاء إدخال رقم صحيح للمنفذ',
-                      ToastType.error,
-                    );
-                    return;
-                  }
-
-                  // تحديث الإعدادات كاملة
-                  settings.updatePrinterSettings(
-                    ip: ip,
-                    port: port,
-                    size: settings.paperSize ?? '58mm',
-                  );
-
-                  showAppToast(
-                    context,
-                    'تم حفظ إعدادات الطابعة بنجاح',
-                    ToastType.success,
-                  );
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDropdownItem({required String text, required bool isSelected}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      decoration: BoxDecoration(
-        color:
-            isSelected
-                ? const Color(0xFF009688).withOpacity(0.1)
-                : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          if (isSelected)
-            const Icon(Icons.check_circle, color: Color(0xFF009688), size: 20)
-          else
-            const Icon(Icons.circle_outlined, color: Colors.grey, size: 20),
-          const SizedBox(width: 12),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color:
-                  isSelected
-                      ? const Color(0xFF009688)
-                      : const Color(0xFF333333),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _saveAdminChanges() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-    await authProvider.updateUserDataByRole(
-      role: 'admin',
-      name: _adminNameController.text.trim(),
-      email: _adminEmailController.text.trim(),
-      phone: _adminPhoneController.text.trim(),
-    );
-
-    setState(() => _isEditingAdmin = false);
-
-    showAppToast(context, 'تم تحديث بيانات المدير بنجاح', ToastType.success);
-  }
-
-  Future<void> _saveCashierChanges() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-    await authProvider.updateUserDataByRole(
-      role: 'cashier',
-      name: _cashierNameController.text.trim(),
-      email: _cashierEmailController.text.trim(),
-    );
-
-    setState(() => _isEditingCashier = false);
-
-    showAppToast(context, 'تم تحديث بيانات الكاشير بنجاح', ToastType.success);
-  }
-
-  Future<void> _saveTaxChanges() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-    await authProvider.updateUserDataByRole(
-      role: 'tax',
-      name: _taxNameController.text.trim(),
-      email: _taxEmailController.text.trim(),
-    );
-
-    setState(() => _isEditingTax = false);
-
-    showAppToast(
-      context,
-      'تم تحديث بيانات حساب الضريبة بنجاح',
-      ToastType.success,
-    );
-  }
-
-  void _changePassword() async {
+  void _changePassword(String role) async {
     final oldPasswordController =
-        _isAdminPassword
+        role == 'admin'
             ? _currentPasswordAdminController
-            : _isCashierPassword
+            : role == 'cashier'
             ? _currentPasswordCashierController
             : _currentPasswordTaxController;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final role =
-        _isAdminPassword
-            ? 'admin'
-            : _isCashierPassword
-            ? 'cashier'
-            : 'tax';
 
     if (_newPasswordController.text != _confirmPasswordController.text) {
       showAppToast(context, 'كلمات المرور غير متطابقة', ToastType.error);
-
       return;
     }
 
@@ -1712,13 +754,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     showAppToast(
       context,
-      success
-          ? (_isAdminPassword
-              ? 'تم تغيير كلمة مرور المدير بنجاح'
-              : _isCashierPassword
-              ? 'تم تغيير كلمة مرور الكاشير بنجاح'
-              : 'تم تغيير كلمة مرور حساب الضريبة بنجاح')
-          : 'كلمة المرور الحالية غير صحيحة أو حدث خطأ أثناء التحديث',
+      success ? 'تم تغيير كلمة المرور بنجاح' : 'كلمة المرور الحالية غير صحيحة',
       success ? ToastType.success : ToastType.error,
     );
 
@@ -1748,6 +784,1216 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _currentPasswordTaxController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
+    _printerIpController.dispose();
+    _printerPortController.dispose();
     super.dispose();
+  }
+}
+
+// ==================== شاشة تفاصيل المدير ====================
+class AdminDetailScreen extends StatefulWidget {
+  final TextEditingController nameController;
+  final TextEditingController emailController;
+  final TextEditingController phoneController;
+  final TextEditingController passwordController;
+  final VoidCallback onSave;
+  final VoidCallback onChangePassword;
+
+  const AdminDetailScreen({
+    super.key,
+    required this.nameController,
+    required this.emailController,
+    required this.phoneController,
+    required this.passwordController,
+    required this.onSave,
+    required this.onChangePassword,
+  });
+
+  @override
+  State<AdminDetailScreen> createState() => _AdminDetailScreenState();
+}
+
+class _AdminDetailScreenState extends State<AdminDetailScreen> {
+  bool _isEditing = false;
+  bool _obscurePassword = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFFF6B35),
+          elevation: 0,
+          title: const Text(
+            'حساب المدير',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+          actions: [
+            if (!_isEditing)
+              IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: () => setState(() => _isEditing = true),
+              ),
+          ],
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              // صورة الملف الشخصي
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF6B35), Color(0xFFFF8E53)],
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF6B35).withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.admin_panel_settings,
+                  size: 60,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 32),
+              _buildDetailCard(
+                child: Column(
+                  children: [
+                    _buildTextField(
+                      controller: widget.nameController,
+                      label: 'اسم المدير',
+                      icon: Icons.person_outline,
+                      enabled: _isEditing,
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextField(
+                      controller: widget.emailController,
+                      label: 'البريد الإلكتروني',
+                      icon: Icons.email_outlined,
+                      enabled: _isEditing,
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextField(
+                      controller: widget.phoneController,
+                      label: 'رقم الهاتف',
+                      icon: Icons.phone_outlined,
+                      enabled: _isEditing,
+                    ),
+                    const SizedBox(height: 20),
+                    _buildPasswordField(
+                      controller: widget.passwordController,
+                      label: 'كلمة المرور الحالية',
+                      obscureText: _obscurePassword,
+                      onToggle:
+                          () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
+                      enabled: false,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              if (_isEditing)
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          widget.onSave();
+                          setState(() => _isEditing = false);
+                          Navigator.pop(context);
+                        },
+                        icon: const Icon(Icons.check),
+                        label: const Text('حفظ التغييرات'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => setState(() => _isEditing = false),
+                        icon: const Icon(Icons.close),
+                        label: const Text('إلغاء'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: widget.onChangePassword,
+                    icon: const Icon(Icons.lock_outline),
+                    label: const Text('تغيير كلمة المرور'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6A3093),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailCard({required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(24),
+      child: child,
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required bool enabled,
+  }) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: const Color(0xFFFF6B35)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFFF6B35), width: 2),
+        ),
+        filled: true,
+        fillColor: enabled ? Colors.white : Colors.grey[50],
+      ),
+    );
+  }
+
+  Widget _buildPasswordField({
+    required TextEditingController controller,
+    required String label,
+    required bool obscureText,
+    required VoidCallback onToggle,
+    required bool enabled,
+  }) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      obscureText: obscureText,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFFF6B35)),
+        suffixIcon: IconButton(
+          icon: Icon(
+            obscureText ? Icons.visibility_off : Icons.visibility,
+            color: const Color(0xFFFF6B35),
+          ),
+          onPressed: onToggle,
+        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        filled: true,
+        fillColor: enabled ? Colors.white : Colors.grey[50],
+      ),
+    );
+  }
+}
+
+// ==================== شاشة إدارة الكاشيرز ====================
+class CashiersManagementScreen extends StatefulWidget {
+  const CashiersManagementScreen({super.key});
+
+  @override
+  State<CashiersManagementScreen> createState() =>
+      _CashiersManagementScreenState();
+}
+
+class _CashiersManagementScreenState extends State<CashiersManagementScreen> {
+  List<Map<String, dynamic>> cashiers = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCashiers();
+  }
+
+  Future<void> _loadCashiers() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final data = await authProvider.getUsersByRole('cashier');
+    setState(() {
+      cashiers = data;
+      _isLoading = false;
+    });
+  }
+
+  void _showAddCashierDialog() {
+    final nameController = TextEditingController();
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: const Text(
+              'إضافة كاشير جديد',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'اسم الكاشير',
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'البريد الإلكتروني',
+                    prefixIcon: Icon(Icons.email),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'كلمة المرور',
+                    prefixIcon: Icon(Icons.lock),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إلغاء', style: TextStyle(color: Colors.red)),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  // منطق إضافة الكاشير
+                  Navigator.pop(context);
+                  _loadCashiers();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4A90E2),
+                ),
+                child: const Text(
+                  'إضافة',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF4A90E2),
+          elevation: 0,
+          title: const Text(
+            'إدارة الكاشيرز',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: _showAddCashierDialog,
+            ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _showAddCashierDialog,
+          backgroundColor: const Color(0xFF4A90E2),
+          icon: const Icon(Icons.person_add),
+          label: const Text('إضافة كاشير'),
+        ),
+        body:
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : cashiers.isEmpty
+                ? _buildEmptyState()
+                : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: cashiers.length,
+                  itemBuilder: (context, index) {
+                    final cashier = cashiers[index];
+                    return _buildCashierCard(cashier);
+                  },
+                ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.people_outline, size: 100, color: Colors.grey[300]),
+          const SizedBox(height: 16),
+          Text(
+            'لا يوجد كاشيرز مضافين',
+            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _showAddCashierDialog,
+            icon: const Icon(Icons.add),
+            label: const Text('إضافة كاشير جديد'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4A90E2),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCashierCard(Map<String, dynamic> cashier) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF4A90E2), Color(0xFF5BA0F2)],
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.person, color: Colors.white, size: 30),
+        ),
+        title: Text(
+          cashier['name'] ?? 'غير معروف',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        subtitle: Text(
+          cashier['email'] ?? '',
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'edit') {
+              // تعديل
+            } else if (value == 'delete') {
+              // حذف
+            }
+          },
+          itemBuilder:
+              (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, color: Colors.blue),
+                      SizedBox(width: 8),
+                      Text('تعديل'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('حذف'),
+                    ],
+                  ),
+                ),
+              ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== شاشة تفاصيل الضريبة ====================
+class TaxDetailScreen extends StatefulWidget {
+  final TextEditingController nameController;
+  final TextEditingController emailController;
+  final TextEditingController passwordController;
+  final VoidCallback onSave;
+  final VoidCallback onChangePassword;
+
+  const TaxDetailScreen({
+    super.key,
+    required this.nameController,
+    required this.emailController,
+    required this.passwordController,
+    required this.onSave,
+    required this.onChangePassword,
+  });
+
+  @override
+  State<TaxDetailScreen> createState() => _TaxDetailScreenState();
+}
+
+class _TaxDetailScreenState extends State<TaxDetailScreen> {
+  bool _isEditing = false;
+  bool _obscurePassword = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF34C759),
+          elevation: 0,
+          title: const Text(
+            'حساب الضريبة',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+          actions: [
+            if (!_isEditing)
+              IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: () => setState(() => _isEditing = true),
+              ),
+          ],
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF34C759), Color(0xFF44D769)],
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF34C759).withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.account_balance,
+                  size: 60,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 32),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    _buildTextField(
+                      controller: widget.nameController,
+                      label: 'اسم حساب الضريبة',
+                      icon: Icons.person_outline,
+                      enabled: _isEditing,
+                      color: const Color(0xFF34C759),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextField(
+                      controller: widget.emailController,
+                      label: 'البريد الإلكتروني',
+                      icon: Icons.email_outlined,
+                      enabled: _isEditing,
+                      color: const Color(0xFF34C759),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildPasswordField(
+                      controller: widget.passwordController,
+                      label: 'كلمة المرور الحالية',
+                      obscureText: _obscurePassword,
+                      onToggle:
+                          () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
+                      enabled: false,
+                      color: const Color(0xFF34C759),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              if (_isEditing)
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          widget.onSave();
+                          setState(() => _isEditing = false);
+                          Navigator.pop(context);
+                        },
+                        icon: const Icon(Icons.check),
+                        label: const Text('حفظ التغييرات'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => setState(() => _isEditing = false),
+                        icon: const Icon(Icons.close),
+                        label: const Text('إلغاء'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: widget.onChangePassword,
+                    icon: const Icon(Icons.lock_outline),
+                    label: const Text('تغيير كلمة المرور'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6A3093),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required bool enabled,
+    required Color color,
+  }) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: color),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: color, width: 2),
+        ),
+        filled: true,
+        fillColor: enabled ? Colors.white : Colors.grey[50],
+      ),
+    );
+  }
+
+  Widget _buildPasswordField({
+    required TextEditingController controller,
+    required String label,
+    required bool obscureText,
+    required VoidCallback onToggle,
+    required bool enabled,
+    required Color color,
+  }) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      obscureText: obscureText,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(Icons.lock_outline, color: color),
+        suffixIcon: IconButton(
+          icon: Icon(
+            obscureText ? Icons.visibility_off : Icons.visibility,
+            color: color,
+          ),
+          onPressed: onToggle,
+        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: enabled ? Colors.white : Colors.grey[50],
+      ),
+    );
+  }
+}
+
+// ==================== شاشة إعدادات المتجر ====================
+class StoreSettingsScreen extends StatelessWidget {
+  final TextEditingController marketNameController;
+  final String? backupFolderPath;
+  final VoidCallback onSelectBackupFolder;
+  final Function(String) onSaveMarketName;
+
+  const StoreSettingsScreen({
+    super.key,
+    required this.marketNameController,
+    required this.backupFolderPath,
+    required this.onSelectBackupFolder,
+    required this.onSaveMarketName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF9C27B0),
+          elevation: 0,
+          title: const Text(
+            'إعدادات المتجر',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: Consumer<SettingsProvider>(
+          builder: (context, settings, child) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  _buildSettingsSection(
+                    title: 'معلومات المتجر',
+                    icon: Icons.store,
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: marketNameController,
+                          decoration: InputDecoration(
+                            labelText: 'اسم السوبر ماركت',
+                            prefixIcon: const Icon(
+                              Icons.store,
+                              color: Color(0xFF9C27B0),
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed:
+                                () =>
+                                    onSaveMarketName(marketNameController.text),
+                            icon: const Icon(Icons.save),
+                            label: const Text('حفظ الاسم'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF9C27B0),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSettingsSection(
+                    title: 'إعدادات العملة',
+                    icon: Icons.currency_exchange,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: settings.currency,
+                          isExpanded: true,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'USD',
+                              child: Text("🇺🇸 الدولار الأمريكي (USD)"),
+                            ),
+                            DropdownMenuItem(
+                              value: 'JOD',
+                              child: Text("🇯🇴 الدينار الأردني (JOD)"),
+                            ),
+                            DropdownMenuItem(
+                              value: 'ILS',
+                              child: Text("🇮🇱 الشيكل الإسرائيلي (ILS)"),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) settings.updateCurrency(value);
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSettingsSection(
+                    title: 'إعدادات المخزون',
+                    icon: Icons.inventory_2,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'الحد الأدنى للمخزون: ${settings.lowStockThreshold}',
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        Slider(
+                          value: settings.lowStockThreshold.toDouble(),
+                          min: 1,
+                          max: 50,
+                          divisions: 49,
+                          label: settings.lowStockThreshold.toString(),
+                          activeColor: const Color(0xFF9C27B0),
+                          onChanged: (value) {
+                            settings.updateLowStockThreshold(value.round());
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSettingsSection(
+                    title: 'النسخ الاحتياطي',
+                    icon: Icons.backup,
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.folder,
+                                color:
+                                    backupFolderPath != null
+                                        ? Colors.green
+                                        : Colors.grey,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  backupFolderPath ?? 'لم يتم تحديد مكان',
+                                  style: TextStyle(
+                                    color:
+                                        backupFolderPath != null
+                                            ? Colors.green
+                                            : Colors.grey,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: onSelectBackupFolder,
+                            icon: const Icon(Icons.folder_open),
+                            label: const Text('اختيار مكان النسخ الاحتياطي'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF9C27B0),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<int>(
+                              value: settings.numberOfCopies ?? 1,
+                              isExpanded: true,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              items: List.generate(7, (index) {
+                                final value = index + 1;
+                                return DropdownMenuItem<int>(
+                                  value: value,
+                                  child: Text('$value نسخة'),
+                                );
+                              }),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  settings.updateNumberOfCopies(value);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsSection({
+    required String title,
+    required IconData icon,
+    required Widget child,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF9C27B0).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: const Color(0xFF9C27B0)),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== شاشة إعدادات الطابعة ====================
+class PrinterSettingsScreen extends StatelessWidget {
+  final TextEditingController ipController;
+  final TextEditingController portController;
+
+  const PrinterSettingsScreen({
+    super.key,
+    required this.ipController,
+    required this.portController,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF009688),
+          elevation: 0,
+          title: const Text(
+            'إعدادات الطابعة',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: Consumer<SettingsProvider>(
+          builder: (context, settings, child) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF009688), Color(0xFF26A69A)],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Icon(
+                            Icons.print,
+                            size: 50,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        TextField(
+                          controller: ipController,
+                          decoration: InputDecoration(
+                            labelText: 'عنوان IP للطابعة',
+                            prefixIcon: const Icon(
+                              Icons.network_wifi,
+                              color: Color(0xFF009688),
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        TextField(
+                          controller: portController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'منفذ الطابعة (مثال: 9100)',
+                            prefixIcon: const Icon(
+                              Icons.usb,
+                              color: Color(0xFF009688),
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: settings.paperSize,
+                              isExpanded: true,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: '58mm',
+                                  child: Text('58mm (فاتورة صغيرة)'),
+                                ),
+                                DropdownMenuItem(
+                                  value: '80mm',
+                                  child: Text('80mm (فاتورة كبيرة)'),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  settings.updatePaperSize(value);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              final ip = ipController.text.trim();
+                              final portText = portController.text.trim();
+
+                              if (ip.isEmpty || portText.isEmpty) {
+                                showAppToast(
+                                  context,
+                                  'الرجاء إدخال جميع البيانات',
+                                  ToastType.error,
+                                );
+                                return;
+                              }
+
+                              final port = int.tryParse(portText);
+                              if (port == null) {
+                                showAppToast(
+                                  context,
+                                  'رقم المنفذ غير صحيح',
+                                  ToastType.error,
+                                );
+                                return;
+                              }
+
+                              settings.updatePrinterSettings(
+                                ip: ip,
+                                port: port,
+                                size: settings.paperSize ?? '58mm',
+                              );
+
+                              showAppToast(
+                                context,
+                                'تم حفظ الإعدادات بنجاح',
+                                ToastType.success,
+                              );
+                            },
+                            icon: const Icon(Icons.save),
+                            label: const Text('حفظ الإعدادات'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF009688),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }

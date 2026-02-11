@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:motamayez/utils/app_config.dart';
 import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../db/db_helper.dart';
 import '../services/secure_storage_service.dart';
 import 'package:archive/archive_io.dart';
@@ -273,8 +274,10 @@ class AuthProvider with ChangeNotifier {
   }
 
   // ================================
-  // باقي الدوال
+  // إدارة المستخدمين - الكاشيرز
   // ================================
+
+  /// جلب جميع المستخدمين حسب الدور
   Future<List<Map<String, dynamic>>> getUsersByRole(String role) async {
     try {
       final db = await _dbHelper.db;
@@ -290,7 +293,71 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<void> updateUserDataByRole({
+  /// ✅ دالة جديدة: جلب جميع الإيميلات (للـ Debug)
+  Future<List<String>> getAllEmails() async {
+    try {
+      final db = await _dbHelper.db;
+      final result = await db.query('users', columns: ['email']);
+      return result.map((row) => row['email'].toString()).toList();
+    } catch (e) {
+      log('ERROR_GET_EMAILS=$e');
+      return [];
+    }
+  }
+
+  Future<bool> createUser({
+    required String role,
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final db = await _dbHelper.db;
+
+      // ✅ تطهير الإيميل
+      final cleanEmail = email.trim().toLowerCase().replaceAll(
+        RegExp(r'\s+'),
+        '',
+      );
+      final cleanName = name.trim();
+
+      print('🔍 إضافة مستخدم: $cleanName / $cleanEmail');
+
+      // ✅ التحقق من وجود الإيميل
+      final existing = await db.query(
+        'users',
+        where: 'email = ?',
+        whereArgs: [cleanEmail],
+      );
+
+      if (existing.isNotEmpty) {
+        print('❌ الإيميل موجود مسبقاً');
+        return false;
+      }
+
+      print('✅ إدراج جديد...');
+
+      // ✅ إدراج بدون created_at
+      final id = await db.insert('users', {
+        'name': cleanName,
+        'email': cleanEmail,
+        'password': password,
+        'role': role,
+        // ❌ تم إزالة 'created_at'
+      }, conflictAlgorithm: ConflictAlgorithm.fail);
+
+      print('✅ تم الإدراج بـ ID: $id');
+      notifyListeners();
+      return true;
+    } catch (e) {
+      print('❌ خطأ: $e');
+      return false;
+    }
+  }
+
+  /// تحديث بيانات مستخدم (باستخدام ID أو role للأدمن)
+  Future<bool> updateUserDataByRole({
+    String? userId, // ✅ إضافة ID للكاشير المحدد
     required String role,
     required String name,
     required String email,
@@ -299,52 +366,136 @@ class AuthProvider with ChangeNotifier {
     try {
       final db = await _dbHelper.db;
 
-      await db.update(
-        'users',
-        {'name': name, 'email': email, 'phone': phone},
-        where: 'role = ?',
-        whereArgs: [role],
-      );
+      Map<String, dynamic> updateData = {'name': name, 'email': email};
 
-      if (_currentUser != null && _currentUser!['role'] == role) {
+      if (phone != null) {
+        updateData['phone'] = phone;
+      }
+
+      int result;
+
+      if (userId != null) {
+        // ✅ تحديث كاشير محدد بالـ ID
+        result = await db.update(
+          'users',
+          updateData,
+          where: 'id = ? AND role = ?',
+          whereArgs: [userId, role],
+        );
+      } else {
+        // تحديث بالـ role (للأدمن)
+        result = await db.update(
+          'users',
+          updateData,
+          where: 'role = ?',
+          whereArgs: [role],
+        );
+      }
+
+      // تحديث currentUser إذا كان هو المستخدم المحدث
+      if (_currentUser != null &&
+          (_currentUser!['role'] == role ||
+              _currentUser!['id'].toString() == userId)) {
         _currentUser!['name'] = name;
         _currentUser!['email'] = email;
-        _currentUser!['phone'] = phone;
+        if (phone != null) _currentUser!['phone'] = phone;
         notifyListeners();
       }
+
+      log('✅ تم تحديث بيانات المستخدم: $name');
+      return result > 0;
     } catch (e) {
-      log('Error updating user data by role: $e');
+      log('❌ Error updating user data: $e');
+      return false;
     }
   }
 
-  Future<bool> changePasswordByRole({
-    required String role,
-    required String oldPassword,
-    required String newPassword,
-  }) async {
-    final db = await _dbHelper.db;
+  /// حذف مستخدم
+  Future<bool> deleteUser(String userId) async {
     try {
-      final users = await db.query(
+      final db = await _dbHelper.db;
+
+      final result = await db.delete(
         'users',
-        where: 'role = ? AND password = ?',
-        whereArgs: [role, oldPassword],
+        where: 'id = ?',
+        whereArgs: [userId],
       );
 
-      if (users.isEmpty) {
-        return false;
-      }
-
-      final result = await db.update(
-        'users',
-        {'password': newPassword},
-        where: 'role = ?',
-        whereArgs: [role],
-      );
-
+      log('✅ تم حذف المستخدم ID: $userId');
+      notifyListeners();
       return result > 0;
     } catch (e) {
-      log('Error changing password: $e');
+      log('❌ Error deleting user: $e');
       return false;
+    }
+  }
+
+  /// تغيير كلمة المرور
+  Future<bool> changePasswordByRole({
+    required String role,
+    String? userId, // ✅ إضافة ID للكاشير المحدد
+    String? oldPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final db = await _dbHelper.db;
+
+      int result;
+
+      if (userId != null) {
+        // ✅ تغيير كلمة مرور كاشير محدد
+        result = await db.update(
+          'users',
+          {'password': newPassword},
+          where: 'id = ? AND role = ?',
+          whereArgs: [userId, role],
+        );
+      } else {
+        // تغيير بالـ role + oldPassword (للأدمن)
+        final users = await db.query(
+          'users',
+          where: 'role = ? AND password = ?',
+          whereArgs: [role, oldPassword],
+        );
+
+        if (users.isEmpty) {
+          return false;
+        }
+
+        result = await db.update(
+          'users',
+          {'password': newPassword},
+          where: 'role = ?',
+          whereArgs: [role],
+        );
+      }
+
+      log('✅ تم تغيير كلمة المرور للمستخدم ID: $userId, Role: $role');
+      return result > 0;
+    } catch (e) {
+      log('❌ Error changing password: $e');
+      return false;
+    }
+  }
+
+  /// جلب مستخدم واحد بالـ ID
+  Future<Map<String, dynamic>?> getUserById(String userId) async {
+    try {
+      final db = await _dbHelper.db;
+      final result = await db.query(
+        'users',
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1,
+      );
+
+      if (result.isNotEmpty) {
+        return result.first;
+      }
+      return null;
+    } catch (e) {
+      log('Error fetching user by ID: $e');
+      return null;
     }
   }
 }
