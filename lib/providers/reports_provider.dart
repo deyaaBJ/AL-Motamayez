@@ -242,17 +242,29 @@ class ReportsProvider extends ChangeNotifier {
   ) async {
     final db = await _dbHelper.db;
 
-    return await db.rawQuery(
-      '''
-      SELECT * FROM sales
-      WHERE $whereClause
-      UNION ALL
-      SELECT * FROM sales_archive
-      WHERE $whereClause
-      ORDER BY date DESC
-    ''',
-      [...whereArgs, ...whereArgs],
-    );
+    try {
+      // محاولة استعلام مع sales_archive
+      return await db.rawQuery(
+        '''
+        SELECT * FROM sales
+        WHERE $whereClause
+        UNION ALL
+        SELECT * FROM sales_archive
+        WHERE $whereClause
+        ORDER BY date DESC
+      ''',
+        [...whereArgs, ...whereArgs],
+      );
+    } catch (e) {
+      // إذا فشل الاستعلام (مثل عدم وجود جدول sales_archive)
+      // جرب الاستعلام من جدول sales فقط
+      log('Warning: sales_archive error, falling back to sales table only: $e');
+      return await db.rawQuery('''
+        SELECT * FROM sales
+        WHERE $whereClause
+        ORDER BY date DESC
+      ''', whereArgs);
+    }
   }
 
   void _calculateSalesStats(List<Map<String, dynamic>> sales) {
@@ -262,9 +274,9 @@ class ReportsProvider extends ChangeNotifier {
     _cashSalesAmount = 0;
     _creditSalesAmount = 0;
     _totalCashProfit = 0;
-    _totalCustomers = 0; // تمت إعادة التعيين
 
     Map<String, double> dailySales = {};
+    Set<dynamic> uniqueCustomers = {}; // تتبع العملاء الفريدين
 
     for (var sale in sales) {
       final amount = (sale['total_amount'] as num?)?.toDouble() ?? 0;
@@ -283,15 +295,18 @@ class ReportsProvider extends ChangeNotifier {
         _creditSalesAmount += amount;
       }
 
-      // حساب عدد العملاء (الذين لديهم customer_id)
+      // تسجيل العملاء الفريدين فقط
       if (customerId != null) {
-        _totalCustomers++;
+        uniqueCustomers.add(customerId);
       }
 
       if (dateStr != null) {
         dailySales[dateStr] = (dailySales[dateStr] ?? 0) + amount;
       }
     }
+
+    // عد العملاء الفريدين فقط
+    _totalCustomers = uniqueCustomers.length;
 
     _profitPercentage =
         _totalSalesAmount > 0 ? (_totalProfit / _totalSalesAmount) * 100 : 0;
@@ -374,6 +389,12 @@ class ReportsProvider extends ChangeNotifier {
     try {
       final db = await _dbHelper.db;
 
+      // تعديل whereClause لتحديد اسم الجدول بشكل صريح (s.date بدلاً من date)
+      String adjustedWhereClause = whereClause
+          .replaceAll('date(date)', 'date(s.date)')
+          .replaceAll("strftime('%Y-%m', date)", "strftime('%Y-%m', s.date)")
+          .replaceAll("strftime('%Y', date)", "strftime('%Y', s.date)");
+
       final result = await db.rawQuery('''
         SELECT 
           p.name,
@@ -393,7 +414,7 @@ class ReportsProvider extends ChangeNotifier {
         JOIN products p ON si.product_id = p.id
         JOIN sales s ON si.sale_id = s.id
         LEFT JOIN product_units pu ON si.unit_id = pu.id
-        WHERE $whereClause
+        WHERE $adjustedWhereClause
         GROUP BY p.id, p.name, p.base_unit
         ORDER BY total_revenue DESC
         LIMIT 10
@@ -423,6 +444,12 @@ class ReportsProvider extends ChangeNotifier {
     try {
       final db = await _dbHelper.db;
 
+      // تعديل whereClause لتحديد اسم الجدول بشكل صريح (s.date بدلاً من date)
+      String adjustedWhereClause = whereClause
+          .replaceAll('date(date)', 'date(s.date)')
+          .replaceAll("strftime('%Y-%m', date)", "strftime('%Y-%m', s.date)")
+          .replaceAll("strftime('%Y', date)", "strftime('%Y', s.date)");
+
       final result = await db.rawQuery('''
         SELECT 
           c.name,
@@ -431,7 +458,7 @@ class ReportsProvider extends ChangeNotifier {
           SUM(s.total_profit) as total_profit
         FROM sales s
         LEFT JOIN customers c ON s.customer_id = c.id
-        WHERE $whereClause AND c.id IS NOT NULL
+        WHERE $adjustedWhereClause AND c.id IS NOT NULL
         GROUP BY c.id, c.name
         HAVING total_amount > 0
         ORDER BY total_amount DESC
@@ -464,17 +491,32 @@ class ReportsProvider extends ChangeNotifier {
     try {
       final db = await _dbHelper.db;
 
-      final sales = await db.rawQuery(
-        '''
-        SELECT * FROM sales
-        WHERE date(date) BETWEEN ? AND ?
-        UNION ALL
-        SELECT * FROM sales_archive
-        WHERE date(date) BETWEEN ? AND ?
-        ORDER BY date DESC
-      ''',
-        [fromDate, toDate, fromDate, toDate],
-      );
+      List<Map<String, dynamic>> sales;
+      try {
+        // محاولة الاستعلام مع sales_archive
+        sales = await db.rawQuery(
+          '''
+          SELECT * FROM sales
+          WHERE date(date) BETWEEN ? AND ?
+          UNION ALL
+          SELECT * FROM sales_archive
+          WHERE date(date) BETWEEN ? AND ?
+          ORDER BY date DESC
+        ''',
+          [fromDate, toDate, fromDate, toDate],
+        );
+      } catch (e) {
+        // إذا فشل الاستعلام، استخدم جدول sales فقط
+        log('Warning: sales_archive error in custom date filter: $e');
+        sales = await db.rawQuery(
+          '''
+          SELECT * FROM sales
+          WHERE date(date) BETWEEN ? AND ?
+          ORDER BY date DESC
+        ''',
+          [fromDate, toDate],
+        );
+      }
 
       _calculateSalesStats(sales);
 
@@ -713,35 +755,82 @@ class ReportsProvider extends ChangeNotifier {
     try {
       final db = await _dbHelper.db;
 
-      final result = await db.rawQuery('''
-        SELECT 
-          date(date) as sale_date,
-          SUM(total_amount) as daily_sales,
-          SUM(total_profit) as daily_profit,
-          COUNT(*) as daily_count
-        FROM sales
-        WHERE date >= date('now', '-7 days')
-        GROUP BY date(date)
-        ORDER BY sale_date ASC
-      ''');
+      List<Map<String, dynamic>> result;
+      try {
+        // محاولة الاستعلام من كلا الجدولين
+        result = await db.rawQuery('''
+          SELECT 
+            date(date) as sale_date,
+            SUM(total_amount) as daily_sales,
+            SUM(total_profit) as daily_profit,
+            COUNT(*) as daily_count
+          FROM sales
+          WHERE date >= date('now', '-7 days')
+          GROUP BY date(date)
+          UNION ALL
+          SELECT 
+            date(date) as sale_date,
+            SUM(total_amount) as daily_sales,
+            SUM(total_profit) as daily_profit,
+            COUNT(*) as daily_count
+          FROM sales_archive
+          WHERE date >= date('now', '-7 days')
+          GROUP BY date(date)
+          ORDER BY sale_date ASC
+        ''');
+      } catch (e) {
+        // Fallback if sales_archive doesn't exist
+        log('Warning: sales_archive error in weekly data: $e');
+        result = await db.rawQuery('''
+          SELECT 
+            date(date) as sale_date,
+            SUM(total_amount) as daily_sales,
+            SUM(total_profit) as daily_profit,
+            COUNT(*) as daily_count
+          FROM sales
+          WHERE date >= date('now', '-7 days')
+          GROUP BY date(date)
+          ORDER BY sale_date ASC
+        ''');
+      }
 
       _weeklySalesData = [];
       final now = DateTime.now();
+
+      // Group results by date (combining duplicates from UNION)
+      Map<String, Map<String, dynamic>> aggregatedData = {};
+      for (var item in result) {
+        final dateKey = item['sale_date'] as String?;
+        if (dateKey != null) {
+          if (aggregatedData.containsKey(dateKey)) {
+            // Aggregate duplicates
+            aggregatedData[dateKey]!['daily_sales'] =
+                ((aggregatedData[dateKey]!['daily_sales'] as num?) ?? 0) +
+                ((item['daily_sales'] as num?) ?? 0);
+            aggregatedData[dateKey]!['daily_profit'] =
+                ((aggregatedData[dateKey]!['daily_profit'] as num?) ?? 0) +
+                ((item['daily_profit'] as num?) ?? 0);
+            aggregatedData[dateKey]!['daily_count'] =
+                ((aggregatedData[dateKey]!['daily_count'] as int?) ?? 0) +
+                ((item['daily_count'] as int?) ?? 0);
+          } else {
+            aggregatedData[dateKey] = item;
+          }
+        }
+      }
 
       for (int i = 6; i >= 0; i--) {
         final date = now.subtract(Duration(days: i));
         final dateStr = _formatDateForSQL(date);
 
-        var dailyData = result.firstWhere(
-          (item) => item['sale_date'] == dateStr,
-          orElse:
-              () => {
-                'sale_date': dateStr,
-                'daily_sales': 0,
-                'daily_profit': 0,
-                'daily_count': 0,
-              },
-        );
+        final dailyData =
+            aggregatedData[dateStr] ??
+            {
+              'sale_date': dateStr,
+              'daily_sales': 0,
+              'daily_profit': 0,
+              'daily_count': 0,
+            };
 
         _weeklySalesData.add({
           'date': dateStr,

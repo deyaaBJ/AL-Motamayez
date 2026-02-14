@@ -27,6 +27,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
     Future.microtask(() async {
       final provider = context.read<ReportsProvider>();
       await provider.loadReportsData();
+      // تطبيق الفلتر الافتراضي بعد تحميل البيانات
+      if (mounted) {
+        await provider.filterByPeriod(_selectedPeriod);
+      }
     });
   }
 
@@ -1214,5 +1218,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _calculateNetProfitForCurrentFilter(provider);
   }
 
-  void _calculateNetProfitForCurrentFilter(ReportsProvider provider) {}
+  void _calculateNetProfitForCurrentFilter(ReportsProvider provider) {
+    // هذه الدالة الآن غير ضرورية لأن جميع الحسابات
+    // تتم في ReportsProvider مباشرة
+  }
 }
