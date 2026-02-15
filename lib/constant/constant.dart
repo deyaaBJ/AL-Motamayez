@@ -3,7 +3,8 @@
 class AppConstants {
   static const developerName = 'م. ضياء بني جابر';
   static const developerEmail = 'deyaanoor9@gmail.com';
-  static const developerPhone = '970595352667+';
-  static const serverUrl = 'https://serverpos.onrender.com/activate';
+  static const developerPhone = '+970595352667';
+  static const serverUrl =
+      'https://server-al-motamayez.onrender.com/api/activate';
   static const secretKey = 'MOTAMAYEZ_PRIVATE_KEY_2026';
 }
