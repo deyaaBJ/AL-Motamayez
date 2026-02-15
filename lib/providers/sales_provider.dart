@@ -94,15 +94,18 @@ class SalesProvider extends ChangeNotifier {
   List<String> get paymentTypes => ['الكل', 'cash', 'credit'];
 
   List<String> get customerNames {
-    Set<String> names = {'الكل'};
+    final Set<String> names = {'الكل'};
     for (var sale in _allSales) {
-      if (sale.customerName != null && sale.customerName!.isNotEmpty) {
-        names.add(sale.customerName!);
+      final normalizedName = sale.customerName?.trim();
+      if (normalizedName != null && normalizedName.isNotEmpty) {
+        names.add(normalizedName);
       } else {
         names.add('بدون عميل');
       }
     }
-    return names.toList();
+    final customerList = names.where((name) => name != 'الكل').toList()
+      ..sort();
+    return ['الكل', ...customerList];
   }
 
   List<String> get months => [
@@ -555,6 +558,20 @@ class SalesProvider extends ChangeNotifier {
       return;
     }
 
+    // ✅ التحقق من الكاش قبل جلب البيانات
+    final cacheKey = _generateCacheKey();
+    if (!forceRefresh && _salesCache.containsKey(cacheKey)) {
+      print('✅ استخدام الكاش للبيانات');
+      _allSales = _salesCache[cacheKey]!;
+      final int displayCount = ((_page + 1) * _limit)
+          .clamp(0, _allSales.length)
+          .toInt();
+      _displayedSales = _allSales.sublist(0, displayCount);
+      _hasMore = _allSales.length > _displayedSales.length;
+      notifyListeners();
+      return;
+    }
+
     _isLoading = true;
     notifyListeners();
 
@@ -562,6 +579,7 @@ class SalesProvider extends ChangeNotifier {
 
     try {
       String table = "sales s";
+      int totalCount = 0;
 
       List<dynamic> args = [];
       String dateCondition = _buildDateWhereClause(args);
@@ -578,8 +596,8 @@ class SalesProvider extends ChangeNotifier {
         if (_selectedCustomer == 'بدون عميل') {
           conditions.add("s.customer_id IS NULL");
         } else {
-          conditions.add("c.name = ?");
-          args.add(_selectedCustomer);
+          conditions.add("TRIM(c.name) = TRIM(?)");
+          args.add(_selectedCustomer.trim());
         }
       }
 
@@ -594,105 +612,47 @@ class SalesProvider extends ChangeNotifier {
       print('🔍 الاستعلام: WHERE $whereClause');
       print('🔍 الـ Args: $args');
 
-      // ✅ جلب العدد الكلي مرة واحدة فقط
-      if (!loadMore) {
-        final countResult = await db.rawQuery('''
+      // ✅ جلب العدد الكلي للنتائج الحالية لتحديد hasMore بدقة
+      final countResult = await db.rawQuery('''
         SELECT COUNT(*) as total
         FROM $table
         LEFT JOIN customers c ON s.customer_id = c.id
         WHERE $whereClause
       ''', args);
 
-        final totalCount = (countResult.first['total'] as int?) ?? 0;
-        print('📊 العدد الكلي: $totalCount فاتورة');
+      totalCount = countResult.first['total'] as int? ?? 0;
 
-        // ✅ إذا كان العدد الكلي أقل من أو يساوي الـ limit، ما نحتاج pagination
-        if (totalCount <= _limit) {
-          final result = await db.rawQuery('''
-          SELECT 
-            s.id,
-            s.date,
-            s.total_amount,
-            s.total_profit,
-            s.customer_id,
-            c.name AS customer_name,
-            s.payment_type,
-            s.show_for_tax
-          FROM $table
-          LEFT JOIN customers c ON s.customer_id = c.id
-          WHERE $whereClause
-          ORDER BY s.date DESC, s.id DESC
-        ''', args);
-
-          _allSales = result.map((e) => Sale.fromMap(e)).toList();
-          _displayedSales = List.from(_allSales);
-          _hasMore = false;
-
-          print(
-            '✅ تم تحميل ${_allSales.length} فاتورة مباشرة (بدون pagination)',
-          );
-          _isLoading = false;
-          notifyListeners();
-          return;
-        }
-      }
-
-      // ✅ حساب OFFSET صحيح بناءً على عدد الفواتير الحالية
-      int currentOffset = loadMore ? _allSales.length : 0;
-
-      print('🔢 حساب الـ OFFSET:');
-      print('   - loadMore: $loadMore');
-      print('   - الفواتير الحالية: ${_allSales.length}');
-      print('   - OFFSET: $currentOffset');
-
+      // ✅ جلب البيانات مع حدود الصفحة
+      final offset = _page * _limit;
       final result = await db.rawQuery('''
-      SELECT 
-        s.id,
-        s.date,
-        s.total_amount,
-        s.total_profit,
-        s.customer_id,
-        c.name AS customer_name,
-        s.payment_type,
-        s.show_for_tax
+      SELECT s.*, c.name as customer_name
       FROM $table
       LEFT JOIN customers c ON s.customer_id = c.id
       WHERE $whereClause
-      ORDER BY s.date DESC, s.id DESC
-      LIMIT $_limit OFFSET $currentOffset
-    ''', args);
+      ORDER BY s.date DESC
+      LIMIT $_limit OFFSET $offset
+      ''', args);
 
-      final newSales = result.map((e) => Sale.fromMap(e)).toList();
-
-      print('📥 الفواتير الجديدة: ${newSales.length}');
-
-      if (newSales.isNotEmpty) {
-        if (loadMore) {
-          _allSales.addAll(newSales);
-        } else {
-          _allSales = newSales;
-        }
-
-        // ✅ تحديث الـ hasMore بناءً على إذا كانت الفواتير الجديدة أقل من الـ limit
-        _hasMore = newSales.length == _limit;
-
-        // ✅ تحديث الـ displayedSales
-        _displayedSales = List.from(_allSales);
-
-        print('✅ الفواتير الكلية: ${_allSales.length}');
+      if (result.isNotEmpty) {
+        final sales = result.map((row) => Sale.fromMap(row)).toList();
+        _allSales.addAll(sales);
+        final int displayCount = ((_page + 1) * _limit)
+            .clamp(0, _allSales.length)
+            .toInt();
+        _displayedSales = _allSales.sublist(0, displayCount);
+        _page++;
+        _hasMore = _allSales.length < totalCount;
       } else {
         _hasMore = false;
-        print('❌ لا توجد فواتير جديدة، تم تعيين hasMore=false');
       }
+
+      // ✅ تحديث الكاش
+      _updateCache();
     } catch (e) {
-      print('❌ خطأ في جلب الفواتير: $e');
-      _hasMore = false;
+      log('❌ خطأ أثناء جلب البيانات: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
-      print(
-        '🏁 انتهى التحميل. hasMore=$_hasMore, الفواتير=${_allSales.length}',
-      );
     }
   }
 

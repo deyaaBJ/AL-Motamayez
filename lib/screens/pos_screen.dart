@@ -100,6 +100,17 @@ class _PosScreenState extends State<PosScreen>
 
       for (final saleItem in saleItems) {
         try {
+          if (saleItem.itemType == 'service' || saleItem.productId == null) {
+            final serviceItem = CartItem.service(
+              serviceName: saleItem.itemName,
+              price: saleItem.price,
+            );
+            serviceItem.quantity = saleItem.quantity;
+            serviceItem.setCustomPrice(saleItem.price);
+            _cartItems.add(serviceItem);
+            continue;
+          }
+
           final product = await _provider.getProductById(saleItem.productId!);
           if (product != null) {
             List<ProductUnit> units = [];
@@ -124,18 +135,23 @@ class _PosScreenState extends State<PosScreen>
               quantity: saleItem.quantity,
               availableUnits: units,
               selectedUnit: selectedUnit,
+              customPrice: saleItem.price,
             );
 
             _cartItems.add(cartItem);
           }
         } catch (e) {
-          log('❌ خطأ في تحميل عنصر الفاتورة: $e');
+          log('Error loading invoice item: $e');
         }
       }
 
       if (mounted) {
         setState(() {
-          _calculateTotal();
+          _totalAmount = _cartItems.fold(0.0, (sum, item) {
+            return sum + (item.unitPrice * item.quantity);
+          });
+          _finalAmount = sale.totalAmount;
+          _isTotalModified = (_finalAmount != _totalAmount);
           _isSaleLoaded = true;
         });
       }

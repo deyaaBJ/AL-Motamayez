@@ -24,25 +24,36 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
   final ScrollController _verticalScrollController = ScrollController();
   Timer? _filterDebounceTimer;
 
+  // ✅ متغير لمنع التحميل المتكرر
+  bool _isInitializing = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final provider = context.read<SalesProvider>();
-
-      // ✅ تحميل السنة الحالية مسبقاً
-      provider.prefetchCurrentYear();
-
-      if (provider.selectedYear == null) {
-        provider.setYearFilter(DateTime.now().year);
-      } else {
-        // ✅ للسنة الحالية، استخدم resetForNewSearch
-        final isCurrentYear = provider.selectedYear == DateTime.now().year;
-        provider.fetchSales();
-      }
+      _initializeData();
     });
+  }
+
+  // ✅ دالة منفصلة للتهيئة مع حماية
+  void _initializeData() {
+    if (_isInitializing) return;
+    _isInitializing = true;
+
+    final provider = context.read<SalesProvider>();
+
+    // ✅ تحميل السنة الحالية مسبقاً
+    provider.prefetchCurrentYear();
+
+    if (provider.selectedYear == null) {
+      provider.setYearFilter(DateTime.now().year);
+    } else {
+      provider.fetchSales();
+    }
+
+    _isInitializing = false;
   }
 
   @override
@@ -60,14 +71,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     }
   }
 
-  // ✅ دالة لمسح جميع الفلاتر عدا التاريخ
   void _clearFiltersExceptDate(SalesProvider provider) {
     provider.setCustomerFilter('الكل');
     provider.setPaymentTypeFilter('الكل');
     provider.setTaxFilter('الكل');
   }
 
-  // ✅ دالة لتحديد ما إذا كانت قيمة Dropdown موجودة في القائمة
   bool _isValueInList(List<String> list, String? value) {
     if (value == null) return false;
     return list.contains(value);
@@ -80,16 +89,28 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       child: BaseLayout(
         currentPage: 'المبيعات',
         title: 'سجل الفواتير',
+        // ✅ استخدام Selector بدل Consumer للفلاتر فقط
+        child: Selector<SalesProvider, FilterState>(
+          selector:
+              (context, provider) => FilterState(
+                customerNames: provider.customerNames,
+                selectedCustomer: provider.selectedCustomer,
+                selectedPaymentType: provider.selectedPaymentType,
+                selectedTaxFilter: provider.selectedTaxFilter,
+                dateFilterType: provider.dateFilterType,
+                selectedDate: provider.selectedDate,
+                selectedMonth: provider.selectedMonth,
+                selectedYear: provider.selectedYear,
+              ),
+          builder: (context, filterState, _) {
+            final provider = context.read<SalesProvider>();
 
-        child: Consumer<SalesProvider>(
-          builder: (context, provider, _) {
-            // ✅ التحقق من صحة قيمة Dropdown قبل بناء الواجهة
             final validCustomerValue =
                 _isValueInList(
-                      provider.customerNames,
-                      provider.selectedCustomer,
+                      filterState.customerNames,
+                      filterState.selectedCustomer,
                     )
-                    ? provider.selectedCustomer
+                    ? filterState.selectedCustomer
                     : 'الكل';
 
             return LayoutBuilder(
@@ -101,22 +122,28 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
 
                 return Column(
                   children: [
-                    // ✅ قسم الفلاتر المتجاوب
-                    _buildResponsiveFiltersSection(
-                      isMobile,
-                      isTablet,
-                      isDesktop,
-                      provider,
-                      validCustomerValue,
+                    // ✅ قسم الفلاتر المتجاوب - مع RepaintBoundary
+                    RepaintBoundary(
+                      child: _buildResponsiveFiltersSection(
+                        isMobile,
+                        isTablet,
+                        isDesktop,
+                        provider,
+                        validCustomerValue ?? '',
+                        filterState,
+                      ),
                     ),
                     const SizedBox(height: 10),
 
-                    // ✅ جدول/قائمة الفواتير المتجاوبة
+                    // ✅ جدول/قائمة الفواتير المتجاوبة - Consumer منفصل للبيانات
                     Expanded(
-                      child:
-                          isMobile
-                              ? _buildMobileSalesList()
-                              : _buildDesktopDataTable(isTablet, isDesktop),
+                      child: RepaintBoundary(
+                        child: _buildSalesContent(
+                          isMobile,
+                          isTablet,
+                          isDesktop,
+                        ),
+                      ),
                     ),
                   ],
                 );
@@ -128,13 +155,34 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ بناء قسم الفلاتر المتجاوب
+  // ✅ Widget منفصل للمحتوى لعزل الـ Rebuilds
+  Widget _buildSalesContent(bool isMobile, bool isTablet, bool isDesktop) {
+    return Consumer2<SalesProvider, SettingsProvider>(
+      builder: (context, salesProvider, settingsProvider, _) {
+        if (salesProvider.sales.isEmpty && !salesProvider.isLoading) {
+          return _buildEmptyState(salesProvider);
+        }
+
+        return isMobile
+            ? _buildMobileSalesList(salesProvider, settingsProvider)
+            : _buildDesktopDataTable(
+              salesProvider,
+              settingsProvider,
+              isTablet,
+              isDesktop,
+            );
+      },
+    );
+  }
+
+  // ✅ تعديل الدالة لتستقبل FilterState
   Widget _buildResponsiveFiltersSection(
     bool isMobile,
     bool isTablet,
     bool isDesktop,
     SalesProvider provider,
     String validCustomerValue,
+    FilterState filterState,
   ) {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final role = auth.role;
@@ -161,54 +209,62 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       ),
       child: Column(
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.filter_alt_rounded,
-                color: Colors.blue.shade700,
-                size: isMobile ? 18 : 22,
-              ),
-              SizedBox(width: isMobile ? 6 : 8),
-              Text(
-                'تصفية الفواتير',
-                style: TextStyle(
-                  fontSize: isMobile ? 14 : 16,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.blue.shade800,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
           if (isMobile)
-            _buildMobileFiltersLayout(provider, role, validCustomerValue),
+            _buildMobileFiltersLayout(
+              provider,
+              role,
+              validCustomerValue,
+              filterState,
+            ),
           if (isTablet)
-            _buildTabletFiltersLayout(provider, role, validCustomerValue),
+            _buildTabletFiltersLayout(
+              provider,
+              role,
+              validCustomerValue,
+              filterState,
+            ),
           if (isDesktop)
-            _buildDesktopFiltersLayout(provider, role, validCustomerValue),
+            _buildDesktopFiltersLayout(
+              provider,
+              role,
+              validCustomerValue,
+              filterState,
+            ),
         ],
       ),
     );
   }
 
-  // ✅ تصميم الفلاتر للموبايل مع validCustomerValue
+  // ✅ تعديلات على دوال الفلاتر لاستقبال FilterState
   Widget _buildMobileFiltersLayout(
     SalesProvider provider,
     String? role,
     String validCustomerValue,
+    FilterState filterState,
   ) {
     return Column(
       children: [
-        _buildResponsivePaymentFilter(provider, true),
+        _buildResponsivePaymentFilter(
+          provider,
+          true,
+          filterState.selectedPaymentType ?? '',
+        ),
         const SizedBox(height: 10),
-        _buildResponsiveCustomerFilter(provider, true, validCustomerValue),
+        _buildResponsiveCustomerFilter(
+          provider,
+          true,
+          validCustomerValue,
+          filterState.customerNames,
+        ),
         const SizedBox(height: 10),
-        _buildResponsiveDateFilter(provider, true),
+        _buildResponsiveDateFilter(provider, true, filterState),
         if (role != 'tax') ...[
           const SizedBox(height: 10),
-          _buildResponsiveTaxFilter(provider, true),
+          _buildResponsiveTaxFilter(
+            provider,
+            true,
+            filterState.selectedTaxFilter ?? ' ',
+          ),
         ],
         const SizedBox(height: 10),
         _buildResponsiveClearButton(provider, true),
@@ -216,24 +272,30 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ تصميم الفلاتر للتابلت
   Widget _buildTabletFiltersLayout(
     SalesProvider provider,
     String? role,
     String validCustomerValue,
+    FilterState filterState,
   ) {
     return Column(
       children: [
-        // الصف الأول
         Row(
           children: [
-            Expanded(child: _buildResponsivePaymentFilter(provider, false)),
+            Expanded(
+              child: _buildResponsivePaymentFilter(
+                provider,
+                false,
+                filterState.selectedPaymentType ?? 'الكل',
+              ),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: _buildResponsiveCustomerFilter(
                 provider,
                 false,
                 validCustomerValue,
+                filterState.customerNames,
               ),
             ),
             const SizedBox(width: 8),
@@ -241,13 +303,20 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
           ],
         ),
         const SizedBox(height: 10),
-        // الصف الثاني
         Row(
           children: [
-            Expanded(child: _buildResponsiveDateFilter(provider, false)),
+            Expanded(
+              child: _buildResponsiveDateFilter(provider, false, filterState),
+            ),
             if (role != 'tax') ...[
               const SizedBox(width: 8),
-              Expanded(child: _buildResponsiveTaxFilter(provider, false)),
+              Expanded(
+                child: _buildResponsiveTaxFilter(
+                  provider,
+                  false,
+                  filterState.selectedTaxFilter ?? '',
+                ),
+              ),
             ],
           ],
         ),
@@ -255,28 +324,43 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ تصميم الفلاتر للكمبيوتر
   Widget _buildDesktopFiltersLayout(
     SalesProvider provider,
     String? role,
     String validCustomerValue,
+    FilterState filterState,
   ) {
     return Row(
       children: [
-        Expanded(child: _buildResponsivePaymentFilter(provider, false)),
+        Expanded(
+          child: _buildResponsivePaymentFilter(
+            provider,
+            false,
+            filterState.selectedPaymentType ?? '',
+          ),
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: _buildResponsiveCustomerFilter(
             provider,
             false,
             validCustomerValue,
+            filterState.customerNames,
           ),
         ),
         const SizedBox(width: 12),
-        Expanded(child: _buildResponsiveDateFilter(provider, false)),
+        Expanded(
+          child: _buildResponsiveDateFilter(provider, false, filterState),
+        ),
         if (role != 'tax') ...[
           const SizedBox(width: 12),
-          Expanded(child: _buildResponsiveTaxFilter(provider, false)),
+          Expanded(
+            child: _buildResponsiveTaxFilter(
+              provider,
+              false,
+              filterState.selectedTaxFilter ?? '',
+            ),
+          ),
         ],
         const SizedBox(width: 12),
         _buildResponsiveClearButton(provider, false),
@@ -284,8 +368,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ فلتر نوع الدفع المتجاوب
-  Widget _buildResponsivePaymentFilter(SalesProvider provider, bool isMobile) {
+  // ✅ تعديل دوال الفلاتر لتستقبل القيم مباشرة بدلاً من الـ Provider
+  Widget _buildResponsivePaymentFilter(
+    SalesProvider provider,
+    bool isMobile,
+    String selectedPaymentType,
+  ) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
@@ -334,54 +422,27 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: provider.selectedPaymentType,
-                items:
-                    provider.paymentTypes.map((String type) {
-                      String displayText = type;
-                      IconData icon = Icons.help_outline;
-                      Color color = Colors.grey;
-
-                      if (type == 'cash') {
-                        displayText = 'نقدي 💵';
-                        icon = Icons.attach_money_rounded;
-                        color = Colors.green;
-                      } else if (type == 'credit') {
-                        displayText = 'آجل 📅';
-                        icon = Icons.schedule_rounded;
-                        color = Colors.orange;
-                      } else {
-                        displayText = 'الكل 🔄';
-                        icon = Icons.all_inclusive_rounded;
-                        color = Colors.blue;
-                      }
-
-                      return DropdownMenuItem(
-                        value: type,
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: isMobile ? 8 : 12,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                icon,
-                                size: isMobile ? 16 : 18,
-                                color: color,
-                              ),
-                              SizedBox(width: isMobile ? 6 : 8),
-                              Text(
-                                displayText,
-                                style: TextStyle(
-                                  fontSize: isMobile ? 13 : 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade800,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                value: selectedPaymentType,
+                items: [
+                  _buildPaymentItem(
+                    'الكل',
+                    Icons.all_inclusive_rounded,
+                    Colors.blue,
+                    isMobile,
+                  ),
+                  _buildPaymentItem(
+                    'cash',
+                    Icons.attach_money_rounded,
+                    Colors.green,
+                    isMobile,
+                  ),
+                  _buildPaymentItem(
+                    'credit',
+                    Icons.schedule_rounded,
+                    Colors.orange,
+                    isMobile,
+                  ),
+                ],
                 onChanged:
                     (value) => _applyFilterWithDebounce(
                       () => provider.setPaymentTypeFilter(value),
@@ -404,11 +465,47 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ فلتر العميل المتجاوب
+  DropdownMenuItem<String> _buildPaymentItem(
+    String type,
+    IconData icon,
+    Color color,
+    bool isMobile,
+  ) {
+    String displayText = type;
+    if (type == 'cash')
+      displayText = 'نقدي 💵';
+    else if (type == 'credit')
+      displayText = 'آجل 📅';
+    else
+      displayText = 'الكل 🔄';
+
+    return DropdownMenuItem(
+      value: type,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 12),
+        child: Row(
+          children: [
+            Icon(icon, size: isMobile ? 16 : 18, color: color),
+            SizedBox(width: isMobile ? 6 : 8),
+            Text(
+              displayText,
+              style: TextStyle(
+                fontSize: isMobile ? 13 : 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildResponsiveCustomerFilter(
     SalesProvider provider,
     bool isMobile,
     String validCustomerValue,
+    List<String> customerNames,
   ) {
     return Container(
       decoration: BoxDecoration(
@@ -460,7 +557,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
               child: DropdownButton<String>(
                 value: validCustomerValue,
                 items:
-                    provider.customerNames.map((String name) {
+                    customerNames.map((String name) {
                       IconData icon = Icons.person_outline_rounded;
                       Color color = Colors.purple;
 
@@ -526,8 +623,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ فلتر التاريخ المتجاوب
-  Widget _buildResponsiveDateFilter(SalesProvider provider, bool isMobile) {
+  Widget _buildResponsiveDateFilter(
+    SalesProvider provider,
+    bool isMobile,
+    FilterState filterState,
+  ) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
@@ -578,85 +678,25 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
-                  value: provider.dateFilterType,
+                  value: filterState.dateFilterType,
                   items: [
-                    DropdownMenuItem(
-                      value: 'day',
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isMobile ? 6 : 8,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.today_rounded,
-                              size: isMobile ? 16 : 18,
-                              color: Colors.black87,
-                            ),
-                            SizedBox(width: isMobile ? 4 : 6),
-                            Text(
-                              'يوم',
-                              style: TextStyle(
-                                fontSize: isMobile ? 12 : 14,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    _buildDateTypeItem(
+                      'day',
+                      Icons.today_rounded,
+                      'يوم',
+                      isMobile,
                     ),
-                    DropdownMenuItem(
-                      value: 'month',
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isMobile ? 6 : 8,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.calendar_view_month_rounded,
-                              size: isMobile ? 16 : 18,
-                              color: Colors.black87,
-                            ),
-                            SizedBox(width: isMobile ? 4 : 6),
-                            Text(
-                              'شهر',
-                              style: TextStyle(
-                                fontSize: isMobile ? 12 : 14,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    _buildDateTypeItem(
+                      'month',
+                      Icons.calendar_view_month_rounded,
+                      'شهر',
+                      isMobile,
                     ),
-                    DropdownMenuItem(
-                      value: 'year',
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isMobile ? 6 : 8,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.event_note_rounded,
-                              size: isMobile ? 16 : 18,
-                              color: Colors.black87,
-                            ),
-                            SizedBox(width: isMobile ? 4 : 6),
-                            Text(
-                              'سنة',
-                              style: TextStyle(
-                                fontSize: isMobile ? 12 : 14,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    _buildDateTypeItem(
+                      'year',
+                      Icons.event_note_rounded,
+                      'سنة',
+                      isMobile,
                     ),
                   ],
                   onChanged:
@@ -682,7 +722,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
             ),
             const SizedBox(height: 6),
             Expanded(
-              child: _buildResponsiveDateFilterContent(provider, isMobile),
+              child: _buildResponsiveDateFilterContent(
+                provider,
+                isMobile,
+                filterState,
+              ),
             ),
           ],
         ),
@@ -690,25 +734,68 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ محتوى فلتر التاريخ المتجاوب
+  DropdownMenuItem<String> _buildDateTypeItem(
+    String value,
+    IconData icon,
+    String text,
+    bool isMobile,
+  ) {
+    return DropdownMenuItem(
+      value: value,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 8),
+        child: Row(
+          children: [
+            Icon(icon, size: isMobile ? 16 : 18, color: Colors.black87),
+            SizedBox(width: isMobile ? 4 : 6),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: isMobile ? 12 : 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.black,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildResponsiveDateFilterContent(
     SalesProvider provider,
     bool isMobile,
+    FilterState filterState,
   ) {
-    switch (provider.dateFilterType) {
+    switch (filterState.dateFilterType) {
       case 'day':
-        return _buildResponsiveDayFilter(provider, isMobile);
+        return _buildResponsiveDayFilter(
+          provider,
+          isMobile,
+          filterState.selectedDate,
+        );
       case 'month':
-        return _buildResponsiveMonthFilter(provider, isMobile);
+        return _buildResponsiveMonthFilter(provider, isMobile, filterState);
       case 'year':
-        return _buildResponsiveYearFilter(provider, isMobile);
+        return _buildResponsiveYearFilter(
+          provider,
+          isMobile,
+          filterState.selectedYear,
+        );
       default:
-        return _buildResponsiveDayFilter(provider, isMobile);
+        return _buildResponsiveDayFilter(
+          provider,
+          isMobile,
+          filterState.selectedDate,
+        );
     }
   }
 
-  // ✅ فلتر اليوم المتجاوب
-  Widget _buildResponsiveDayFilter(SalesProvider provider, bool isMobile) {
+  Widget _buildResponsiveDayFilter(
+    SalesProvider provider,
+    bool isMobile,
+    DateTime? selectedDate,
+  ) {
     return GestureDetector(
       onTap: () => _selectDate(context, provider, isMobile),
       child: Container(
@@ -727,14 +814,13 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              _getDayFilterText(provider),
+              selectedDate == null
+                  ? 'اختر التاريخ'
+                  : '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
               style: TextStyle(
                 fontSize: isMobile ? 13 : 14,
                 fontWeight: FontWeight.w500,
-                color:
-                    provider.selectedDate == null
-                        ? Colors.black54
-                        : Colors.black,
+                color: selectedDate == null ? Colors.black54 : Colors.black,
               ),
             ),
             Container(
@@ -755,8 +841,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ فلتر الشهر المتجاوب
-  Widget _buildResponsiveMonthFilter(SalesProvider provider, bool isMobile) {
+  Widget _buildResponsiveMonthFilter(
+    SalesProvider provider,
+    bool isMobile,
+    FilterState filterState,
+  ) {
     return SizedBox(
       height: isMobile ? 42 : 48,
       child: Row(
@@ -769,7 +858,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<int>(
-                  value: provider.selectedMonth,
+                  value: filterState.selectedMonth,
                   items: List.generate(12, (index) {
                     final month = index + 1;
                     return DropdownMenuItem(
@@ -803,7 +892,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                       (month) => _applyFilterWithDebounce(() {
                         if (month != null) {
                           provider.setMonthFilter(month);
-                          if (provider.selectedYear == null) {
+                          if (filterState.selectedYear == null) {
                             provider.setYearFilter(DateTime.now().year);
                           }
                           _clearFiltersExceptDate(provider);
@@ -846,13 +935,13 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<int>(
-                  value: provider.selectedYear,
+                  value: filterState.selectedYear,
                   items: _generateYearItems(isMobile),
                   onChanged:
                       (year) => _applyFilterWithDebounce(() {
                         if (year != null) {
                           provider.setYearFilter(year);
-                          if (provider.selectedMonth == null) {
+                          if (filterState.selectedMonth == null) {
                             provider.setMonthFilter(DateTime.now().month);
                           }
                           _clearFiltersExceptDate(provider);
@@ -897,8 +986,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ فلتر السنة المتجاوب
-  Widget _buildResponsiveYearFilter(SalesProvider provider, bool isMobile) {
+  Widget _buildResponsiveYearFilter(
+    SalesProvider provider,
+    bool isMobile,
+    int? selectedYear,
+  ) {
     return Container(
       height: isMobile ? 42 : 48,
       decoration: BoxDecoration(
@@ -907,7 +999,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int>(
-          value: provider.selectedYear,
+          value: selectedYear,
           items: _generateYearItems(isMobile),
           onChanged:
               (year) => _applyFilterWithDebounce(() {
@@ -956,8 +1048,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ فلتر الضريبة المتجاوب
-  Widget _buildResponsiveTaxFilter(SalesProvider provider, bool isMobile) {
+  Widget _buildResponsiveTaxFilter(
+    SalesProvider provider,
+    bool isMobile,
+    String selectedTaxFilter,
+  ) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
@@ -1006,7 +1101,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: provider.selectedTaxFilter,
+                value: selectedTaxFilter,
                 items: [
                   _buildTaxDropdownItem(
                     'الكل',
@@ -1049,7 +1144,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ عنصر قائمة الضريبة المتجاوب
   DropdownMenuItem<String> _buildTaxDropdownItem(
     String text,
     IconData icon,
@@ -1078,7 +1172,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ زر مسح الفلاتر المتجاوب
   Widget _buildResponsiveClearButton(SalesProvider provider, bool isMobile) {
     return Container(
       decoration: BoxDecoration(
@@ -1142,65 +1235,53 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ دالة مساعدة للـ Debounce على الفلاتر
   void _applyFilterWithDebounce(Function() filterFunction) {
     _filterDebounceTimer?.cancel();
     _filterDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       filterFunction();
-      // ✅ الدالة filterFunction بالفعل تستدعي resetForNewSearch
     });
   }
 
-  // ✅ بناء قائمة الفواتير للعرض على الموبايل
-  Widget _buildMobileSalesList() {
-    return Consumer2<SalesProvider, SettingsProvider>(
-      builder: (context, salesProvider, settingsProvider, _) {
-        if (salesProvider.sales.isEmpty && !salesProvider.isLoading) {
-          return _buildEmptyState(salesProvider);
-        }
+  // ✅ تعديل الدوال لتستقبل الـ Providers مباشرة
+  Widget _buildMobileSalesList(
+    SalesProvider salesProvider,
+    SettingsProvider settingsProvider,
+  ) {
+    return Column(
+      children: [
+        _buildMobileTableHeader(salesProvider),
+        Expanded(
+          child: ListView.builder(
+            controller: _verticalScrollController,
+            itemCount: salesProvider.sales.length + 1,
+            itemBuilder: (context, index) {
+              if (index == salesProvider.sales.length) {
+                if (salesProvider.isLoading) {
+                  return _buildLoadingIndicator(salesProvider);
+                }
+                if (!salesProvider.hasMore && salesProvider.sales.isNotEmpty) {
+                  return _buildEndOfListIndicator(salesProvider);
+                }
+                if (salesProvider.hasMore && !salesProvider.isLoading) {
+                  return _buildLoadMoreButton(salesProvider);
+                }
+                return Container();
+              }
 
-        return Column(
-          children: [
-            // ✅ رأس المعلومات مع أدوات التحديد
-            _buildMobileTableHeader(salesProvider),
-
-            // ✅ قائمة الفواتير
-            Expanded(
-              child: ListView.builder(
-                controller: _verticalScrollController,
-                itemCount: salesProvider.sales.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == salesProvider.sales.length) {
-                    if (salesProvider.isLoading) {
-                      return _buildLoadingIndicator(salesProvider);
-                    }
-                    if (!salesProvider.hasMore &&
-                        salesProvider.sales.isNotEmpty) {
-                      return _buildEndOfListIndicator(salesProvider);
-                    }
-                    if (salesProvider.hasMore && !salesProvider.isLoading) {
-                      return _buildLoadMoreButton(salesProvider);
-                    }
-                    return Container();
-                  }
-
-                  final sale = salesProvider.sales[index];
-                  return _buildMobileSaleCard(
-                    sale,
-                    salesProvider,
-                    settingsProvider,
-                    index,
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
+              final sale = salesProvider.sales[index];
+              return _buildMobileSaleCard(
+                sale,
+                salesProvider,
+                settingsProvider,
+                index,
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
-  // ✅ بطاقة بيع للعرض على الموبايل
   Widget _buildMobileSaleCard(
     Sale sale,
     SalesProvider salesProvider,
@@ -1233,10 +1314,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // الصف الأول: رقم التسلسلي، Checkbox، رقم الفاتورة
               Row(
                 children: [
-                  // ✅ الرقم التسلسلي
                   Container(
                     width: 30,
                     alignment: Alignment.center,
@@ -1248,8 +1327,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                       ),
                     ),
                   ),
-
-                  // ✅ Checkbox التحديد
                   if (!isCurrentArchiveMode)
                     Checkbox(
                       value: isSelected,
@@ -1257,10 +1334,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                         salesProvider.toggleSaleSelection(sale.id);
                       },
                     ),
-
                   const Spacer(),
-
-                  // رقم الفاتورة
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -1287,10 +1361,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   ),
                 ],
               ),
-
               const SizedBox(height: 8),
-
-              // الصف الثاني: نوع الدفع
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -1316,10 +1387,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
-              // معلومات العميل
               Row(
                 children: [
                   Icon(Icons.person, size: 16, color: Colors.grey[600]),
@@ -1333,10 +1401,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   ),
                 ],
               ),
-
               const SizedBox(height: 8),
-
-              // المعلومات المالية
               Row(
                 children: [
                   Expanded(
@@ -1363,10 +1428,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   ),
                 ],
               ),
-
               const SizedBox(height: 8),
-
-              // التاريخ والوقت
               Row(
                 children: [
                   Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
@@ -1384,14 +1446,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
-              // أزرار الإجراءات
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  // زر التعديل (غير متاح للأرشيف)
                   IconButton(
                     icon: Icon(
                       Icons.edit,
@@ -1416,10 +1474,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                                 ),
                               );
                             },
-                    tooltip: 'تعديل',
+                    tooltip: ' تعديل',
                   ),
-
-                  // زر الحذف/الإرجاع (غير متاح للأرشيف)
                   IconButton(
                     icon: Icon(
                       Icons.delete_outline,
@@ -1436,8 +1492,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                                 _showDeleteConfirmationDialog(context, sale),
                     tooltip: 'حذف',
                   ),
-
-                  // زر التفاصيل
                   IconButton(
                     icon: Icon(
                       Icons.visibility,
@@ -1459,211 +1513,184 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ بناء جدول الفواتير للعرض على الكمبيوتر/التابلت
-  Widget _buildDesktopDataTable(bool isTablet, bool isDesktop) {
-    return Consumer2<SalesProvider, SettingsProvider>(
-      builder: (context, salesProvider, settingsProvider, _) {
-        final hasSelectedSales = salesProvider.selectedSaleIds.isNotEmpty;
+  Widget _buildDesktopDataTable(
+    SalesProvider salesProvider,
+    SettingsProvider settingsProvider,
+    bool isTablet,
+    bool isDesktop,
+  ) {
+    final hasSelectedSales = salesProvider.selectedSaleIds.isNotEmpty;
 
-        if (salesProvider.sales.isEmpty && !salesProvider.isLoading) {
-          return _buildEmptyState(salesProvider);
-        }
+    if (salesProvider.sales.isEmpty && !salesProvider.isLoading) {
+      return _buildEmptyState(salesProvider);
+    }
 
-        // تحديد الأعمدة التي ستظهر بناءً على حجم الشاشة
-        final showProfitColumn =
-            isDesktop || (isTablet && !salesProvider.isArchiveMode);
-        final showTimeColumn = isDesktop;
-        final showCustomerColumn = isDesktop || isTablet;
+    final showProfitColumn =
+        isDesktop || (isTablet && !salesProvider.isArchiveMode);
+    final showTimeColumn = isDesktop;
+    final showCustomerColumn = isDesktop || isTablet;
 
-        return Column(
-          children: [
-            // ✅ شريط التحديد Sticky (يظهر فقط عند التحديد)
-            if (hasSelectedSales && !salesProvider.isArchiveMode)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  border: Border.all(color: Colors.blue[100]!),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.blue[700], size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${salesProvider.selectedSaleIds.length} فاتورة محددة',
-                      style: TextStyle(
-                        color: Colors.blue[800],
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const Spacer(),
-
-                    // زر تحويل للكاش
-                    ElevatedButton.icon(
-                      icon: Icon(Icons.money_off, size: 16),
-                      label: Text('تحويل لكاش'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green[500],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPressed: () {
-                        _showBatchPaymentDialog(context, salesProvider, 'cash');
-                      },
-                    ),
-
-                    const SizedBox(width: 8),
-
-                    // زر تحويل لأجل
-                    ElevatedButton.icon(
-                      icon: Icon(Icons.credit_card, size: 16),
-                      label: Text('تحويل لأجل'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange[500],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPressed: () {
-                        _showBatchPaymentDialog(
-                          context,
-                          salesProvider,
-                          'credit',
-                        );
-                      },
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    // زر إلغاء التحديد
-                    IconButton(
-                      icon: Icon(Icons.clear, size: 20),
-                      onPressed: () {
-                        salesProvider.clearSelection();
-                      },
-                      tooltip: 'إلغاء التحديد',
-                      color: Colors.grey[600],
-                    ),
-                  ],
-                ),
-              ),
-
-            // الجدول الرئيسي
-            Expanded(
-              child: Container(
-                margin: EdgeInsets.symmetric(
-                  horizontal: isTablet ? 8 : 16,
-                  vertical: 0,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey[200]!),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                constraints: const BoxConstraints(minHeight: 200),
-                child: Column(
-                  children: [
-                    // رأس المعلومات مع مؤشر الأرشيف
-                    _buildTableHeader(salesProvider),
-
-                    // ✅ الجدول مع التمرير
-                    Expanded(
-                      child: SingleChildScrollView(
-                        controller: _verticalScrollController,
-                        scrollDirection: Axis.vertical,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            showCheckboxColumn: false,
-                            headingRowColor:
-                                WidgetStateProperty.resolveWith<Color?>(
-                                  (Set<WidgetState> states) =>
-                                      salesProvider.isArchiveMode
-                                          ? Colors.orange[50]
-                                          : Colors.blue[50],
-                                ),
-                            dataRowMaxHeight: 56,
-                            dataRowMinHeight: 48,
-                            headingTextStyle: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color:
-                                  salesProvider.isArchiveMode
-                                      ? Colors.orange[800]
-                                      : Colors.blue[800],
-                              fontSize: isTablet ? 14 : 15,
-                            ),
-                            dataTextStyle: TextStyle(
-                              fontSize: isTablet ? 13 : 14,
-                            ),
-                            columnSpacing: isTablet ? 40 : 70,
-                            horizontalMargin: isTablet ? 10 : 20,
-                            columns: _buildDataTableColumns(
-                              showProfitColumn,
-                              showTimeColumn,
-                              showCustomerColumn,
-                              salesProvider,
-                            ),
-                            rows: _buildDataTableRows(
-                              salesProvider,
-                              settingsProvider,
-                              salesProvider.sales,
-                              showProfitColumn,
-                              showTimeColumn,
-                              showCustomerColumn,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // ✅ مؤشرات التحميل والرسائل
-                    if (salesProvider.isLoading)
-                      _buildLoadingIndicator(salesProvider),
-
-                    if (!salesProvider.hasMore &&
-                        salesProvider.sales.isNotEmpty &&
-                        !salesProvider.isLoading)
-                      _buildEndOfListIndicator(salesProvider),
-
-                    // ✅ زر تحميل المزيد
-                    if (salesProvider.hasMore &&
-                        !salesProvider.isLoading &&
-                        salesProvider.sales.isNotEmpty)
-                      _buildLoadMoreButton(salesProvider),
-                  ],
-                ),
+    return Column(
+      children: [
+        if (hasSelectedSales && !salesProvider.isArchiveMode)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              border: Border.all(color: Colors.blue[100]!),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
               ),
             ),
-          ],
-        );
-      },
+            child: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.blue[700], size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  '${salesProvider.selectedSaleIds.length} فاتورة محددة',
+                  style: TextStyle(
+                    color: Colors.blue[800],
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const Spacer(),
+                ElevatedButton.icon(
+                  icon: Icon(Icons.money_off, size: 16),
+                  label: Text('تحويل لكاش'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[500],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: () {
+                    _showBatchPaymentDialog(context, salesProvider, 'cash');
+                  },
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  icon: Icon(Icons.credit_card, size: 16),
+                  label: Text('تحويل لأجل'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange[500],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: () {
+                    _showBatchPaymentDialog(context, salesProvider, 'credit');
+                  },
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  icon: Icon(Icons.clear, size: 20),
+                  onPressed: () {
+                    salesProvider.clearSelection();
+                  },
+                  tooltip: 'إلغاء التحديد',
+                  color: Colors.grey[600],
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: Container(
+            margin: EdgeInsets.symmetric(
+              horizontal: isTablet ? 8 : 16,
+              vertical: 0,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey[200]!),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            constraints: const BoxConstraints(minHeight: 200),
+            child: Column(
+              children: [
+                _buildTableHeader(salesProvider),
+                Expanded(
+                  child: SingleChildScrollView(
+                    controller: _verticalScrollController,
+                    scrollDirection: Axis.vertical,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        showCheckboxColumn: false,
+                        headingRowColor:
+                            WidgetStateProperty.resolveWith<Color?>(
+                              (Set<WidgetState> states) =>
+                                  salesProvider.isArchiveMode
+                                      ? Colors.orange[50]
+                                      : Colors.blue[50],
+                            ),
+                        dataRowMaxHeight: 56,
+                        dataRowMinHeight: 48,
+                        headingTextStyle: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color:
+                              salesProvider.isArchiveMode
+                                  ? Colors.orange[800]
+                                  : Colors.blue[800],
+                          fontSize: isTablet ? 14 : 15,
+                        ),
+                        dataTextStyle: TextStyle(fontSize: isTablet ? 13 : 14),
+                        columnSpacing: isTablet ? 40 : 70,
+                        horizontalMargin: isTablet ? 10 : 20,
+                        columns: _buildDataTableColumns(
+                          showProfitColumn,
+                          showTimeColumn,
+                          showCustomerColumn,
+                          salesProvider,
+                        ),
+                        rows: _buildDataTableRows(
+                          salesProvider,
+                          settingsProvider,
+                          salesProvider.sales,
+                          showProfitColumn,
+                          showTimeColumn,
+                          showCustomerColumn,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (salesProvider.isLoading)
+                  _buildLoadingIndicator(salesProvider),
+                if (!salesProvider.hasMore &&
+                    salesProvider.sales.isNotEmpty &&
+                    !salesProvider.isLoading)
+                  _buildEndOfListIndicator(salesProvider),
+                if (salesProvider.hasMore &&
+                    !salesProvider.isLoading &&
+                    salesProvider.sales.isNotEmpty)
+                  _buildLoadMoreButton(salesProvider),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  // ✅ بناء أعمدة الجدول بشكل ديناميكي
   List<DataColumn> _buildDataTableColumns(
     bool showProfitColumn,
     bool showTimeColumn,
@@ -1674,15 +1701,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     if (!salesProvider.isArchiveMode) {
       columns.add(DataColumn(label: _buildSelectAllHeader(salesProvider)));
     }
-    // ✅ عمود الرقم التسلسلي
     columns.add(
       DataColumn(
         label: Text('#', style: TextStyle(fontWeight: FontWeight.bold)),
         numeric: true,
       ),
     );
-
-    // ✅ عمود Checkbox التحديد (مخفي في الأرشيف)
 
     if (showCustomerColumn) {
       columns.add(
@@ -1717,7 +1741,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     return columns;
   }
 
-  // ✅ دالة لبناء header التحديد (Select All)
   Widget _buildSelectAllHeader(SalesProvider salesProvider) {
     final shownSales = salesProvider.sales;
     final allSelected =
@@ -1738,7 +1761,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ بناء صفوف الجدول بشكل ديناميكي
   List<DataRow> _buildDataTableRows(
     SalesProvider salesProvider,
     SettingsProvider settingsProvider,
@@ -1753,7 +1775,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
         sales[index],
         salesProvider,
         settingsProvider,
-        Key('sale_row_${sales[index].id}_${sales[index].date}'),
+        Key('sale_row_${sales[index].id}_${sales[index].date}_$index'),
         showProfitColumn,
         showTimeColumn,
         showCustomerColumn,
@@ -1763,7 +1785,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ بناء صف واحد بشكل ديناميكي
   DataRow _buildDataRow(
     Sale sale,
     SalesProvider salesProvider,
@@ -1777,7 +1798,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     final isCurrentArchiveMode = salesProvider.isArchiveMode;
     final isSelected = salesProvider.selectedSaleIds.contains(sale.id);
     final cells = <DataCell>[];
-    // ✅ خلية Checkbox التحديد (مخفية في الأرشيف)
+
     if (!isCurrentArchiveMode) {
       cells.add(
         DataCell(
@@ -1790,7 +1811,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
         ),
       );
     }
-    // ✅ خلية الرقم التسلسلي
+
     cells.add(
       DataCell(
         Container(
@@ -1807,7 +1828,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       ),
     );
 
-    // خلية العميل (إذا كانت معروضة)
     if (showCustomerColumn) {
       cells.add(
         DataCell(
@@ -1827,7 +1847,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       );
     }
 
-    // خلية المبلغ
     cells.add(
       DataCell(
         Text(
@@ -1841,7 +1860,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       ),
     );
 
-    // خلية النوع
     cells.add(
       DataCell(
         Container(
@@ -1872,7 +1890,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       ),
     );
 
-    // خلية التاريخ
     cells.add(
       DataCell(
         Text(
@@ -1890,13 +1907,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       ),
     );
 
-    // خلية الإجراءات
     cells.add(
       DataCell(
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // زر التعديل (غير متاح للأرشيف)
             Container(
               decoration: BoxDecoration(
                 color:
@@ -1939,12 +1954,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                 tooltip:
                     isCurrentArchiveMode
                         ? 'لا يمكن تعديل الفواتير المؤرشفة'
-                        : 'تعديل الفاتورة',
+                        : ' تعديل الفاتورة',
               ),
             ),
             const SizedBox(width: 8),
-
-            // زر الحذف/الإرجاع (غير متاح للأرشيف)
             Container(
               decoration: BoxDecoration(
                 color: isCurrentArchiveMode ? Colors.grey[100] : Colors.red[50],
@@ -1976,8 +1989,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                         : 'حذف الفاتورة',
               ),
             ),
-
-            // ✅ زر التفاصيل الإضافية
             const SizedBox(width: 8),
             Container(
               decoration: BoxDecoration(
@@ -2024,7 +2035,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ رأس الجدول للكمبيوتر/التابلت
   Widget _buildTableHeader(SalesProvider salesProvider) {
     final hasSelectedSales = salesProvider.selectedSaleIds.isNotEmpty;
 
@@ -2074,94 +2084,76 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      hasSelectedSales
-                          ? '${salesProvider.selectedSaleIds.length} فاتورة محددة من ${salesProvider.sales.length} فاتورة معروضة'
-                          : 'عرض ${salesProvider.sales.length} من إجمالي ${salesProvider.loadedSalesCount} فاتورة',
-                      style: TextStyle(
-                        color:
-                            salesProvider.isArchiveMode
-                                ? Colors.orange[600]
-                                : Colors.blue[600],
-                        fontSize: 11,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          hasSelectedSales
+                              ? '${salesProvider.selectedSaleIds.length} محدد من ${salesProvider.sales.length}'
+                              : '${salesProvider.sales.length} من ${salesProvider.loadedSalesCount}',
+                          style: TextStyle(
+                            color:
+                                salesProvider.isArchiveMode
+                                    ? Colors.orange[600]
+                                    : Colors.blue[600],
+                            fontSize: 11,
+                          ),
+                        ),
+                        if (salesProvider.isFilterActive) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[200],
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              salesProvider.activeFiltersDescription,
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 10,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    if (salesProvider.isFilterActive) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        salesProvider.activeFiltersDescription,
-                        style: TextStyle(color: Colors.grey[600], fontSize: 10),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
                   ],
                 ),
               ),
-              const Spacer(),
-
-              // ✅ أزرار التعديل الجماعي في Header
               if (hasSelectedSales && !salesProvider.isArchiveMode)
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // زر تحويل للكاش
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.green[100],
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.green[300]!),
-                      ),
-                      child: IconButton(
-                        icon: Icon(
-                          Icons.money_off,
-                          size: 16,
-                          color: Colors.green[700],
-                        ),
-                        onPressed: () {
-                          _showBatchPaymentDialog(
-                            context,
-                            salesProvider,
-                            'cash',
-                          );
-                        },
-                        tooltip: 'تحويل الفواتير المحددة لكاش',
-                      ),
+                    _buildSmallActionButton(
+                      icon: Icons.money_off,
+                      color: Colors.green,
+                      onPressed: () {
+                        _showBatchPaymentDialog(context, salesProvider, 'cash');
+                      },
+                      tooltip: 'تحويل للكاش',
                     ),
-                    const SizedBox(width: 8),
-
-                    // زر تحويل لأجل
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.orange[100],
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.orange[300]!),
-                      ),
-                      child: IconButton(
-                        icon: Icon(
-                          Icons.credit_card,
-                          size: 16,
-                          color: Colors.orange[700],
-                        ),
-                        onPressed: () {
-                          _showBatchPaymentDialog(
-                            context,
-                            salesProvider,
-                            'credit',
-                          );
-                        },
-                        tooltip: 'تحويل الفواتير المحددة لأجل',
-                      ),
+                    const SizedBox(width: 4),
+                    _buildSmallActionButton(
+                      icon: Icons.credit_card,
+                      color: Colors.orange,
+                      onPressed: () {
+                        _showBatchPaymentDialog(
+                          context,
+                          salesProvider,
+                          'credit',
+                        );
+                      },
+                      tooltip: 'تحويل لأجل',
                     ),
-                    const SizedBox(width: 8),
-
-                    // زر إلغاء التحديد
-                    IconButton(
-                      icon: Icon(
-                        Icons.clear,
-                        size: 18,
-                        color: Colors.grey[600],
-                      ),
+                    const SizedBox(width: 4),
+                    _buildSmallActionButton(
+                      icon: Icons.clear,
+                      color: Colors.grey,
                       onPressed: () {
                         salesProvider.clearSelection();
                       },
@@ -2169,23 +2161,23 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                     ),
                   ],
                 ),
-
               if (salesProvider.isLoading)
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color:
-                        salesProvider.isArchiveMode
-                            ? Colors.orange
-                            : Colors.blue,
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color:
+                          salesProvider.isArchiveMode
+                              ? Colors.orange
+                              : Colors.blue,
+                    ),
                   ),
                 ),
             ],
           ),
-
-          // ✅ مؤشر الأرشيف مع معلومات إضافية
           if (salesProvider.isArchiveMode) ...[
             const SizedBox(height: 8),
             Container(
@@ -2218,7 +2210,29 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ رأس الجدول للعرض على الموبايل
+  Widget _buildSmallActionButton({
+    required IconData icon,
+    required MaterialColor color,
+    required VoidCallback onPressed,
+    required String tooltip,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: color[100],
+        borderRadius: BorderRadius.circular(4),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            child: Icon(icon, size: 16, color: color[700]),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMobileTableHeader(SalesProvider salesProvider) {
     final hasSelectedSales = salesProvider.selectedSaleIds.isNotEmpty;
 
@@ -2282,8 +2296,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   ],
                 ),
               ),
-
-              // ✅ أزرار التعديل الجماعي في الموبايل
               if (hasSelectedSales && !salesProvider.isArchiveMode)
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -2327,7 +2339,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                     ),
                   ],
                 ),
-
               if (salesProvider.isLoading)
                 SizedBox(
                   width: 16,
@@ -2342,8 +2353,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                 ),
             ],
           ),
-
-          // ✅ أزرار التعديل الجماعي أسفل Header في الموبايل
           if (hasSelectedSales && !salesProvider.isArchiveMode)
             Column(
               children: [
@@ -2396,7 +2405,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ مؤشر التحميل
   Widget _buildLoadingIndicator(SalesProvider salesProvider) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2408,7 +2416,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ مؤشر نهاية القائمة
   Widget _buildEndOfListIndicator(SalesProvider salesProvider) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -2445,8 +2452,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ زر تحميل المزيد
   Widget _buildLoadMoreButton(SalesProvider salesProvider) {
+    if (!salesProvider.hasMore || salesProvider.isLoading) {
+      return const SizedBox.shrink();
+    }
+
     print(
       '🔘 بناء زر عرض المزيد: hasMore=${salesProvider.hasMore}, isLoading=${salesProvider.isLoading}',
     );
@@ -2488,7 +2498,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
   }
 
-  // ✅ حالة عدم وجود فواتير
   Widget _buildEmptyState(SalesProvider salesProvider) {
     if (salesProvider.hasLoadedSales) {
       return Center(
@@ -2538,13 +2547,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
         ),
       );
     }
-  }
-
-  // ✅ باقي الدوال المساعدة
-  String _getDayFilterText(SalesProvider provider) {
-    if (provider.selectedDate == null) return 'اختر التاريخ';
-    final date = provider.selectedDate!;
-    return '${date.day}/${date.month}/${date.year}';
   }
 
   String _getMonthName(int month) {
@@ -2627,7 +2629,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     }
   }
 
-  // ✅ دالة لعرض تأكيد التعديل الجماعي
   Future<void> _showBatchPaymentDialog(
     BuildContext context,
     SalesProvider salesProvider,
@@ -2867,7 +2868,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
         ToastType.success,
       );
     } catch (e) {
-      showAppToast(context, 'خطأ في حذف الفاتورة: $e', ToastType.error);
+      showAppToast(context, 'خطأ في حذف الفواتير: $e', ToastType.error);
     }
   }
 
@@ -2882,4 +2883,52 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
   Color _getPaymentTypeColor(String paymentType) {
     return paymentType == 'cash' ? Colors.green : Colors.orange;
   }
+}
+
+// ✅ كلاس مساعد لعزل حالة الفلاتر
+class FilterState {
+  final List<String> customerNames;
+  final String? selectedCustomer;
+  final String? selectedPaymentType;
+  final String? selectedTaxFilter;
+  final String dateFilterType;
+  final DateTime? selectedDate;
+  final int? selectedMonth;
+  final int? selectedYear;
+
+  FilterState({
+    required this.customerNames,
+    required this.selectedCustomer,
+    required this.selectedPaymentType,
+    required this.selectedTaxFilter,
+    required this.dateFilterType,
+    required this.selectedDate,
+    required this.selectedMonth,
+    required this.selectedYear,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FilterState &&
+          runtimeType == other.runtimeType &&
+          customerNames == other.customerNames &&
+          selectedCustomer == other.selectedCustomer &&
+          selectedPaymentType == other.selectedPaymentType &&
+          selectedTaxFilter == other.selectedTaxFilter &&
+          dateFilterType == other.dateFilterType &&
+          selectedDate == other.selectedDate &&
+          selectedMonth == other.selectedMonth &&
+          selectedYear == other.selectedYear;
+
+  @override
+  int get hashCode =>
+      customerNames.hashCode ^
+      selectedCustomer.hashCode ^
+      selectedPaymentType.hashCode ^
+      selectedTaxFilter.hashCode ^
+      dateFilterType.hashCode ^
+      selectedDate.hashCode ^
+      selectedMonth.hashCode ^
+      selectedYear.hashCode;
 }

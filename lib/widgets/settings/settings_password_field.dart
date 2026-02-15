@@ -5,6 +5,7 @@ class SettingsPasswordField extends StatefulWidget {
   final TextEditingController controller;
   final String label;
   final bool enabled;
+  final bool readOnly;
   final Color? color;
 
   const SettingsPasswordField({
@@ -12,6 +13,7 @@ class SettingsPasswordField extends StatefulWidget {
     required this.controller,
     required this.label,
     this.enabled = true,
+    this.readOnly = false,
     this.color,
   });
 
@@ -29,6 +31,7 @@ class _SettingsPasswordFieldState extends State<SettingsPasswordField> {
     return TextField(
       controller: widget.controller,
       enabled: widget.enabled,
+      readOnly: widget.readOnly,
       obscureText: _obscureText,
       decoration: InputDecoration(
         labelText: widget.label,

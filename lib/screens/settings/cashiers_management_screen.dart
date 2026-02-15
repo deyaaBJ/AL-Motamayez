@@ -615,7 +615,8 @@ class _CashierDetailScreenState extends State<CashierDetailScreen> {
                     SettingsPasswordField(
                       controller: _passwordController,
                       label: 'كلمة المرور الحالية',
-                      enabled: false,
+                      enabled: true,
+                      readOnly: true,
                       color: const Color(0xFF4A90E2),
                     ),
                   ],
@@ -663,7 +664,10 @@ class _CashierDetailScreenState extends State<CashierDetailScreen> {
                   child: ElevatedButton.icon(
                     onPressed: _showChangePassword,
                     icon: const Icon(Icons.lock_outline),
-                    label: const Text('تغيير كلمة المرور'),
+                    label: const Text(
+                      'تغيير كلمة المرور',
+                      style: TextStyle(color: Colors.white),
+                    ),
                     style: _buttonStyle(const Color(0xFF6A3093)),
                   ),
                 ),

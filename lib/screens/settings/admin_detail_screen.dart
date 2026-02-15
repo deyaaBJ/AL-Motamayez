@@ -171,7 +171,10 @@ class _AdminDetailScreenState extends State<AdminDetailScreen> {
       child: ElevatedButton.icon(
         onPressed: _showChangePassword,
         icon: const Icon(Icons.lock_outline),
-        label: const Text('تغيير كلمة المرور'),
+        label: const Text(
+          'تغيير كلمة المرور',
+          style: TextStyle(color: Colors.white),
+        ),
         style: _buttonStyle(const Color(0xFF6A3093)),
       ),
     );
