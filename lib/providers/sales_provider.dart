@@ -358,6 +358,27 @@ class SalesProvider extends ChangeNotifier {
     _fetchSalesWithFilters(forceRefresh: true);
   }
 
+  void applyDayFilter(DateTime? date) {
+    _selectedPaymentType = 'الكل';
+    _selectedCustomer = 'الكل';
+    _selectedTaxFilter = 'الكل';
+    _selectedDate = date;
+    _selectedMonth = null;
+    _selectedYear = null;
+    _dateFilterType = 'day';
+
+    _tempSelectedPaymentType = 'الكل';
+    _tempSelectedCustomer = 'الكل';
+    _tempSelectedTaxFilter = 'الكل';
+    _tempSelectedDate = date;
+    _tempSelectedMonth = null;
+    _tempSelectedYear = null;
+    _tempDateFilterType = 'day';
+
+    resetForNewSearch();
+    _fetchSalesWithFilters(forceRefresh: true);
+  }
+
   void setTaxFilter(String? value) {
     _selectedTaxFilter = value ?? 'الكل';
     _tempSelectedTaxFilter = _selectedTaxFilter;
@@ -381,6 +402,30 @@ class SalesProvider extends ChangeNotifier {
     _fetchSalesWithFilters(forceRefresh: true);
   }
 
+  void applyMonthFilter({
+    required int month,
+    required int year,
+  }) {
+    _selectedPaymentType = 'الكل';
+    _selectedCustomer = 'الكل';
+    _selectedTaxFilter = 'الكل';
+    _selectedDate = null;
+    _selectedMonth = month;
+    _selectedYear = year;
+    _dateFilterType = 'month';
+
+    _tempSelectedPaymentType = 'الكل';
+    _tempSelectedCustomer = 'الكل';
+    _tempSelectedTaxFilter = 'الكل';
+    _tempSelectedDate = null;
+    _tempSelectedMonth = month;
+    _tempSelectedYear = year;
+    _tempDateFilterType = 'month';
+
+    resetForNewSearch();
+    _fetchSalesWithFilters(forceRefresh: true);
+  }
+
   void setYearFilter(int year) {
     _selectedYear = year;
     _tempSelectedYear = year;
@@ -389,6 +434,27 @@ class SalesProvider extends ChangeNotifier {
 
     print('🎯 تطبيق فلتر السنة: $year');
     clearSalesData(); // ✅ مسح البيانات القديمة أولاً
+    _fetchSalesWithFilters(forceRefresh: true);
+  }
+
+  void applyYearFilter(int year) {
+    _selectedPaymentType = 'الكل';
+    _selectedCustomer = 'الكل';
+    _selectedTaxFilter = 'الكل';
+    _selectedDate = null;
+    _selectedMonth = null;
+    _selectedYear = year;
+    _dateFilterType = 'year';
+
+    _tempSelectedPaymentType = 'الكل';
+    _tempSelectedCustomer = 'الكل';
+    _tempSelectedTaxFilter = 'الكل';
+    _tempSelectedDate = null;
+    _tempSelectedMonth = null;
+    _tempSelectedYear = year;
+    _tempDateFilterType = 'year';
+
+    resetForNewSearch();
     _fetchSalesWithFilters(forceRefresh: true);
   }
 
@@ -635,14 +701,22 @@ class SalesProvider extends ChangeNotifier {
 
       if (result.isNotEmpty) {
         final sales = result.map((row) => Sale.fromMap(row)).toList();
-        _allSales.addAll(sales);
+        if (loadMore) {
+          _allSales.addAll(sales);
+        } else {
+          _allSales = sales;
+        }
         final int displayCount = ((_page + 1) * _limit)
             .clamp(0, _allSales.length)
             .toInt();
         _displayedSales = _allSales.sublist(0, displayCount);
-        _page++;
+        _page = loadMore ? _page + 1 : 1;
         _hasMore = _allSales.length < totalCount;
       } else {
+        if (!loadMore) {
+          _allSales = [];
+          _displayedSales = [];
+        }
         _hasMore = false;
       }
 

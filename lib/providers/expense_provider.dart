@@ -261,11 +261,50 @@ class ExpenseProvider with ChangeNotifier {
         .fold(0, (sum, e) => sum + e.amount);
   }
 
+  Future<Map<String, double>> getOverallStatistics() async {
+    try {
+      final db = await _dbHelper.db;
+      final now = DateTime.now();
+      final today = _formatDateForDb(now);
+      final currentMonth =
+          "${now.year.toString().padLeft(4, '0')}-"
+          "${now.month.toString().padLeft(2, '0')}";
+
+      final result = await db.rawQuery(
+        '''
+        SELECT
+          COALESCE(SUM(amount), 0) AS total,
+          COALESCE(SUM(CASE WHEN substr(date, 1, 10) = ? THEN amount ELSE 0 END), 0) AS todayTotal,
+          COALESCE(SUM(CASE WHEN substr(date, 1, 7) = ? THEN amount ELSE 0 END), 0) AS monthTotal
+        FROM expenses
+        ''',
+        [today, currentMonth],
+      );
+
+      final row = result.first;
+      return {
+        'today': _toDouble(row['todayTotal']),
+        'month': _toDouble(row['monthTotal']),
+        'total': _toDouble(row['total']),
+      };
+    } catch (error) {
+      debugPrint('Error getting overall expense statistics: $error');
+      return {'today': 0.0, 'month': 0.0, 'total': 0.0};
+    }
+  }
+
   // دالة مساعدة لتحويل التاريخ
   String _formatDateForDb(DateTime date) {
     return "${date.year.toString().padLeft(4, '0')}-"
         "${date.month.toString().padLeft(2, '0')}-"
         "${date.day.toString().padLeft(2, '0')}";
+  }
+
+  double _toDouble(dynamic value) {
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
   }
 
   // الحصول على أنواع المصاريف الفريدة

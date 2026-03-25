@@ -8,7 +8,6 @@ class PurchaseInvoiceProvider with ChangeNotifier {
   List<Map<String, dynamic>> _invoices = [];
   List<Map<String, dynamic>> get invoices => _invoices;
 
-  // متغيرات للتحميل التدريجي
   int _currentPage = 0;
   final int _itemsPerPage = 20;
   bool _hasMore = true;
@@ -26,9 +25,6 @@ class PurchaseInvoiceProvider with ChangeNotifier {
   bool get hasError => _hasError;
   String? get lastError => _lastError;
 
-  // ============================================
-  // دالة مساعدة للتحويل الآمن للأرقام
-  // ============================================
   int _safeInt(dynamic value) {
     if (value == null) return 0;
     if (value is int) return value;
@@ -46,9 +42,6 @@ class PurchaseInvoiceProvider with ChangeNotifier {
     return 0.0;
   }
 
-  // ============================================
-  // الدالة الرئيسية للتحميل مع البحث
-  // ============================================
   Future<void> loadPurchaseInvoices({
     bool reset = false,
     String query = '',

@@ -23,6 +23,10 @@ class _ExpensesPageState extends State<ExpensesPage> {
 
   // فلتر خاص للتحقق من "الكل"
   bool _isAllSelected = true;
+  double _overallTodayExpenses = 0.0;
+  double _overallMonthExpenses = 0.0;
+  double _overallTotalExpenses = 0.0;
+  bool _isOverallStatsLoading = true;
 
   final List<String> _expenseTypes = [
     'كهرباء',
@@ -43,7 +47,9 @@ class _ExpensesPageState extends State<ExpensesPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ExpenseProvider>().fetchExpenses();
+      final provider = context.read<ExpenseProvider>();
+      _applyTodayFilter(provider);
+      _loadOverallStatistics();
     });
 
     _scrollController.addListener(_scrollListener);
@@ -54,6 +60,21 @@ class _ExpensesPageState extends State<ExpensesPage> {
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadOverallStatistics() async {
+    if (!mounted) return;
+    setState(() => _isOverallStatsLoading = true);
+
+    final stats = await context.read<ExpenseProvider>().getOverallStatistics();
+    if (!mounted) return;
+
+    setState(() {
+      _overallTodayExpenses = stats['today'] ?? 0.0;
+      _overallMonthExpenses = stats['month'] ?? 0.0;
+      _overallTotalExpenses = stats['total'] ?? 0.0;
+      _isOverallStatsLoading = false;
+    });
   }
 
   void _scrollListener() {
@@ -73,6 +94,12 @@ class _ExpensesPageState extends State<ExpensesPage> {
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'المصاريف',
+        floatingActionButton: FloatingActionButton(
+          heroTag: 'add_expense_fab',
+          onPressed: () => _showAddExpenseDialog(context),
+          backgroundColor: Colors.red.shade600,
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
         child: _buildMainContent(context),
       ),
     );
@@ -85,144 +112,16 @@ class _ExpensesPageState extends State<ExpensesPage> {
 
     return Column(
       children: [
-        // 🔹 هيدر واضح ومختصر
-        _buildHeader(provider, currencyName),
-
         // 🔹 شريط البحث والفلترة
         _buildSearchAndFilter(provider),
 
         // 🔹 إحصائيات
-        _buildStatistics(provider),
+        _buildStatistics(),
 
         // 🔹 قائمة المصاريف
         Expanded(child: _buildExpensesList(provider, currencyName)),
       ],
     );
-  }
-
-  Widget _buildHeader(ExpenseProvider provider, String currencyName) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.red.shade600,
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(16),
-          bottomRight: Radius.circular(16),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              SizedBox(),
-              // العنوان والإجمالي
-              Column(
-                children: [
-                  const Text(
-                    'المصاريف',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${provider.totalExpenses.toStringAsFixed(1)} $currencyName',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-
-              // زر الإضافة
-              IconButton(
-                onPressed: () => _showAddExpenseDialog(context),
-                icon: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.add, color: Colors.white, size: 22),
-                ),
-              ),
-            ],
-          ),
-
-          // مؤشر الفلتر النشط
-          if (!_isAllSelected || provider.currentFilterType != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.filter_alt,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _getFilterText(provider),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        GestureDetector(
-                          onTap: () {
-                            _resetAllFilters(provider);
-                          },
-                          child: const Icon(
-                            Icons.close,
-                            size: 14,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  String _getFilterText(ExpenseProvider provider) {
-    if (provider.currentFilterType != null) {
-      return 'نوع: ${provider.currentFilterType}';
-    } else if (_selectedPaymentType != null) {
-      return 'دفع: $_selectedPaymentType';
-    } else if (_activeTimeFilter != null) {
-      return 'التاريخ: $_activeTimeFilter';
-    }
-    return 'فلاتر';
   }
 
   Widget _buildSearchAndFilter(ExpenseProvider provider) {
@@ -383,6 +282,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
+
                         const SizedBox(width: 8),
                         GestureDetector(
                           onTap: () {
@@ -484,7 +384,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
     return 'فلاتر';
   }
 
-  Widget _buildStatistics(ExpenseProvider provider) {
+  Widget _buildStatistics() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(12),
@@ -498,19 +398,25 @@ class _ExpensesPageState extends State<ExpensesPage> {
         children: [
           _buildStatItem(
             'اليوم',
-            provider.getTodayTotal().toStringAsFixed(1),
+            _isOverallStatsLoading
+                ? '...'
+                : _overallTodayExpenses.toStringAsFixed(1),
             Icons.today,
             Colors.blue,
           ),
           _buildStatItem(
             'الشهر',
-            provider.getMonthlyTotal().toStringAsFixed(1),
+            _isOverallStatsLoading
+                ? '...'
+                : _overallMonthExpenses.toStringAsFixed(1),
             Icons.calendar_month,
             Colors.green,
           ),
           _buildStatItem(
             'المجموع',
-            provider.totalExpenses.toStringAsFixed(1),
+            _isOverallStatsLoading
+                ? '...'
+                : _overallTotalExpenses.toStringAsFixed(1),
             Icons.attach_money,
             Colors.red,
           ),
@@ -840,6 +746,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
 
     _selectedPaymentType = null;
     _activeTimeFilter = 'اليوم';
+    _isAllSelected = false;
     _searchController.clear();
 
     // استخدام filterByDate التي تدعم pagination
@@ -853,6 +760,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
 
     _selectedPaymentType = null;
     _activeTimeFilter = 'الشهر';
+    _isAllSelected = false;
     _searchController.clear();
 
     // استخدام filterByDate التي تدعم pagination
@@ -862,6 +770,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
   void _resetAllFilters(ExpenseProvider provider) {
     _selectedPaymentType = null;
     _activeTimeFilter = null;
+    _isAllSelected = true;
     _searchController.clear();
     provider.resetFilter();
   }
@@ -1039,7 +948,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                   child: const Text('إلغاء'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (formKey.currentState!.validate()) {
                       final expense = Expense(
                         type: selectedExpenseType!,
@@ -1052,7 +961,8 @@ class _ExpensesPageState extends State<ExpensesPage> {
                                 : null,
                         createdAt: DateTime.now().toIso8601String(),
                       );
-                      context.read<ExpenseProvider>().addExpense(expense);
+                      await context.read<ExpenseProvider>().addExpense(expense);
+                      await _loadOverallStatistics();
                       Navigator.pop(context);
 
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -1241,7 +1151,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                   child: const Text('إلغاء'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (formKey.currentState!.validate()) {
                       final updatedExpense = Expense(
                         id: expense.id,
@@ -1255,9 +1165,10 @@ class _ExpensesPageState extends State<ExpensesPage> {
                                 : null,
                         createdAt: expense.createdAt,
                       );
-                      context.read<ExpenseProvider>().updateExpense(
+                      await context.read<ExpenseProvider>().updateExpense(
                         updatedExpense,
                       );
+                      await _loadOverallStatistics();
                       Navigator.pop(context);
 
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -1302,8 +1213,9 @@ class _ExpensesPageState extends State<ExpensesPage> {
               child: const Text('إلغاء'),
             ),
             ElevatedButton(
-              onPressed: () {
-                provider.deleteExpense(expense.id!);
+              onPressed: () async {
+                await provider.deleteExpense(expense.id!);
+                await _loadOverallStatistics();
                 Navigator.pop(context);
 
                 ScaffoldMessenger.of(context).showSnackBar(

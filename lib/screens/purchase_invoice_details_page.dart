@@ -22,6 +22,18 @@ class _PurchaseInvoiceDetailsPageState
   bool _isLoading = false;
   List<Map<String, dynamic>> _purchaseItems = [];
 
+  String _translateUnit(String? unit) {
+    switch (unit?.toLowerCase()) {
+      case 'piece':
+        return 'قطعة';
+      case 'kg':
+        return 'كيلو';
+      default:
+        final trimmedUnit = unit?.trim() ?? '';
+        return trimmedUnit.isEmpty ? 'قطعة' : trimmedUnit;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -60,138 +72,114 @@ class _PurchaseInvoiceDetailsPageState
 
   // ==================== Widget Builder Methods ====================
 
-  /// رأس الصفحة
+  /// رأس الصفحة المُحسَّن
   Widget _buildHeader(BuildContext context, Map<String, dynamic> invoice) {
     final isCash = invoice['payment_type'] == 'cash';
     final dateInfo = DateFormatter.formatDateTime(invoice['date']);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.blue.shade50, Colors.white],
-        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.shade100.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 5),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // زر الرجوع ورقم الفاتورة
+          // الصف العلوي: الرجوع والمعلومات الأساسية
           Row(
             children: [
-              // زر الرجوع
+              // زر الرجوع المُبسَّط
               GestureDetector(
                 onTap: () => Navigator.pop(context),
                 child: Container(
-                  width: 48,
-                  height: 48,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.arrow_forward,
-                    color: Colors.blue,
-                    size: 24,
+                    color: Colors.grey.shade800,
+                    size: 22,
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
 
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade100.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            'فاتورة مشتريات',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.blue.shade800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
                     Text(
-                      'فاتورة #${invoice['id']}',
+                      'فاتورة مشتريات #${invoice['id']}',
                       style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                         color: Colors.grey.shade900,
                         fontFamily: 'Cairo',
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today,
+                          size: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${dateInfo['date']} • ${dateInfo['time_12']}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-            ],
-          ),
 
-          const SizedBox(height: 20),
-
-          // معلومات الفاتورة الأساسية
-          Row(
-            children: [
-              // نوع الدفع
+              // حالة الدفع
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
+                  horizontal: 12,
+                  vertical: 6,
                 ),
                 decoration: BoxDecoration(
                   color: isCash ? Colors.green.shade50 : Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color:
                         isCash ? Colors.green.shade200 : Colors.orange.shade200,
-                    width: 2,
                   ),
                 ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       isCash ? Icons.money : Icons.credit_card,
-                      size: 18,
+                      size: 16,
                       color:
                           isCash
                               ? Colors.green.shade700
                               : Colors.orange.shade700,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Text(
                       isCash ? 'نقدي' : 'آجل',
                       style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
                         color:
                             isCash
                                 ? Colors.green.shade800
@@ -201,63 +189,6 @@ class _PurchaseInvoiceDetailsPageState
                   ],
                 ),
               ),
-
-              const Spacer(),
-
-              // التاريخ والوقت في بطاقة واحدة
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.purple.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.purple.shade100, width: 2),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.calendar_today,
-                          size: 14,
-                          color: Colors.purple.shade700,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          dateInfo['date'] ?? '',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.purple.shade800,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 14,
-                          color: Colors.purple.shade600,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          dateInfo['time_12'] ?? '',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.purple.shade700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ],
@@ -265,232 +196,180 @@ class _PurchaseInvoiceDetailsPageState
     );
   }
 
-  /// بطاقة معلومات الفاتورة الأساسية
+  /// بطاقة معلومات المورد والإجمالي
   Widget _buildInvoiceInfoCard(Map<String, dynamic> invoice) {
     final supplierName = invoice['supplier_name'] ?? 'غير محدد';
     final note = invoice['note']?.toString().trim() ?? '';
     final totalCost = invoice['total_cost']?.toDouble() ?? 0.0;
 
     return Container(
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 5),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // عنوان البطاقة
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.blue.shade100,
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    Icons.store,
-                    color: Colors.blue.shade700,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'المورد',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.blue.shade600,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        supplierName,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.grey.shade900,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // المبلغ الإجمالي
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.green.shade200, width: 2),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(
-                        'المبلغ الإجمالي',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.green.shade700,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        Formatters.formatCurrency(totalCost),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.green.shade800,
-                          fontFamily: 'Cairo',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // محتوى البطاقة
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                if (note.isNotEmpty) ...[
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.yellow.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.yellow.shade200,
-                        width: 1,
+          // المورد والإجمالي في صف واحد
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'المورد',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
                       ),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 4),
+                    Row(
                       children: [
                         Icon(
-                          Icons.note,
-                          color: Colors.orange.shade600,
+                          Icons.store,
                           size: 20,
+                          color: Colors.blue.shade700,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'ملاحظات',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.orange.shade800,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                note,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            supplierName,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey.shade900,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
+                  ],
+                ),
+              ),
 
-                // خط فاصل
-                Container(
-                  height: 1,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.grey.shade200,
-                        Colors.grey.shade300,
-                        Colors.grey.shade200,
-                      ],
+              // خط فاصل عمودي
+              Container(
+                height: 50,
+                width: 1,
+                color: Colors.grey.shade200,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+
+              // الإجمالي
+              Expanded(
+                flex: 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'الإجمالي',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      Formatters.formatCurrency(totalCost),
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade800,
+                        fontFamily: 'Cairo',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // الملاحظات إذا وجدت
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.yellow.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.yellow.shade200),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.note, color: Colors.orange.shade600, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      note,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.grey.shade800,
+                        height: 1.4,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  /// بناء جدول المنتجات
+  /// بناء الجدول الاحترافي
   Widget _buildProductsTable() {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200, width: 1),
+        border: Border.all(color: Colors.grey.shade300, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         children: [
           // رأس الجدول
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             decoration: BoxDecoration(
-              color: Colors.blue.shade50,
+              color: Colors.blue.shade700,
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
-              ),
-              border: Border(
-                bottom: BorderSide(color: Colors.blue.shade100, width: 1),
+                topLeft: Radius.circular(11),
+                topRight: Radius.circular(11),
               ),
             ),
-            child: const Row(
+            child: Row(
               children: [
                 // رقم
-                Expanded(
-                  flex: 1,
+                SizedBox(
+                  width: 40,
                   child: Text(
                     'رقم',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.blue,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -502,51 +381,51 @@ class _PurchaseInvoiceDetailsPageState
                   child: Text(
                     'اسم المنتج',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.blue,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     textAlign: TextAlign.right,
                   ),
                 ),
 
                 // الكمية
-                Expanded(
-                  flex: 2,
+                SizedBox(
+                  width: 70,
                   child: Text(
                     'الكمية',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.blue,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     textAlign: TextAlign.center,
                   ),
                 ),
 
                 // سعر الحبة
-                Expanded(
-                  flex: 2,
+                SizedBox(
+                  width: 85,
                   child: Text(
-                    'سعر الحبة',
+                    'السعر',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.blue,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     textAlign: TextAlign.center,
                   ),
                 ),
 
                 // المجموع
-                Expanded(
-                  flex: 2,
+                SizedBox(
+                  width: 90,
                   child: Text(
                     'المجموع',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.blue,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -559,10 +438,15 @@ class _PurchaseInvoiceDetailsPageState
           ..._purchaseItems.asMap().entries.map((entry) {
             final index = entry.key;
             final item = entry.value;
-            final quantity = (item['quantity'] as num).toDouble();
+            final quantity =
+                ((item['display_quantity'] ?? item['quantity']) as num)
+                    .toDouble();
             final costPrice = (item['cost_price'] as num).toDouble();
             final subtotal = (item['subtotal'] as num).toDouble();
+            final displayCostPrice =
+                quantity > 0 ? subtotal / quantity : costPrice;
             final productName = item['product_name'] ?? 'غير معروف';
+            final displayUnit = _translateUnit(item['display_unit'] as String?);
 
             // تحديد لون الصف (تبديل الألوان)
             final isEvenRow = index % 2 == 0;
@@ -577,101 +461,127 @@ class _PurchaseInvoiceDetailsPageState
                   ),
                 ),
               ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {},
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 16,
+                ),
+                child: Row(
+                  children: [
+                    // رقم
+                    SizedBox(
+                      width: 40,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade800,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     ),
-                    child: Row(
-                      children: [
-                        // رقم
-                        Expanded(
-                          flex: 1,
-                          child: Text(
-                            '${index + 1}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade700,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
 
-                        // اسم المنتج
-                        Expanded(
-                          flex: 3,
-                          child: Text(
-                            productName,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade900,
-                            ),
-                            textAlign: TextAlign.right,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
+                    const SizedBox(width: 8),
 
-                        // الكمية
-                        Expanded(
-                          flex: 2,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade50,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
+                    // اسم المنتج
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        productName,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade900,
+                          height: 1.3,
+                        ),
+                        textAlign: TextAlign.right,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // الكمية
+                    SizedBox(
+                      width: 70,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 6,
+                          horizontal: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.green.shade100),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
                               quantity.toStringAsFixed(2),
                               style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
                                 color: Colors.green.shade800,
                               ),
                               textAlign: TextAlign.center,
                             ),
-                          ),
-                        ),
-
-                        // سعر الحبة
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            Formatters.formatNumber(costPrice),
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.blue.shade800,
+                            const SizedBox(height: 2),
+                            Text(
+                              displayUnit,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.green.shade700,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                            textAlign: TextAlign.center,
-                          ),
+                          ],
                         ),
-
-                        // المجموع
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            Formatters.formatCurrency(subtotal),
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.orange.shade800,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+
+                    const SizedBox(width: 8),
+
+                    // سعر الحبة
+                    SizedBox(
+                      width: 85,
+                      child: Text(
+                        Formatters.formatNumber(displayCostPrice),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade800,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // المجموع
+                    SizedBox(
+                      width: 90,
+                      child: Text(
+                        Formatters.formatCurrency(subtotal),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade800,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -681,30 +591,24 @@ class _PurchaseInvoiceDetailsPageState
     );
   }
 
-  /// قسم المنتجات
+  /// قسم المنتجات مع الجدول
   Widget _buildProductsSection(Map<String, dynamic> invoice) {
     if (_purchaseItems.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(40),
+        padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 20,
-              offset: const Offset(0, 5),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
         ),
         child: Column(
           children: [
             Icon(
               Icons.shopping_cart_outlined,
-              size: 60,
+              size: 48,
               color: Colors.grey.shade400,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Text(
               'لا توجد منتجات في هذه الفاتورة',
               style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
@@ -717,352 +621,175 @@ class _PurchaseInvoiceDetailsPageState
     final totalCost = invoice['total_cost']?.toDouble() ?? 0.0;
     final itemsCount = _purchaseItems.length;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // عنوان القسم
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.blueGrey.shade50,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // عنوان القسم
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.grid_view, color: Colors.blue.shade700, size: 24),
+                const SizedBox(width: 8),
+                Text(
+                  'تفاصيل الفاتورة',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade900,
+                  ),
+                ),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '$itemsCount منتج',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade800,
+                ),
               ),
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.blueGrey.shade100,
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    Icons.grid_view,
-                    color: Colors.blueGrey.shade700,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'تفاصيل الفاتورة',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.grey.shade900,
-                              fontFamily: 'Cairo',
-                            ),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              '$itemsCount منتج',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.blueGrey.shade800,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'جدول تفصيلي بالمنتجات المشتراة',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        // الجدول
+        _buildProductsTable(),
+
+        const SizedBox(height: 16),
+
+        // ملخص الفاتورة
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green.shade200),
           ),
-
-          // محتوى القسم
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                // جدول المنتجات
-                _buildProductsTable(),
-
-                const SizedBox(height: 24),
-
-                // ملخص الفاتورة
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.shade200, width: 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'الإجمالي النهائي',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.grey.shade800,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      // إجمالي عدد المنتجات
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'عدد المنتجات',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey.shade700,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: Colors.blue.shade200,
-                                width: 1,
-                              ),
-                            ),
-                            child: Text(
-                              '$itemsCount منتج',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.blue.shade800,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // الإجمالي النهائي
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.green.shade200,
-                            width: 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.green.shade100,
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'الإجمالي النهائي',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    color: Colors.grey.shade800,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'شامل جميع المنتجات',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Text(
-                              Formatters.formatCurrency(totalCost),
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.green.shade800,
-                                fontFamily: 'Cairo',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 4),
+                  Text(
+                    '$itemsCount منتجات',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                   ),
+                ],
+              ),
+              Text(
+                Formatters.formatCurrency(totalCost),
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade800,
+                  fontFamily: 'Cairo',
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  /// حالة التحميل
+  /// حالة التحميل المُحسَّنة
   Widget _buildLoadingState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: Colors.blue.shade100, blurRadius: 20),
-              ],
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Colors.blue.shade700,
-                  ),
-                  strokeWidth: 3,
-                  backgroundColor: Colors.blue.shade100,
-                ),
-                Icon(Icons.inventory_2, color: Colors.blue.shade400, size: 30),
-              ],
-            ),
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade700),
+            strokeWidth: 3,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Text(
-            'جاري تحميل تفاصيل الفاتورة',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.grey.shade700,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'يرجى الانتظار...',
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+            'جاري تحميل تفاصيل الفاتورة...',
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
           ),
         ],
       ),
     );
   }
 
-  /// أزرار التنقل والإجراءات
+  /// أزرار التنقل المُحسَّنة
   Widget _buildActionButtons(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.shade300,
-            blurRadius: 20,
-            offset: const Offset(0, -5),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
           ),
         ],
-        border: Border(top: BorderSide(color: Colors.grey.shade200, width: 1)),
       ),
       child: Row(
         children: [
           // زر الرجوع
           Expanded(
-            child: ElevatedButton(
+            child: OutlinedButton.icon(
               onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey.shade100,
-                foregroundColor: Colors.grey.shade800,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: BorderSide(color: Colors.grey.shade300, width: 1),
-                ),
-                elevation: 0,
-                shadowColor: Colors.transparent,
+              icon: const Icon(Icons.arrow_back, size: 20),
+              label: const Text(
+                'رجوع',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.arrow_back, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'رجوع',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ],
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.grey.shade800,
+                side: BorderSide(color: Colors.grey.shade300),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
           ),
 
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
 
           // زر الطباعة
           Expanded(
-            child: ElevatedButton(
+            flex: 2,
+            child: ElevatedButton.icon(
               onPressed: () {
                 // TODO: طباعة الفاتورة
               },
+              icon: const Icon(Icons.print_outlined, size: 20),
+              label: const Text(
+                'طباعة الفاتورة',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade700,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 18),
+                padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                elevation: 3,
-                shadowColor: Colors.blue.shade200,
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.print_outlined, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'طباعة الفاتورة',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ],
+                elevation: 0,
               ),
             ),
           ),
@@ -1082,7 +809,7 @@ class _PurchaseInvoiceDetailsPageState
       child: BaseLayout(
         currentPage: 'تفاصيل الفاتورة',
         child: Scaffold(
-          backgroundColor: Colors.grey.shade50,
+          backgroundColor: Colors.grey.shade100,
           body: SafeArea(
             bottom: false,
             child: Column(
@@ -1096,21 +823,21 @@ class _PurchaseInvoiceDetailsPageState
                       _isLoading
                           ? _buildLoadingState()
                           : SingleChildScrollView(
-                            padding: const EdgeInsets.all(20),
+                            padding: const EdgeInsets.all(16),
                             physics: const BouncingScrollPhysics(),
                             child: Column(
                               children: [
-                                const SizedBox(height: 8),
-
                                 // Invoice Info Card
                                 _buildInvoiceInfoCard(invoice),
 
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 16),
 
                                 // Products Section
                                 _buildProductsSection(invoice),
 
-                                const SizedBox(height: 32),
+                                const SizedBox(
+                                  height: 80,
+                                ), // مساحة للأزرار السفلية
                               ],
                             ),
                           ),

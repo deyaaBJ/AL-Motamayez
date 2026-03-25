@@ -24,11 +24,11 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
   Timer? _debounceTimer;
   bool _initialLoad = true;
   final Map<int, double> _localBalanceCache = {};
+  int? _hoveredRowIndex;
 
   @override
   void initState() {
     super.initState();
-    // تأجيل تحميل البيانات حتى اكتمال بناء الويدجت
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadSuppliers();
     });
@@ -97,337 +97,182 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
     ).loadSuppliers(searchQuery: _searchController.text);
   }
 
-  Widget _buildSupplierCard(Map<String, dynamic> supplier) {
+  Color _getBalanceColor(double balance) {
+    if (balance > 0) return Colors.red.shade700;
+    if (balance < 0) return Colors.green.shade700;
+    return Colors.blue.shade700;
+  }
+
+  Color _getBalanceBgColor(double balance) {
+    if (balance > 0) return Colors.red.shade50;
+    if (balance < 0) return Colors.green.shade50;
+    return Colors.blue.shade50;
+  }
+
+  String _getBalanceStatus(double balance) {
+    if (balance > 0) return 'مستحق للمورد';
+    if (balance < 0) return 'مستحق من المورد';
+    return 'متعادل';
+  }
+
+  void _showSupplierActions(
+    BuildContext context,
+    Map<String, dynamic> supplier,
+  ) {
     final supplierId = supplier['id'] as int;
     final supplierName = supplier['name'] as String;
     final phone = supplier['phone'] as String?;
     final address = supplier['address'] as String?;
     final notes = supplier['notes'] as String?;
-
     final balance =
         supplier['balance'] != null
             ? (supplier['balance'] as num).toDouble()
             : _localBalanceCache[supplierId] ?? 0.0;
 
-    final isWeOweSupplier = balance > 0;
-    final isSupplierOwesUs = balance < 0;
-
-    String getStatusText() {
-      if (isWeOweSupplier) {
-        return 'مستحق للمورد';
-      } else if (isSupplierOwesUs) {
-        return 'مستحق من المورد';
-      } else {
-        return 'صافي الرصيد';
-      }
-    }
-
-    String getExplanationText() {
-      if (isWeOweSupplier) {
-        return 'دين علينا';
-      } else if (isSupplierOwesUs) {
-        return 'دين لنا';
-      } else {
-        return 'الحسابات متساوية';
-      }
-    }
-
-    Color getStatusColor() {
-      if (isWeOweSupplier) {
-        return Colors.red.shade700;
-      } else if (isSupplierOwesUs) {
-        return Colors.green.shade700;
-      } else {
-        return Colors.blue.shade700;
-      }
-    }
-
-    Color getBackgroundColor() {
-      if (isWeOweSupplier) {
-        return Colors.red.shade50;
-      } else if (isSupplierOwesUs) {
-        return Colors.green.shade50;
-      } else {
-        return Colors.blue.shade50;
-      }
-    }
-
-    Color getBorderColor() {
-      if (isWeOweSupplier) {
-        return Colors.red.shade300;
-      } else if (isSupplierOwesUs) {
-        return Colors.green.shade300;
-      } else {
-        return Colors.blue.shade300;
-      }
-    }
-
-    return Card(
-      color: Colors.white,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 4,
-      shadowColor: Colors.grey.withOpacity(0.2),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200, width: 1),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // صف العنوان والرصيد مع زر التعديل
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              supplierName,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-                          // زر التعديل الصغير في الزاوية
-                          IconButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => AddEditSupplierPage(
-                                        supplier: SupplierModel(
-                                          id: supplierId,
-                                          name: supplierName,
-                                          phone: phone ?? '',
-                                          address: address ?? '',
-                                          notes: notes ?? '',
-                                          balance: balance,
-                                        ),
-                                      ),
-                                ),
-                              ).then((_) => _refreshSuppliers());
-                            },
-                            icon: Icon(
-                              Icons.edit,
-                              size: 20,
-                              color: Colors.blue.shade700,
-                            ),
-                            padding: const EdgeInsets.all(4),
-                            constraints: const BoxConstraints(
-                              minWidth: 40,
-                              minHeight: 40,
-                            ),
-                            tooltip: 'تعديل المورد',
-                          ),
-                        ],
-                      ),
-                      if (phone != null && phone.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.phone,
-                                size: 16,
-                                color: Colors.grey.shade700,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                phone,
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: getBackgroundColor(),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: getBorderColor(), width: 1.5),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(
-                        getStatusText(),
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: getStatusColor(),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-
-                      // المبلغ
-                      Text(
-                        Formatters.formatCurrency(balance.abs()),
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: getStatusColor(),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-
-                      // التوضيح
-                      Text(
-                        getExplanationText(),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: getStatusColor().withOpacity(0.8),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
-
-            // العنوان
-            if (address != null && address.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 3),
-                child: Row(
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.location_on,
-                      size: 16,
-                      color: Colors.grey.shade700,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        address,
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 14,
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 2,
                       ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      supplierName,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (phone != null && phone.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.phone,
+                              size: 16,
+                              color: Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              phone,
+                              style: TextStyle(color: Colors.grey.shade700),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 20),
+                    _buildActionTile(
+                      icon: Icons.edit,
+                      title: 'تعديل بيانات المورد',
+                      color: Colors.blue,
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (context) => AddEditSupplierPage(
+                                  supplier: SupplierModel(
+                                    id: supplierId,
+                                    name: supplierName,
+                                    phone: phone ?? '',
+                                    address: address ?? '',
+                                    notes: notes ?? '',
+                                    balance: balance,
+                                  ),
+                                ),
+                          ),
+                        ).then((_) => _refreshSuppliers());
+                      },
+                    ),
+                    _buildActionTile(
+                      icon: Icons.receipt_long,
+                      title: 'كشف الحساب',
+                      color: Colors.indigo,
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (context) => SupplierAccountStatementPage(
+                                  supplierId: supplierId,
+                                  supplierName: supplierName,
+                                ),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildActionTile(
+                      icon: Icons.payment,
+                      title: 'تسجيل دفعة',
+                      color: Colors.green,
+                      onTap: () async {
+                        Navigator.pop(context);
+                        final newBalance = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (context) => AddSupplierPaymentPage(
+                                  supplierId: supplierId,
+                                  supplierName: supplierName,
+                                  currentBalance: balance,
+                                ),
+                          ),
+                        );
+                        if (newBalance != null && mounted) {
+                          _localBalanceCache[supplierId] = newBalance as double;
+                          setState(() {});
+                        }
+                      },
                     ),
                   ],
                 ),
               ),
-
-            // الملاحظات
-            if (notes != null && notes.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.note, size: 16, color: Colors.grey.shade700),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        notes,
-                        style: const TextStyle(
-                          color: Colors.black87,
-                          fontSize: 14,
-                          fontStyle: FontStyle.italic,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            const SizedBox(height: 16),
-
-            // الأزرار
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) => SupplierAccountStatementPage(
-                                supplierId: supplierId,
-                                supplierName: supplierName,
-                              ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.receipt_long, size: 18),
-                    label: const Text('كشف الحساب'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.blue.shade700,
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: BorderSide(color: Colors.blue.shade200, width: 1),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      final newBalance = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) => AddSupplierPaymentPage(
-                                supplierId: supplierId,
-                                supplierName: supplierName,
-                                currentBalance: balance,
-                              ),
-                        ),
-                      );
-
-                      if (newBalance != null && mounted) {
-                        _localBalanceCache[supplierId] = newBalance as double;
-                        setState(() {});
-                      }
-                    },
-                    icon: const Icon(Icons.payment, size: 18),
-                    label: const Text('تسجيل دفعة'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade700,
-                      foregroundColor: Colors.white,
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-              ],
             ),
-          ],
+          ),
+    );
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
+    required String title,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
         ),
+        child: Icon(icon, color: color),
       ),
+      title: Text(title),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+      onTap: onTap,
     );
   }
 
@@ -511,7 +356,7 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
                 controller: _searchController,
                 onChanged: _onSearchChanged,
                 decoration: InputDecoration(
-                  hintText: 'ابحث عن مورد بالاسم...',
+                  hintText: 'ابحث عن مورد بالاسم أو رقم الهاتف...',
                   hintStyle: TextStyle(color: Colors.grey.shade500),
                   prefixIcon: Icon(Icons.search, color: Colors.blue.shade600),
                   border: InputBorder.none,
@@ -570,20 +415,277 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
             color: Colors.blue.shade700,
             backgroundColor: Colors.white,
             onRefresh: _refreshSuppliers,
-            child: ListView.builder(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              itemCount: provider.suppliers.length + (provider.hasMore ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index < provider.suppliers.length) {
-                  return _buildSupplierCard(provider.suppliers[index]);
-                } else {
-                  return _buildLoadingMoreIndicator(provider.isLoading);
-                }
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        _buildDataTable(
+                          provider.suppliers,
+                          constraints.maxWidth,
+                        ),
+                        if (provider.hasMore)
+                          _buildLoadingMoreIndicator(provider.isLoading),
+                      ],
+                    ),
+                  ),
+                );
               },
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildDataTable(
+    List<Map<String, dynamic>> suppliers,
+    double maxWidth,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade700,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      'اسم المورد',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: maxWidth > 600 ? 16 : 14,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      'رقم الهاتف',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: maxWidth > 600 ? 16 : 14,
+                      ),
+                    ),
+                  ),
+                  if (maxWidth > 800)
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        'العنوان',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      'الرصيد',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: maxWidth > 600 ? 16 : 14,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      'الحالة',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: maxWidth > 600 ? 16 : 14,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 50), // مساحة لزر القائمة
+                ],
+              ),
+            ),
+            // Rows
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: suppliers.length,
+              separatorBuilder:
+                  (context, index) => Divider(
+                    height: 1,
+                    color: Colors.grey.shade200,
+                    indent: 16,
+                    endIndent: 16,
+                  ),
+              itemBuilder: (context, index) {
+                final supplier = suppliers[index];
+                final supplierId = supplier['id'] as int;
+                final supplierName = supplier['name'] as String;
+                final phone = supplier['phone'] as String?;
+                final address = supplier['address'] as String?;
+                final balance =
+                    supplier['balance'] != null
+                        ? (supplier['balance'] as num).toDouble()
+                        : _localBalanceCache[supplierId] ?? 0.0;
+
+                return MouseRegion(
+                  onEnter: (_) => setState(() => _hoveredRowIndex = index),
+                  onExit: (_) => setState(() => _hoveredRowIndex = null),
+                  child: GestureDetector(
+                    onTap: () => _showSupplierActions(context, supplier),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                      color:
+                          _hoveredRowIndex == index
+                              ? Colors.blue.shade50
+                              : (index % 2 == 0
+                                  ? Colors.white
+                                  : Colors.grey.shade50),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  supplierName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: maxWidth > 600 ? 15 : 14,
+                                    color: Colors.black,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (maxWidth <= 800 &&
+                                    address != null &&
+                                    address.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      address,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              phone ?? '-',
+                              style: TextStyle(
+                                fontSize: maxWidth > 600 ? 14 : 13,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                          if (maxWidth > 800)
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                address ?? '-',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade700,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          Expanded(
+                            flex: 2,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _getBalanceBgColor(balance),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                Formatters.formatCurrency(balance.abs()),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: maxWidth > 600 ? 14 : 13,
+                                  color: _getBalanceColor(balance),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              _getBalanceStatus(balance),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: maxWidth > 600 ? 13 : 12,
+                                color: _getBalanceColor(balance),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 50,
+                            child: IconButton(
+                              icon: Icon(
+                                Icons.more_vert,
+                                color: Colors.grey.shade600,
+                              ),
+                              onPressed:
+                                  () => _showSupplierActions(context, supplier),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

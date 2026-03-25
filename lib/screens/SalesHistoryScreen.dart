@@ -891,11 +891,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   onChanged:
                       (month) => _applyFilterWithDebounce(() {
                         if (month != null) {
-                          provider.setMonthFilter(month);
-                          if (filterState.selectedYear == null) {
-                            provider.setYearFilter(DateTime.now().year);
-                          }
-                          _clearFiltersExceptDate(provider);
+                          provider.applyMonthFilter(
+                            month: month,
+                            year:
+                                filterState.selectedYear ?? DateTime.now().year,
+                          );
                         }
                       }),
                   hint: Padding(
@@ -940,11 +940,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   onChanged:
                       (year) => _applyFilterWithDebounce(() {
                         if (year != null) {
-                          provider.setYearFilter(year);
-                          if (filterState.selectedMonth == null) {
-                            provider.setMonthFilter(DateTime.now().month);
-                          }
-                          _clearFiltersExceptDate(provider);
+                          provider.applyMonthFilter(
+                            month:
+                                filterState.selectedMonth ?? DateTime.now().month,
+                            year: year,
+                          );
                         }
                       }),
                   hint: Padding(
@@ -1004,8 +1004,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
           onChanged:
               (year) => _applyFilterWithDebounce(() {
                 if (year != null) {
-                  provider.setYearFilter(year);
-                  _clearFiltersExceptDate(provider);
+                  provider.applyYearFilter(year);
                 }
               }),
           hint: Padding(
@@ -2623,8 +2622,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     );
     if (picked != null) {
       _applyFilterWithDebounce(() {
-        provider.setDateFilter(picked);
-        _clearFiltersExceptDate(provider);
+        provider.applyDayFilter(picked);
       });
     }
   }

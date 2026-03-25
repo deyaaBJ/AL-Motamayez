@@ -25,6 +25,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _showScrollToTop = false;
   final Map<int, double> _customerDebts = {};
+  int _totalCustomersOverall = 0;
+  double _totalDebtOverall = 0.0;
+  double _totalCreditOverall = 0.0;
+  int _customersWithDebtOverall = 0;
+  bool _isStatsLoading = true;
   bool _isProcessingAction = false;
 
   // للترتيب في الجدول
@@ -66,6 +71,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       // تحميل الديون فوراً
       if (mounted) {
         await _loadAllCustomerDebts();
+        await _loadDashboardStats();
       }
     } catch (e) {
       log('خطأ في تحميل البيانات الأولية: $e');
@@ -100,6 +106,46 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }
 
     if (mounted) setState(() {});
+  }
+
+  Future<void> _loadDashboardStats() async {
+    if (!mounted) return;
+    setState(() => _isStatsLoading = true);
+
+    try {
+      final customerProvider = context.read<CustomerProvider>();
+      final debtProvider = context.read<DebtProvider>();
+      final allCustomers = await customerProvider.searchInDatabase('');
+
+      double totalDebt = 0.0;
+      double totalCredit = 0.0;
+      int customersWithDebt = 0;
+
+      for (final customer in allCustomers) {
+        if (customer.id == null) continue;
+
+        final debt = await debtProvider.getTotalDebtByCustomerId(customer.id!);
+        if (debt > 0) {
+          totalDebt += debt;
+          customersWithDebt++;
+        } else if (debt < 0) {
+          totalCredit += debt.abs();
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _totalCustomersOverall = allCustomers.length;
+        _totalDebtOverall = totalDebt;
+        _totalCreditOverall = totalCredit;
+        _customersWithDebtOverall = customersWithDebt;
+        _isStatsLoading = false;
+      });
+    } catch (e) {
+      log('خطأ في تحميل إحصائيات العملاء: $e');
+      if (!mounted) return;
+      setState(() => _isStatsLoading = false);
+    }
   }
 
   Future<void> _loadSingleCustomerDebt(
@@ -254,6 +300,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       _customerDebts[newCustomer.id!] = 0.0;
                     }
                   });
+                  await _loadDashboardStats();
 
                   showAppToast(
                     context,
@@ -332,17 +379,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.search, color: Color(0xFF6A3093)),
-                  const SizedBox(width: 8),
-                  Text(
-                    'بحث سريع عن العملاء',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const Spacer(),
                   if (provider.isSearching && provider.isLoading)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -456,27 +492,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget _buildStatsSection() {
     return Consumer<CustomerProvider>(
       builder: (context, provider, child) {
-        final customers = provider.displayedCustomers;
-        final totalCustomers = customers.length;
-        final totalDebt = customers.fold(
-          0.0,
-          (sum, customer) =>
-              sum +
-              (_customerDebts[customer.id!] ?? 0).clamp(0, double.infinity),
-        );
-        final totalCredit = customers.fold(
-          0.0,
-          (sum, customer) =>
-              sum +
-              (_customerDebts[customer.id!] ?? 0)
-                  .clamp(double.negativeInfinity, 0)
-                  .abs(),
-        );
-        final customersWithDebt =
-            customers
-                .where((customer) => (_customerDebts[customer.id!] ?? 0) > 0)
-                .length;
-
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -497,26 +512,33 @@ class _CustomersScreenState extends State<CustomersScreen> {
               _buildStatItem(
                 icon: Icons.group,
                 color: const Color(0xFF6A3093),
-                label: provider.isSearching ? 'النتائج' : 'إجمالي العملاء',
-                value: totalCustomers.toString(),
+                label: 'إجمالي العملاء',
+                value: _isStatsLoading ? '...' : _totalCustomersOverall.toString(),
               ),
               _buildStatItem(
                 icon: Icons.money_off,
                 color: Colors.red,
                 label: 'إجمالي الدين',
-                value: '${totalDebt.toStringAsFixed(2)} د',
+                value:
+                    _isStatsLoading
+                        ? '...'
+                        : '${_totalDebtOverall.toStringAsFixed(2)} د',
               ),
               _buildStatItem(
                 icon: Icons.credit_card,
                 color: Colors.green,
                 label: 'إجمالي الرصيد',
-                value: '${totalCredit.toStringAsFixed(2)} د',
+                value:
+                    _isStatsLoading
+                        ? '...'
+                        : '${_totalCreditOverall.toStringAsFixed(2)} د',
               ),
               _buildStatItem(
                 icon: Icons.person,
                 color: Colors.orange,
                 label: 'مدينون',
-                value: '$customersWithDebt',
+                value:
+                    _isStatsLoading ? '...' : '$_customersWithDebtOverall',
               ),
             ],
           ),
@@ -1060,6 +1082,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
       if (mounted) {
         setState(() {});
+        await _loadDashboardStats();
       }
     } catch (e) {
       log('خطأ في تحديث دين العميل $customerId: $e');
@@ -1165,6 +1188,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             ToastType.success,
           );
           setState(() {});
+          await _loadDashboardStats();
         }
       }
     } catch (e) {
@@ -1202,6 +1226,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
           if (mounted) {
             setState(() {});
+            await _loadDashboardStats();
             showAppToast(context, 'تم صرف الرصيد بنجاح', ToastType.success);
           }
         } catch (e) {
@@ -1235,6 +1260,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
           if (mounted) {
             setState(() {});
+            await _loadDashboardStats();
             showAppToast(context, 'تم تسديد الدفعة بنجاح', ToastType.success);
           }
         } catch (e) {

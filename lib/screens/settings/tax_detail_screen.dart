@@ -153,7 +153,10 @@ class _TaxDetailScreenState extends State<TaxDetailScreen> {
       child: ElevatedButton.icon(
         onPressed: _showChangePassword,
         icon: const Icon(Icons.lock_outline),
-        label: const Text('تغيير كلمة المرور'),
+        label: const Text(
+          'تغيير كلمة المرور',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
         style: _buttonStyle(const Color(0xFF6A3093)),
       ),
     );
