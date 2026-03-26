@@ -836,6 +836,30 @@ class PDFExporter {
         'type': 'text',
         'priority': 3,
       },
+      {
+        'key': 'currentDebtBalance',
+        'label': 'إجمالي الذمم الحالية على الزبائن',
+        'type': 'currency',
+        'priority': 2,
+      },
+      {
+        'key': 'periodCreditAdded',
+        'label': 'ديون جديدة انضافت خلال الفترة',
+        'type': 'currency',
+        'priority': 2,
+      },
+      {
+        'key': 'periodDebtCollected',
+        'label': 'مبالغ تم تحصيلها من الديون',
+        'type': 'currency',
+        'priority': 2,
+      },
+      {
+        'key': 'debtNetChange',
+        'label': 'الفرق بين الديون الجديدة والمحصلة',
+        'type': 'currency',
+        'priority': 2,
+      },
     ];
 
     // تصفية فقط الإحصائيات الموجودة
@@ -876,6 +900,10 @@ class PDFExporter {
       'netCashProfit',
       'adjustedNetProfit',
       'bestSalesDay',
+      'currentDebtBalance',
+      'periodCreditAdded',
+      'periodDebtCollected',
+      'debtNetChange',
     ];
 
     int count = 0;
@@ -924,6 +952,16 @@ class PDFExporter {
 
     if (key.contains('Expenses')) {
       return PdfColors.red;
+    }
+
+    if (key.contains('Debt') || key.contains('debt')) {
+      if (key == 'periodDebtCollected') {
+        return PdfColors.green;
+      }
+      if (key == 'debtNetChange' && value is num && value < 0) {
+        return PdfColors.green;
+      }
+      return PdfColors.orange;
     }
 
     if (key.contains('Percentage')) {

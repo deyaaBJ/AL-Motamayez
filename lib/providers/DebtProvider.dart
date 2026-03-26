@@ -50,20 +50,7 @@ class DebtProvider extends ChangeNotifier {
     required double amount,
     String? note,
   }) async {
-    final db = await _dbHelper.db;
-
-    // تحديث الرصيد (يزيد الدين)
-    await db.rawInsert(
-      '''
-      INSERT INTO customer_balance (customer_id, balance, last_updated)
-      VALUES (?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(customer_id)
-      DO UPDATE SET
-        balance = balance + ?,
-        last_updated = CURRENT_TIMESTAMP
-      ''',
-      [customerId, amount, amount],
-    );
+    await _applyBalanceDelta(customerId: customerId, delta: amount);
 
     await loadCustomerBalance(customerId);
     notifyListeners();
@@ -95,25 +82,11 @@ class DebtProvider extends ChangeNotifier {
 
     // 2️⃣ عدل الرصيد بناءً على نوع المعاملة
     if (type == TransactionType.payment) {
-      // تسديد دفعة: يخصم من الرصيد (يقلل الدين)
-      await db.rawUpdate(
-        '''
-      UPDATE customer_balance
-      SET balance = balance - ?, last_updated = CURRENT_TIMESTAMP
-      WHERE customer_id = ?
-      ''',
-        [amount, customerId],
-      );
+      // تسديد دفعة: يقلل ما على العميل.
+      await _applyBalanceDelta(customerId: customerId, delta: -amount);
     } else if (type == TransactionType.withdrawal) {
-      // صرف رصيد: يزيد الرصيد (إذا كان سالباً) أو يقلل الدين (إذا كان موجباً)
-      await db.rawUpdate(
-        '''
-      UPDATE customer_balance
-      SET balance = balance - ?, last_updated = CURRENT_TIMESTAMP
-      WHERE customer_id = ?
-      ''',
-        [amount, customerId],
-      );
+      // صرف رصيد: يقلل ما للعميل عندنا، لذلك يرفع الرصيد باتجاه الصفر.
+      await _applyBalanceDelta(customerId: customerId, delta: amount);
     }
 
     await loadCustomerBalance(customerId);
@@ -275,8 +248,9 @@ class DebtProvider extends ChangeNotifier {
       }
 
       // 3. الحساب النهائي
-      // الدين = فواتير آجلة - دفعات - مسحوبات رصيد
-      final totalDebt = totalCreditSales - totalPayments - totalWithdrawals;
+      // الرصيد = فواتير آجلة - دفعات + صرف رصيد
+      // الرصيد السالب يعني أن المحل مدين للعميل.
+      final totalDebt = totalCreditSales - totalPayments + totalWithdrawals;
       log('Calculated total debt: $totalDebt');
 
       return totalDebt;
@@ -494,5 +468,24 @@ class DebtProvider extends ChangeNotifier {
       log('Error getting current balance: $e');
       return 0.0;
     }
+  }
+
+  Future<void> _applyBalanceDelta({
+    required int customerId,
+    required double delta,
+  }) async {
+    final db = await _dbHelper.db;
+
+    await db.rawInsert(
+      '''
+      INSERT INTO customer_balance (customer_id, balance, last_updated)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(customer_id)
+      DO UPDATE SET
+        balance = balance + excluded.balance,
+        last_updated = CURRENT_TIMESTAMP
+      ''',
+      [customerId, delta],
+    );
   }
 }

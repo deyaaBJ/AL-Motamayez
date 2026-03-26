@@ -32,6 +32,10 @@ class ReportsProvider extends ChangeNotifier {
   double _netCashProfit = 0; // صافي الربح النقدي
   double _adjustedNetProfit = 0; // صافي الربح المعدل
   double _netProfit = 0; // صافي الربح الأساسي
+  double _currentDebtBalance = 0; // إجمالي الديون الحالية
+  double _periodCreditAdded = 0; // الديون المضافة خلال الفترة
+  double _periodDebtCollected = 0; // المحصل من الديون خلال الفترة
+  double _debtNetChange = 0; // صافي تغير الذمم
 
   // قوائم المنتجات والعملاء
   List<Map<String, dynamic>> _topProducts = [];
@@ -56,6 +60,10 @@ class ReportsProvider extends ChangeNotifier {
   double get netCashProfit => _netCashProfit;
   double get adjustedNetProfit => _adjustedNetProfit;
   double get netProfit => _netProfit;
+  double get currentDebtBalance => _currentDebtBalance;
+  double get periodCreditAdded => _periodCreditAdded;
+  double get periodDebtCollected => _periodDebtCollected;
+  double get debtNetChange => _debtNetChange;
   List<Map<String, dynamic>> get topProducts => _topProducts;
   List<Map<String, dynamic>> get topCustomers => _topCustomers;
   List<Map<String, dynamic>> get weeklySalesData => _weeklySalesData;
@@ -217,14 +225,17 @@ class ReportsProvider extends ChangeNotifier {
       // 3. حساب المصاريف مع نفس الفلتر
       await _calculateExpensesWithFilter(whereClause, whereArgs);
 
-      // 4. حساب جميع مقاييس الربحية
+      // 4. حساب ملخص الذمم مع نفس الفلتر
+      await _calculateDebtMetricsWithFilter(whereClause, whereArgs);
+
+      // 5. حساب جميع مقاييس الربحية
       _calculateAllProfitMetrics();
 
-      // 5. تحميل أفضل المنتجات والعملاء
+      // 6. تحميل أفضل المنتجات والعملاء
       await _loadFilteredTopProducts(whereClause, whereArgs);
       await _loadFilteredTopCustomers(whereClause, whereArgs);
 
-      // 6. التحقق من الحسابات
+      // 7. التحقق من الحسابات
       _debugCalculations();
     } catch (e) {
       log('Error in _filterSales: $e');
@@ -382,6 +393,64 @@ class ReportsProvider extends ChangeNotifier {
     _adjustedNetProfit = _netProfit;
   }
 
+  Future<void> _calculateDebtMetricsWithFilter(
+    String whereClause,
+    List<dynamic> whereArgs,
+  ) async {
+    try {
+      final db = await _dbHelper.db;
+
+      final currentDebtResult = await db.rawQuery('''
+        SELECT COALESCE(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END), 0)
+          as total_current_debt
+        FROM customer_balance
+      ''');
+
+      _currentDebtBalance =
+          (currentDebtResult.first['total_current_debt'] as num?)?.toDouble() ??
+          0;
+
+      final creditAddedResult = await db.rawQuery(
+        '''
+        SELECT COALESCE(SUM(total_amount), 0) as total_credit_added
+        FROM (
+          SELECT total_amount, payment_type, date FROM sales
+          WHERE $whereClause
+          UNION ALL
+          SELECT total_amount, payment_type, date FROM sales_archive
+          WHERE $whereClause
+        )
+        WHERE payment_type = 'credit'
+        ''',
+        [...whereArgs, ...whereArgs],
+      );
+
+      _periodCreditAdded =
+          (creditAddedResult.first['total_credit_added'] as num?)?.toDouble() ??
+          0;
+
+      final collectedResult = await db.rawQuery(
+        '''
+        SELECT COALESCE(SUM(amount), 0) as total_collected
+        FROM transactions
+        WHERE $whereClause AND type = 'payment'
+        ''',
+        whereArgs,
+      );
+
+      _periodDebtCollected =
+          (collectedResult.first['total_collected'] as num?)?.toDouble() ?? 0;
+
+      _debtNetChange = _periodCreditAdded - _periodDebtCollected;
+    } catch (e) {
+      log('Error in _calculateDebtMetricsWithFilter: $e');
+      _currentDebtBalance = 0;
+      _periodCreditAdded = 0;
+      _periodDebtCollected = 0;
+      _debtNetChange = 0;
+    }
+  }
+
   Future<void> _loadFilteredTopProducts(
     String whereClause,
     List<dynamic> whereArgs,
@@ -522,6 +591,8 @@ class ReportsProvider extends ChangeNotifier {
 
       await _calculateExpensesForCustomDate(fromDate, toDate);
 
+      await _calculateDebtMetricsForCustomDate(fromDate, toDate);
+
       _calculateAllProfitMetrics();
 
       await _loadTopProductsForCustomDate(fromDate, toDate);
@@ -572,6 +643,64 @@ class ReportsProvider extends ChangeNotifier {
       log('Error in _calculateExpensesForCustomDate: $e');
       _totalExpensesAll = 0;
       _totalCashExpenses = 0;
+    }
+  }
+
+  Future<void> _calculateDebtMetricsForCustomDate(
+    String fromDate,
+    String toDate,
+  ) async {
+    try {
+      final db = await _dbHelper.db;
+
+      final currentDebtResult = await db.rawQuery('''
+        SELECT COALESCE(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END), 0)
+          as total_current_debt
+        FROM customer_balance
+      ''');
+
+      _currentDebtBalance =
+          (currentDebtResult.first['total_current_debt'] as num?)?.toDouble() ??
+          0;
+
+      final creditAddedResult = await db.rawQuery(
+        '''
+        SELECT COALESCE(SUM(total_amount), 0) as total_credit_added
+        FROM (
+          SELECT total_amount, payment_type, date FROM sales
+          WHERE date(date) BETWEEN ? AND ?
+          UNION ALL
+          SELECT total_amount, payment_type, date FROM sales_archive
+          WHERE date(date) BETWEEN ? AND ?
+        )
+        WHERE payment_type = 'credit'
+        ''',
+        [fromDate, toDate, fromDate, toDate],
+      );
+
+      _periodCreditAdded =
+          (creditAddedResult.first['total_credit_added'] as num?)?.toDouble() ??
+          0;
+
+      final collectedResult = await db.rawQuery(
+        '''
+        SELECT COALESCE(SUM(amount), 0) as total_collected
+        FROM transactions
+        WHERE date(date) BETWEEN ? AND ? AND type = 'payment'
+        ''',
+        [fromDate, toDate],
+      );
+
+      _periodDebtCollected =
+          (collectedResult.first['total_collected'] as num?)?.toDouble() ?? 0;
+
+      _debtNetChange = _periodCreditAdded - _periodDebtCollected;
+    } catch (e) {
+      log('Error in _calculateDebtMetricsForCustomDate: $e');
+      _currentDebtBalance = 0;
+      _periodCreditAdded = 0;
+      _periodDebtCollected = 0;
+      _debtNetChange = 0;
     }
   }
 
@@ -918,6 +1047,10 @@ class ReportsProvider extends ChangeNotifier {
     10. صافي الربح (الأرباح - المصاريف): $_netProfit
     11. صافي الربح النقدي (أرباح نقدية - مصاريف نقدية): $_netCashProfit
     12. إجمالي العملاء: $_totalCustomers
+    13. إجمالي الديون الحالية: $_currentDebtBalance
+    14. ديون مضافة خلال الفترة: $_periodCreditAdded
+    15. محصل من الديون: $_periodDebtCollected
+    16. صافي تغير الديون: $_debtNetChange
     
     = الحسابات الدقيقة =
     - صافي الربح المحسوب يدوياً: ${(_totalProfit - _totalExpensesAll).toStringAsFixed(2)}
@@ -947,6 +1080,10 @@ class ReportsProvider extends ChangeNotifier {
       'bestSalesDay': _bestSalesDay ?? 'لا يوجد',
       'averageSale': _salesCount > 0 ? _totalSalesAmount / _salesCount : 0,
       'totalCustomers': _totalCustomers, // تمت الإضافة
+      'currentDebtBalance': _currentDebtBalance,
+      'periodCreditAdded': _periodCreditAdded,
+      'periodDebtCollected': _periodDebtCollected,
+      'debtNetChange': _debtNetChange,
     };
   }
 
@@ -966,6 +1103,10 @@ class ReportsProvider extends ChangeNotifier {
     _netCashProfit = 0;
     _adjustedNetProfit = 0;
     _netProfit = 0;
+    _currentDebtBalance = 0;
+    _periodCreditAdded = 0;
+    _periodDebtCollected = 0;
+    _debtNetChange = 0;
 
     notifyListeners();
   }

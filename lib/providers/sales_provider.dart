@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
 import '../db/db_helper.dart';
 import '../models/sale.dart';
 import 'dart:developer';
@@ -830,22 +831,65 @@ class SalesProvider extends ChangeNotifier {
       throw Exception('نوع الدفع غير صالح. يجب أن يكون "cash" أو "credit".');
     }
 
-    Map<String, dynamic> updateData = {'payment_type': paymentType};
+    int? resolvedCustomerId;
 
-    if (paymentType == 'credit') {
-      updateData['customer_id'] = customerId;
-    }
+    await db.transaction((txn) async {
+      final saleResult = await txn.query(
+        'sales',
+        columns: ['id', 'total_amount', 'payment_type', 'customer_id'],
+        where: 'id = ?',
+        whereArgs: [saleId],
+        limit: 1,
+      );
 
-    int count = await db.update(
-      'sales',
-      updateData,
-      where: 'id = ?',
-      whereArgs: [saleId],
-    );
+      if (saleResult.isEmpty) {
+        throw Exception('فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.');
+      }
 
-    if (count == 0) {
-      throw Exception('فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.');
-    }
+      final saleData = saleResult.first;
+      final oldPaymentType = saleData['payment_type'] as String;
+      final oldCustomerId = saleData['customer_id'] as int?;
+      final totalAmount = (saleData['total_amount'] as num).toDouble();
+
+      resolvedCustomerId =
+          paymentType == 'credit' ? (customerId ?? oldCustomerId) : null;
+
+      if (paymentType == 'credit' && resolvedCustomerId == null) {
+        throw Exception('يجب اختيار عميل قبل تحويل الفاتورة إلى آجل.');
+      }
+
+      final updateData = <String, dynamic>{
+        'payment_type': paymentType,
+        'customer_id': resolvedCustomerId,
+      };
+
+      final count = await txn.update(
+        'sales',
+        updateData,
+        where: 'id = ?',
+        whereArgs: [saleId],
+      );
+
+      if (count == 0) {
+        throw Exception('فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.');
+      }
+
+      if (oldPaymentType == 'credit' && oldCustomerId != null) {
+        await _applyCustomerBalanceDelta(
+          txn: txn,
+          customerId: oldCustomerId,
+          delta: -totalAmount,
+        );
+      }
+
+      if (paymentType == 'credit' && resolvedCustomerId != null) {
+        await _applyCustomerBalanceDelta(
+          txn: txn,
+          customerId: resolvedCustomerId!,
+          delta: totalAmount,
+        );
+      }
+    });
 
     final index = _allSales.indexWhere((sale) => sale.id == saleId);
     if (index != -1) {
@@ -855,7 +899,7 @@ class SalesProvider extends ChangeNotifier {
         date: oldSale.date,
         totalAmount: oldSale.totalAmount,
         totalProfit: oldSale.totalProfit,
-        customerId: customerId ?? oldSale.customerId,
+        customerId: resolvedCustomerId,
         customerName: oldSale.customerName,
         paymentType: paymentType,
         showForTax: oldSale.showForTax,
@@ -1287,5 +1331,23 @@ class SalesProvider extends ChangeNotifier {
     } catch (e) {
       log('❌ خطأ في تحميل البيانات المسبق: $e');
     }
+  }
+
+  Future<void> _applyCustomerBalanceDelta({
+    required DatabaseExecutor txn,
+    required int customerId,
+    required double delta,
+  }) async {
+    await txn.rawInsert(
+      '''
+      INSERT INTO customer_balance (customer_id, balance, last_updated)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(customer_id)
+      DO UPDATE SET
+        balance = balance + excluded.balance,
+        last_updated = CURRENT_TIMESTAMP
+      ''',
+      [customerId, delta],
+    );
   }
 }

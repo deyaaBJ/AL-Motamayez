@@ -10,7 +10,6 @@ import 'package:motamayez/models/product.dart';
 import 'package:motamayez/models/product_unit.dart';
 import 'package:motamayez/models/sale.dart';
 import 'package:motamayez/models/sale_item.dart';
-import 'package:motamayez/providers/DebtProvider.dart';
 import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/providers/customer_provider.dart';
 import 'package:motamayez/providers/auth_provider.dart';
@@ -1618,8 +1617,6 @@ class _PosScreenState extends State<PosScreen>
     final auth = context.read<AuthProvider>();
     final user = auth.currentUser;
     final productProvider = context.read<ProductProvider>();
-    final debtProvider = context.read<DebtProvider>();
-
     try {
       // تحقق من أن جميع المنتجات لديها كمية كافية (باستثناء الخدمات)
       for (final item in _cartItems) {
@@ -1643,12 +1640,6 @@ class _PosScreenState extends State<PosScreen>
         customerId: customer.id,
         userRole: auth.role ?? 'user',
         userId: user?["id"],
-      );
-
-      await debtProvider.addCreditSale(
-        customerId: customer.id!,
-        amount: _finalAmount,
-        note: 'فاتورة تحتوي على خدمات',
       );
 
       if (mounted) {

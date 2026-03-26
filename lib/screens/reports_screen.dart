@@ -88,6 +88,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
           reportsProvider.salesCount > 0
               ? reportsProvider.totalSalesAmount / reportsProvider.salesCount
               : 0,
+      'currentDebtBalance': reportsProvider.currentDebtBalance,
+      'periodCreditAdded': reportsProvider.periodCreditAdded,
+      'periodDebtCollected': reportsProvider.periodDebtCollected,
+      'debtNetChange': reportsProvider.debtNetChange,
     };
 
     return ReportData(
@@ -223,6 +227,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   _buildPeriodFilter(provider),
                   const SizedBox(height: 20),
                   _buildAllStatsCards(provider),
+                  const SizedBox(height: 24),
+                  _buildDebtSummaryCard(provider),
                   const SizedBox(height: 24),
                   _buildWeeklySalesTable(provider),
                   const SizedBox(height: 24),
@@ -874,6 +880,86 @@ class _ReportsScreenState extends State<ReportsScreen> {
               'أفضل يوم مبيعات',
               provider.bestSalesDay ?? 'لا يوجد بيانات',
               Colors.purple,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDebtSummaryCard(ReportsProvider provider) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currencyName = settings.currencyName;
+    final netDebtChangeColor =
+        provider.debtNetChange >= 0 ? Colors.orange : Colors.green;
+    final netDebtChangeLabel =
+        provider.debtNetChange >= 0 ? 'زيادة في الذمم' : 'انخفاض في الذمم';
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.account_balance_wallet, color: Colors.orange[700]),
+                const SizedBox(width: 8),
+                const Text(
+                  'ملخص الذمم',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'هذا القسم يعرض حركة الديون بشكل منفصل عن الأرباح والمصاريف.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildStatRow(
+              'إجمالي الذمم الحالية على الزبائن',
+              '${provider.currentDebtBalance.toStringAsFixed(2)} $currencyName',
+              Colors.red,
+            ),
+            _buildStatRow(
+              'ديون جديدة انضافت خلال الفترة',
+              '${provider.periodCreditAdded.toStringAsFixed(2)} $currencyName',
+              Colors.orange,
+            ),
+            _buildStatRow(
+              'مبالغ تم تحصيلها من الديون',
+              '${provider.periodDebtCollected.toStringAsFixed(2)} $currencyName',
+              Colors.green,
+            ),
+            _buildStatRow(
+              'الفرق بين الديون الجديدة والمحصلة',
+              '${provider.debtNetChange.toStringAsFixed(2)} $currencyName',
+              netDebtChangeColor,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: netDebtChangeColor.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: netDebtChangeColor.withOpacity(0.2)),
+              ),
+              child: Text(
+                netDebtChangeLabel,
+                style: TextStyle(
+                  color: netDebtChangeColor,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),
