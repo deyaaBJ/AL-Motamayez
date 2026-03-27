@@ -5,7 +5,7 @@ import 'dart:developer';
 
 class DBHelper {
   static Database? _db;
-  static const int _version = 2; // ⬅️ رفعنا من 1 لـ 2
+  static const int _version = 4; // ⬅️ إصلاح إنشاء sales وإضافة تتبع السداد
 
   Future<Database> get db async {
     if (_db != null) return _db!;
@@ -42,10 +42,13 @@ class DBHelper {
       await _upgradeToVersion2(db);
     }
 
-    // لو في نسخ مستقبلية:
-    // if (oldVersion < 3) {
-    //   await _upgradeToVersion3(db);
-    // }
+    if (oldVersion < 3) {
+      await _upgradeToVersion3(db);
+    }
+
+    if (oldVersion < 4) {
+      await _upgradeToVersion4(db);
+    }
   }
 
   // ⬅️ جديد: الترقية للنسخة 2 (إضافة user_id)
@@ -72,7 +75,86 @@ class DBHelper {
       log('❌ خطأ في الترقية للنسخة 2: $e');
       rethrow;
     }
-  } // ⬅️ رجعه ل 1 لأنك ستخلي الداتا وتعيدها
+  }
+
+  Future<void> _upgradeToVersion3(Database db) async {
+    try {
+      log('⬆️ بدء الترقية للنسخة 3...');
+
+      final salesColumns = await db.rawQuery('PRAGMA table_info(sales)');
+      final hasPaidAmount = salesColumns.any(
+        (col) => col['name'] == 'paid_amount',
+      );
+      final hasRemainingAmount = salesColumns.any(
+        (col) => col['name'] == 'remaining_amount',
+      );
+
+      if (!hasPaidAmount) {
+        await db.execute(
+          'ALTER TABLE sales ADD COLUMN paid_amount REAL NOT NULL DEFAULT 0',
+        );
+      }
+
+      if (!hasRemainingAmount) {
+        await db.execute(
+          'ALTER TABLE sales ADD COLUMN remaining_amount REAL NOT NULL DEFAULT 0',
+        );
+      }
+
+      await db.execute('''
+        UPDATE sales
+        SET
+          paid_amount = CASE
+            WHEN payment_type = 'cash' THEN total_amount
+            ELSE COALESCE(paid_amount, 0)
+          END,
+          remaining_amount = CASE
+            WHEN payment_type = 'credit' THEN total_amount
+            ELSE 0
+          END
+        WHERE COALESCE(paid_amount, 0) = 0 AND COALESCE(remaining_amount, 0) = 0
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS sale_payment_allocations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          transaction_id INTEGER NOT NULL,
+          sale_id INTEGER NOT NULL,
+          amount REAL NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
+          FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
+        )
+      ''');
+
+      log('✅ تمت ترقية تتبع سداد فواتير البيع');
+    } catch (e) {
+      log('❌ خطأ في الترقية للنسخة 3: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _upgradeToVersion4(Database db) async {
+    try {
+      log('⬆️ بدء الترقية للنسخة 4...');
+
+      final salesColumns = await db.rawQuery('PRAGMA table_info(sales)');
+      final hasUserId = salesColumns.any((col) => col['name'] == 'user_id');
+
+      if (!hasUserId) {
+        await db.execute('''
+          ALTER TABLE sales
+          ADD COLUMN user_id INTEGER
+          REFERENCES users(id) ON DELETE SET NULL
+        ''');
+      }
+
+      log('✅ تم التحقق من عمود user_id في جدول sales');
+    } catch (e) {
+      log('❌ خطأ في الترقية للنسخة 4: $e');
+      rethrow;
+    }
+  }
 
   Future _onCreate(Database db, int version) async {
     // ========== جدول المنتجات ==========
@@ -196,8 +278,24 @@ class DBHelper {
         total_profit REAL NOT NULL DEFAULT 0,
         customer_id INTEGER, 
         payment_type TEXT NOT NULL DEFAULT 'cash', 
+        paid_amount REAL NOT NULL DEFAULT 0,
+        remaining_amount REAL NOT NULL DEFAULT 0,
         show_for_tax INTEGER DEFAULT 0,
-        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL
+        user_id INTEGER,
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+      );
+    ''');
+
+    await db.execute('''
+      CREATE TABLE sale_payment_allocations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transaction_id INTEGER NOT NULL,
+        sale_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
+        FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
       );
     ''');
 

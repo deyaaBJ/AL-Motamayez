@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import '../db/db_helper.dart';
 import '../models/sale.dart';
+import 'DebtProvider.dart';
 import 'dart:developer';
 
 class SalesProvider extends ChangeNotifier {
@@ -92,7 +93,7 @@ class SalesProvider extends ChangeNotifier {
   // ████████████████████████████████ Getters جديدة ███████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
 
-  List<String> get paymentTypes => ['الكل', 'cash', 'credit'];
+  List<String> get paymentTypes => ['الكل', 'cash', 'credit', 'debt', 'settled'];
 
   List<String> get customerNames {
     final Set<String> names = {'الكل'};
@@ -163,7 +164,7 @@ class SalesProvider extends ChangeNotifier {
     final filters = <String>[];
 
     if (_selectedPaymentType != 'الكل') {
-      filters.add('دفع: ${_selectedPaymentType == 'cash' ? 'نقدي' : 'آجل'}');
+      filters.add('دفع: ${_getPaymentFilterLabel(_selectedPaymentType)}');
     }
 
     if (_selectedCustomer != 'الكل') {
@@ -186,6 +187,21 @@ class SalesProvider extends ChangeNotifier {
     }
 
     return filters.isEmpty ? 'لا توجد فلاتر' : filters.join('، ');
+  }
+
+  String _getPaymentFilterLabel(String paymentType) {
+    switch (paymentType) {
+      case 'cash':
+        return 'نقدي';
+      case 'credit':
+        return 'آجل';
+      case 'debt':
+        return 'دين';
+      case 'settled':
+        return 'مسدد';
+      default:
+        return paymentType;
+    }
   }
 
   // █████████████████████████████████████████████████████████████████████████
@@ -655,8 +671,17 @@ class SalesProvider extends ChangeNotifier {
 
       if (_selectedPaymentType != 'الكل') {
         final paymentValue = _selectedPaymentType.toLowerCase();
-        conditions.add("s.payment_type = ?");
-        args.add(paymentValue);
+
+        if (paymentValue == 'debt') {
+          conditions.add("s.payment_type = 'credit'");
+          conditions.add('COALESCE(s.remaining_amount, s.total_amount) > 0');
+        } else if (paymentValue == 'settled') {
+          conditions.add("s.payment_type = 'credit'");
+          conditions.add('COALESCE(s.remaining_amount, 0) <= 0');
+        } else {
+          conditions.add("s.payment_type = ?");
+          args.add(paymentValue);
+        }
       }
 
       if (_selectedCustomer != 'الكل') {
@@ -861,6 +886,8 @@ class SalesProvider extends ChangeNotifier {
       final updateData = <String, dynamic>{
         'payment_type': paymentType,
         'customer_id': resolvedCustomerId,
+        'paid_amount': paymentType == 'cash' ? totalAmount : 0.0,
+        'remaining_amount': paymentType == 'credit' ? totalAmount : 0.0,
       };
 
       final count = await txn.update(
@@ -902,6 +929,8 @@ class SalesProvider extends ChangeNotifier {
         customerId: resolvedCustomerId,
         customerName: oldSale.customerName,
         paymentType: paymentType,
+        paidAmount: paymentType == 'cash' ? oldSale.totalAmount : 0.0,
+        remainingAmount: paymentType == 'credit' ? oldSale.totalAmount : 0.0,
         showForTax: oldSale.showForTax,
       );
       _allSales[index] = updatedSale;
@@ -938,6 +967,8 @@ class SalesProvider extends ChangeNotifier {
         customerId: oldSale.customerId,
         customerName: oldSale.customerName,
         paymentType: oldSale.paymentType,
+        paidAmount: oldSale.paidAmount,
+        remainingAmount: oldSale.remainingAmount,
         showForTax: showForTax,
       );
       _allSales[index] = updatedSale;
@@ -1259,6 +1290,102 @@ class SalesProvider extends ChangeNotifier {
 
     selectedSaleIds.clear();
     notifyListeners();
+  }
+
+  Future<double> settleSelectedSales({String? note}) async {
+    if (selectedSaleIds.isEmpty) {
+      throw Exception('لم يتم تحديد أي فواتير للتسديد.');
+    }
+
+    final uniqueIds = selectedSaleIds.toSet().toList();
+    final db = await _dbHelper.db;
+    final placeholders = List.filled(uniqueIds.length, '?').join(',');
+    final selectedSales = await db.rawQuery(
+      '''
+      SELECT id, customer_id, payment_type, total_amount, remaining_amount
+      FROM sales
+      WHERE id IN ($placeholders)
+      ORDER BY date ASC, id ASC
+      ''',
+      uniqueIds,
+    );
+
+    if (selectedSales.isEmpty) {
+      throw Exception('الفواتير المحددة غير موجودة.');
+    }
+
+    if (selectedSales.any((sale) => sale['payment_type'] != 'credit')) {
+      throw Exception('يمكن تسديد الفواتير الآجلة فقط.');
+    }
+
+    final customerIds =
+        selectedSales
+            .map((sale) => sale['customer_id'] as int?)
+            .whereType<int>()
+            .toSet();
+
+    if (customerIds.length != 1 || selectedSales.any((sale) => sale['customer_id'] == null)) {
+      throw Exception('يجب أن تكون كل الفواتير المحددة لنفس العميل.');
+    }
+
+    final totalSettled = selectedSales.fold<double>(
+      0.0,
+      (sum, sale) =>
+          sum + ((sale['remaining_amount'] as num?)?.toDouble() ?? 0.0),
+    );
+
+    if (totalSettled <= 0.0001) {
+      throw Exception('كل الفواتير المحددة مسددة مسبقاً.');
+    }
+
+    await DebtProvider().recordCustomerPayment(
+      customerId: customerIds.first,
+      amount: totalSettled,
+      note: note ?? 'تسديد ${selectedSales.length} فاتورة محددة',
+      saleIds: uniqueIds,
+    );
+
+    for (final saleId in uniqueIds) {
+      final index = _allSales.indexWhere((sale) => sale.id == saleId);
+      if (index == -1) continue;
+
+      final oldSale = _allSales[index];
+      _allSales[index] = Sale(
+        id: oldSale.id,
+        date: oldSale.date,
+        totalAmount: oldSale.totalAmount,
+        totalProfit: oldSale.totalProfit,
+        customerId: oldSale.customerId,
+        customerName: oldSale.customerName,
+        paymentType: oldSale.paymentType,
+        paidAmount: oldSale.totalAmount,
+        remainingAmount: 0.0,
+        showForTax: oldSale.showForTax,
+      );
+    }
+
+    for (int i = 0; i < _displayedSales.length; i++) {
+      if (!uniqueIds.contains(_displayedSales[i].id)) continue;
+
+      final oldSale = _displayedSales[i];
+      _displayedSales[i] = Sale(
+        id: oldSale.id,
+        date: oldSale.date,
+        totalAmount: oldSale.totalAmount,
+        totalProfit: oldSale.totalProfit,
+        customerId: oldSale.customerId,
+        customerName: oldSale.customerName,
+        paymentType: oldSale.paymentType,
+        paidAmount: oldSale.totalAmount,
+        remainingAmount: 0.0,
+        showForTax: oldSale.showForTax,
+      );
+    }
+
+    selectedSaleIds.clear();
+    _updateCache();
+    notifyListeners();
+    return totalSettled;
   }
 
   Future<void> addNewSaleDirectly(Sale newSale) async {

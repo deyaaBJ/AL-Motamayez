@@ -606,6 +606,8 @@ class ProductProvider with ChangeNotifier {
         'total_profit': 0.0,
         'customer_id': customerId,
         'payment_type': paymentType,
+        'paid_amount': paymentType == 'cash' ? totalAmount : 0.0,
+        'remaining_amount': paymentType == 'credit' ? totalAmount : 0.0,
         'show_for_tax': showForTax,
         'user_id': userId, // ⬅️ جديد: حفظ معرف المستخدم
       });
@@ -1497,6 +1499,9 @@ class ProductProvider with ChangeNotifier {
         totalProfit: _allSales[allIndex].totalProfit,
         customerId: _allSales[allIndex].customerId,
         paymentType: _allSales[allIndex].paymentType,
+        customerName: _allSales[allIndex].customerName,
+        paidAmount: _allSales[allIndex].paidAmount,
+        remainingAmount: _allSales[allIndex].remainingAmount,
         showForTax: _allSales[allIndex].showForTax,
       );
     }
@@ -1510,6 +1515,9 @@ class ProductProvider with ChangeNotifier {
         totalProfit: _displayedSales[displayedIndex].totalProfit,
         customerId: _displayedSales[displayedIndex].customerId,
         paymentType: _displayedSales[displayedIndex].paymentType,
+        customerName: _displayedSales[displayedIndex].customerName,
+        paidAmount: _displayedSales[displayedIndex].paidAmount,
+        remainingAmount: _displayedSales[displayedIndex].remainingAmount,
         showForTax: _displayedSales[displayedIndex].showForTax,
       );
     }

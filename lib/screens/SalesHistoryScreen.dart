@@ -442,6 +442,18 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                     Colors.orange,
                     isMobile,
                   ),
+                  _buildPaymentItem(
+                    'debt',
+                    Icons.warning_amber_rounded,
+                    Colors.red,
+                    isMobile,
+                  ),
+                  _buildPaymentItem(
+                    'settled',
+                    Icons.check_circle_rounded,
+                    Colors.green,
+                    isMobile,
+                  ),
                 ],
                 onChanged:
                     (value) => _applyFilterWithDebounce(
@@ -476,6 +488,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       displayText = 'نقدي 💵';
     else if (type == 'credit')
       displayText = 'آجل 📅';
+    else if (type == 'debt')
+      displayText = 'دين ⏳';
+    else if (type == 'settled')
+      displayText = 'مسدد ✅';
     else
       displayText = 'الكل 🔄';
 
@@ -1425,6 +1441,34 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                       ],
                     ),
                   ),
+                  if (sale.paymentType == 'credit')
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            sale.isFullyPaid ? 'الحالة' : 'المتبقي',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          Text(
+                            sale.isFullyPaid
+                                ? sale.creditStatusLabel
+                                : '${sale.remainingAmount.toStringAsFixed(2)} ${settingsProvider.currencyName}',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color:
+                                  sale.isFullyPaid
+                                      ? Colors.green[700]
+                                      : Colors.orange[700],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -1556,8 +1600,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                 ),
                 const Spacer(),
                 ElevatedButton.icon(
-                  icon: Icon(Icons.money_off, size: 16),
-                  label: Text('تحويل لكاش'),
+                  icon: Icon(Icons.payments, size: 16),
+                  label: Text('تسديد المحدد'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[500],
                     foregroundColor: Colors.white,
@@ -1570,26 +1614,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                     ),
                   ),
                   onPressed: () {
-                    _showBatchPaymentDialog(context, salesProvider, 'cash');
-                  },
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  icon: Icon(Icons.credit_card, size: 16),
-                  label: Text('تحويل لأجل'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange[500],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed: () {
-                    _showBatchPaymentDialog(context, salesProvider, 'credit');
+                    _showBatchSettlementDialog(context, salesProvider);
                   },
                 ),
                 const SizedBox(width: 12),
@@ -1861,30 +1886,39 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
 
     cells.add(
       DataCell(
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: _getPaymentTypeColor(sale.paymentType).withOpacity(
-              isSelected ? 0.15 : (isCurrentArchiveMode ? 0.05 : 0.1),
-            ),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: _getPaymentTypeColor(sale.paymentType).withOpacity(
-                isSelected ? 0.3 : (isCurrentArchiveMode ? 0.2 : 0.3),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _getPaymentTypeColor(sale.paymentType).withOpacity(
+                  isSelected ? 0.15 : (isCurrentArchiveMode ? 0.05 : 0.1),
+                ),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _getPaymentTypeColor(sale.paymentType).withOpacity(
+                    isSelected ? 0.3 : (isCurrentArchiveMode ? 0.2 : 0.3),
+                  ),
+                  width: 1,
+                ),
               ),
-              width: 1,
-            ),
-          ),
-          child: Text(
-            sale.paymentType == 'cash' ? 'نقدي' : 'آجل',
-            style: TextStyle(
-              color: _getPaymentTypeColor(sale.paymentType).withOpacity(
-                isSelected ? 1.0 : (isCurrentArchiveMode ? 0.6 : 1.0),
+              child: Text(
+                sale.paymentType == 'cash' ? 'نقدي' : 'آجل',
+                style: TextStyle(
+                  color: _getPaymentTypeColor(sale.paymentType).withOpacity(
+                    isSelected ? 1.0 : (isCurrentArchiveMode ? 0.6 : 1.0),
+                  ),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
             ),
-          ),
+            if (sale.paymentType == 'credit') ...[
+              const SizedBox(width: 6),
+              _buildCreditStatusBadge(sale),
+            ],
+          ],
         ),
       ),
     );
@@ -2129,25 +2163,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildSmallActionButton(
-                      icon: Icons.money_off,
+                      icon: Icons.payments,
                       color: Colors.green,
                       onPressed: () {
-                        _showBatchPaymentDialog(context, salesProvider, 'cash');
+                        _showBatchSettlementDialog(context, salesProvider);
                       },
-                      tooltip: 'تحويل للكاش',
-                    ),
-                    const SizedBox(width: 4),
-                    _buildSmallActionButton(
-                      icon: Icons.credit_card,
-                      color: Colors.orange,
-                      onPressed: () {
-                        _showBatchPaymentDialog(
-                          context,
-                          salesProvider,
-                          'credit',
-                        );
-                      },
-                      tooltip: 'تحويل لأجل',
+                      tooltip: 'تسديد المحدد',
                     ),
                     const SizedBox(width: 4),
                     _buildSmallActionButton(
@@ -2301,29 +2322,14 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   children: [
                     IconButton(
                       icon: Icon(
-                        Icons.money_off,
+                        Icons.payments,
                         size: 18,
                         color: Colors.green[700],
                       ),
                       onPressed: () {
-                        _showBatchPaymentDialog(context, salesProvider, 'cash');
+                        _showBatchSettlementDialog(context, salesProvider);
                       },
-                      tooltip: 'تحويل للكاش',
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.credit_card,
-                        size: 18,
-                        color: Colors.orange[700],
-                      ),
-                      onPressed: () {
-                        _showBatchPaymentDialog(
-                          context,
-                          salesProvider,
-                          'credit',
-                        );
-                      },
-                      tooltip: 'تحويل لأجل',
+                      tooltip: 'تسديد المحدد',
                     ),
                     IconButton(
                       icon: Icon(
@@ -2360,38 +2366,15 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        icon: Icon(Icons.money_off, size: 16),
-                        label: Text('تحويل للكاش'),
+                        icon: Icon(Icons.payments, size: 16),
+                        label: Text('تسديد المحدد'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green[500],
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 8),
                         ),
                         onPressed: () {
-                          _showBatchPaymentDialog(
-                            context,
-                            salesProvider,
-                            'cash',
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        icon: Icon(Icons.credit_card, size: 16),
-                        label: Text('تحويل لأجل'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange[500],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                        ),
-                        onPressed: () {
-                          _showBatchPaymentDialog(
-                            context,
-                            salesProvider,
-                            'credit',
-                          );
+                          _showBatchSettlementDialog(context, salesProvider);
                         },
                       ),
                     ),
@@ -2627,60 +2610,46 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     }
   }
 
-  Future<void> _showBatchPaymentDialog(
+  Future<void> _showBatchSettlementDialog(
     BuildContext context,
     SalesProvider salesProvider,
-    String targetPaymentType,
   ) async {
-    final paymentName = targetPaymentType == 'cash' ? 'نقدي' : 'آجل';
     final count = salesProvider.selectedSaleIds.length;
 
     bool? confirmed = await showDialog<bool>(
       context: context,
       builder:
           (context) => AlertDialog(
-            title: Text('تغيير طريقة الدفع'),
+            title: Text('تسديد الفواتير المحددة'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'هل تريد تغيير طريقة الدفع لـ $count فاتورة إلى $paymentName؟',
+                  'هل تريد تسجيل تسديد كامل لـ $count فاتورة محددة؟',
                 ),
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color:
-                        targetPaymentType == 'cash'
-                            ? Colors.green[50]
-                            : Colors.orange[50],
+                    color: Colors.green[50],
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color:
-                          targetPaymentType == 'cash'
-                              ? Colors.green[200]!
-                              : Colors.orange[200]!,
+                      color: Colors.green[200]!,
                     ),
                   ),
                   child: Row(
                     children: [
                       Icon(
                         Icons.info_outline,
-                        color:
-                            targetPaymentType == 'cash'
-                                ? Colors.green[700]
-                                : Colors.orange[700],
+                        color: Colors.green[700],
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'سيتم تطبيق التغيير على جميع الفواتير المحددة',
+                          'سيتم إنشاء دفعة فعلية وتصفير المتبقي على الفواتير المحددة دون تغيير نوع الفاتورة.',
                           style: TextStyle(
-                            color:
-                                targetPaymentType == 'cash'
-                                    ? Colors.green[700]
-                                    : Colors.orange[700],
+                            color: Colors.green[700],
                           ),
                         ),
                       ),
@@ -2697,12 +2666,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      targetPaymentType == 'cash'
-                          ? Colors.green
-                          : Colors.orange,
+                  backgroundColor: Colors.green,
                 ),
-                child: Text('تأكيد التغيير ($count فاتورة)'),
+                child: Text('تأكيد التسديد ($count فاتورة)'),
               ),
             ],
           ),
@@ -2710,14 +2676,14 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
 
     if (confirmed == true) {
       try {
-        await salesProvider.updateMultiplePaymentTypes(targetPaymentType);
+        final amount = await salesProvider.settleSelectedSales();
         showAppToast(
           context,
-          'تم تغيير طريقة الدفع لـ $count فاتورة إلى $paymentName',
+          'تم تسديد $count فاتورة بقيمة ${amount.toStringAsFixed(2)}',
           ToastType.success,
         );
       } catch (e) {
-        showAppToast(context, 'حدث خطأ أثناء التغيير: $e', ToastType.error);
+        showAppToast(context, 'حدث خطأ أثناء التسديد: $e', ToastType.error);
       }
     }
   }
@@ -2876,6 +2842,33 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       context: context,
       builder: (context) => SaleDetailsDialog(saleId: saleId),
     );
+  }
+
+  Widget _buildCreditStatusBadge(Sale sale) {
+    final color = _getCreditStatusColor(sale);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.25)),
+      ),
+      child: Text(
+        sale.creditStatusLabel,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Color _getCreditStatusColor(Sale sale) {
+    if (sale.isFullyPaid) return Colors.green;
+    if (sale.isPartiallyPaid) return Colors.amber.shade800;
+    return Colors.red.shade600;
   }
 
   Color _getPaymentTypeColor(String paymentType) {

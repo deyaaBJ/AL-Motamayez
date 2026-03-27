@@ -1,14 +1,16 @@
 // screens/customer_details_screen.dart
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Transaction;
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/customer.dart';
-import 'package:motamayez/models/transaction.dart';
+import 'package:motamayez/models/transaction.dart' as debt_models;
 import 'package:motamayez/providers/DebtProvider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/utils/date_formatter.dart';
 import 'package:motamayez/widgets/quick_payment_dialog.dart';
 import 'dart:developer';
+
+enum _CustomerPaymentMode { general, invoiceLinked }
 
 class CustomerDetailsScreen extends StatefulWidget {
   final Customer customer;
@@ -27,12 +29,12 @@ class CustomerDetailsScreen extends StatefulWidget {
 class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   bool _isLoading = true;
   bool _isLoadingTransactions = false;
-  List<Transaction> _transactions = [];
+  List<debt_models.Transaction> _transactions = [];
   int _transactionPage = 0;
   final int _transactionPageSize = 20;
   bool _hasMoreTransactions = true;
   final ScrollController _transactionScrollController = ScrollController();
-  Map<String, List<Transaction>> _groupedTransactions = {};
+  Map<String, List<debt_models.Transaction>> _groupedTransactions = {};
 
   @override
   void initState() {
@@ -72,11 +74,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     setState(() => _isLoadingTransactions = true);
 
     final debtProvider = Provider.of<DebtProvider>(context, listen: false);
-    final newTransactions = await debtProvider.loadTransactionsPage(
-      widget.customer.id!,
-      page: page,
-      limit: _transactionPageSize,
-    );
+    final List<debt_models.Transaction> newTransactions =
+        List<debt_models.Transaction>.from(
+          await debtProvider.loadTransactionsPage(
+            widget.customer.id!,
+            page: page,
+            limit: _transactionPageSize,
+          ),
+        );
 
     setState(() {
       if (page == 0) {
@@ -95,7 +100,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   void _groupTransactionsByMonth() {
-    final Map<String, List<Transaction>> grouped = {};
+    final Map<String, List<debt_models.Transaction>> grouped = {};
 
     for (var transaction in _transactions) {
       try {
@@ -119,7 +124,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         grouped.keys.toList()
           ..sort((a, b) => _parseMonthYear(b).compareTo(_parseMonthYear(a)));
 
-    final sortedGrouped = <String, List<Transaction>>{};
+    final sortedGrouped = <String, List<debt_models.Transaction>>{};
     for (var key in sortedKeys) {
       // ترتيب المعاملات داخل كل شهر تنازلياً حسب التاريخ
       grouped[key]!.sort((a, b) => b.date.compareTo(a.date));
@@ -211,10 +216,27 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       currentDebt: currentDebt,
       onPayment: (customer, amount, note) async {
         final debtProvider = Provider.of<DebtProvider>(context, listen: false);
-        await debtProvider.addPayment(
+        final openSales = await debtProvider.getOpenCreditSales(customer.id!);
+
+        List<int>? selectedSaleIds;
+        if (openSales.isNotEmpty && mounted) {
+          final paymentMode = await _showPaymentModeDialog(openSales.length);
+          if (paymentMode == null) return;
+
+          if (paymentMode == _CustomerPaymentMode.invoiceLinked) {
+            selectedSaleIds = await _showInvoiceSelectionDialog(
+              openSales: openSales,
+              paymentAmount: amount,
+            );
+            if (selectedSaleIds == null) return;
+          }
+        }
+
+        await debtProvider.recordCustomerPayment(
           customerId: customer.id!,
           amount: amount,
           note: note,
+          saleIds: selectedSaleIds,
         );
 
         // تحديث البيانات بعد الإضافة
@@ -226,6 +248,150 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         });
       },
     );
+  }
+
+  Future<_CustomerPaymentMode?> _showPaymentModeDialog(int openInvoicesCount) {
+    return showDialog<_CustomerPaymentMode>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('نوع التسديد'),
+            content: Text(
+              'يوجد $openInvoicesCount فاتورة آجلة مفتوحة لهذا العميل. هل تريد تسجيل السداد على الحساب أم ربطه بفواتير محددة؟',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إلغاء'),
+              ),
+              TextButton(
+                onPressed:
+                    () => Navigator.pop(context, _CustomerPaymentMode.general),
+                child: const Text('سداد عام'),
+              ),
+              ElevatedButton(
+                onPressed:
+                    () => Navigator.pop(
+                      context,
+                      _CustomerPaymentMode.invoiceLinked,
+                    ),
+                child: const Text('اختيار فواتير'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<List<int>?> _showInvoiceSelectionDialog({
+    required List<Map<String, dynamic>> openSales,
+    required double paymentAmount,
+  }) {
+    final selectedIds = <int>{};
+
+    return showDialog<List<int>>(
+      context: context,
+      builder:
+          (context) => StatefulBuilder(
+            builder: (context, setState) {
+              final double selectedRemaining = openSales
+                  .where((sale) => selectedIds.contains(sale['id']))
+                  .fold<double>(
+                    0.0,
+                    (sum, sale) =>
+                        sum +
+                        ((sale['remaining_amount'] as num?)?.toDouble() ?? 0.0),
+                  );
+
+              return AlertDialog(
+                title: const Text('اختيار الفواتير'),
+                content: SizedBox(
+                  width: 420,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'حدد الفواتير التي تريد ربط مبلغ ${paymentAmount.toStringAsFixed(2)} بها.',
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          'إجمالي المتبقي للمحدد: ${selectedRemaining.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color:
+                                selectedRemaining + 0.0001 >= paymentAmount
+                                    ? Colors.green[700]
+                                    : Colors.red[700],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Flexible(
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: openSales.length,
+                          itemBuilder: (context, index) {
+                            final sale = openSales[index];
+                            final saleId = sale['id'] as int;
+                            final remaining =
+                                (sale['remaining_amount'] as num?)?.toDouble() ?? 0.0;
+                            final total =
+                                (sale['total_amount'] as num?)?.toDouble() ?? 0.0;
+                            final date = _formatSaleDate(sale['date']?.toString());
+
+                            return CheckboxListTile(
+                              value: selectedIds.contains(saleId),
+                              onChanged: (value) {
+                                setState(() {
+                                  if (value == true) {
+                                    selectedIds.add(saleId);
+                                  } else {
+                                    selectedIds.remove(saleId);
+                                  }
+                                });
+                              },
+                              title: Text('فاتورة #$saleId'),
+                              subtitle: Text(
+                                'التاريخ: $date\nالمبلغ: ${total.toStringAsFixed(2)} | المتبقي: ${remaining.toStringAsFixed(2)}',
+                              ),
+                              controlAffinity: ListTileControlAffinity.leading,
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('إلغاء'),
+                  ),
+                  ElevatedButton(
+                    onPressed:
+                        selectedIds.isEmpty ||
+                                selectedRemaining + 0.0001 < paymentAmount
+                            ? null
+                            : () =>
+                                Navigator.pop(context, selectedIds.toList()),
+                    child: const Text('تأكيد الربط'),
+                  ),
+                ],
+              );
+            },
+          ),
+    );
+  }
+
+  String _formatSaleDate(String? rawDate) {
+    if (rawDate == null || rawDate.isEmpty) return 'غير محدد';
+    try {
+      final date = DateTime.parse(rawDate);
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (_) {
+      return rawDate;
+    }
   }
 
   void _showWithdrawalDialog(Customer customer, double currentBalance) {
@@ -503,11 +669,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     );
   }
 
-  Widget _buildTransactionItem(Transaction transaction, int sequentialNumber) {
+  Widget _buildTransactionItem(
+    debt_models.Transaction transaction,
+    int sequentialNumber,
+  ) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final currencyName = settings.currencyName;
     final dateTime = DateFormatter.formatDateTime(transaction.date.toString());
-    final isPayment = transaction.type == TransactionType.payment;
+    final isPayment = transaction.type == debt_models.TransactionType.payment;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' show DatabaseExecutor;
 import '../db/db_helper.dart';
 import '../models/customer_balance.dart';
 import '../models/transaction.dart';
@@ -92,6 +93,160 @@ class DebtProvider extends ChangeNotifier {
     await loadCustomerBalance(customerId);
     await loadTransactionsPage(customerId);
     notifyListeners();
+  }
+
+  Future<List<Map<String, dynamic>>> getOpenCreditSales(int customerId) async {
+    final db = await _dbHelper.db;
+
+    final result = await db.rawQuery(
+      '''
+      SELECT id, date, total_amount, paid_amount, remaining_amount
+      FROM sales
+      WHERE customer_id = ?
+        AND payment_type = 'credit'
+        AND COALESCE(remaining_amount, total_amount) > 0
+      ORDER BY date ASC, id ASC
+      ''',
+      [customerId],
+    );
+
+    return result
+        .map(
+          (row) => {
+            'id': row['id'],
+            'date': row['date'],
+            'total_amount': _safeToDouble(row['total_amount']),
+            'paid_amount': _safeToDouble(row['paid_amount']),
+            'remaining_amount': _safeToDouble(
+              row['remaining_amount'] ?? row['total_amount'],
+            ),
+          },
+        )
+        .toList();
+  }
+
+  Future<double> recordCustomerPayment({
+    required int customerId,
+    required double amount,
+    String? note,
+    List<int>? saleIds,
+  }) async {
+    final db = await _dbHelper.db;
+    double allocatedAmount = 0.0;
+
+    await db.transaction((txn) async {
+      final selectedSaleIds = saleIds?.toSet().toList() ?? <int>[];
+      List<Map<String, dynamic>> targetSales = [];
+
+      if (selectedSaleIds.isNotEmpty) {
+        final placeholders = List.filled(selectedSaleIds.length, '?').join(',');
+        final rows = await txn.rawQuery('''
+          SELECT id, customer_id, payment_type, total_amount, paid_amount, remaining_amount, date
+          FROM sales
+          WHERE id IN ($placeholders)
+          ORDER BY date ASC, id ASC
+          ''', selectedSaleIds);
+
+        if (rows.isEmpty || rows.length != selectedSaleIds.length) {
+          throw Exception('بعض الفواتير المحددة غير موجودة.');
+        }
+
+        for (final sale in rows) {
+          if (sale['payment_type'] != 'credit') {
+            throw Exception('يمكن ربط السداد بالفواتير الآجلة فقط.');
+          }
+
+          if (sale['customer_id'] != customerId) {
+            throw Exception('تم اختيار فواتير لا تخص هذا العميل.');
+          }
+        }
+
+        targetSales =
+            rows
+                .map(
+                  (row) => {
+                    'id': row['id'] as int,
+                    'total_amount': _safeToDouble(row['total_amount']),
+                    'paid_amount': _safeToDouble(row['paid_amount']),
+                    'remaining_amount': _safeToDouble(
+                      row['remaining_amount'] ?? row['total_amount'],
+                    ),
+                  },
+                )
+                .where((sale) => (sale['remaining_amount'] as double) > 0.0001)
+                .toList();
+
+        if (targetSales.isEmpty) {
+          throw Exception('كل الفواتير المحددة مسددة مسبقاً.');
+        }
+
+        final totalRemaining = targetSales.fold<double>(
+          0.0,
+          (sum, sale) => sum + (sale['remaining_amount'] as double),
+        );
+
+        if (amount > totalRemaining + 0.0001) {
+          throw Exception('مبلغ السداد أكبر من المتبقي في الفواتير المحددة.');
+        }
+      }
+
+      final transactionId = await txn.insert('transactions', {
+        'customer_id': customerId,
+        'amount': amount,
+        'type': TransactionType.payment.name,
+        'date': DateTime.now().toIso8601String(),
+        'note':
+            note ??
+            (targetSales.isEmpty
+                ? 'سداد عام على الحساب'
+                : 'سداد مربوط بـ ${targetSales.length} فاتورة'),
+      });
+
+      double remainingPayment = amount;
+
+      for (final sale in targetSales) {
+        if (remainingPayment <= 0.0001) break;
+
+        final saleId = sale['id'] as int;
+        final paidAmount = sale['paid_amount'] as double;
+        final remainingAmount = sale['remaining_amount'] as double;
+        final allocation =
+            remainingPayment >= remainingAmount
+                ? remainingAmount
+                : remainingPayment;
+
+        await txn.update(
+          'sales',
+          {
+            'paid_amount': paidAmount + allocation,
+            'remaining_amount': remainingAmount - allocation,
+          },
+          where: 'id = ?',
+          whereArgs: [saleId],
+        );
+
+        await txn.insert('sale_payment_allocations', {
+          'transaction_id': transactionId,
+          'sale_id': saleId,
+          'amount': allocation,
+        });
+
+        allocatedAmount += allocation;
+        remainingPayment -= allocation;
+      }
+
+      await _applyBalanceDeltaTxn(
+        txn: txn,
+        customerId: customerId,
+        delta: -amount,
+      );
+    });
+
+    await loadCustomerBalance(customerId);
+    await loadTransactionsPage(customerId);
+    notifyListeners();
+
+    return allocatedAmount;
   }
 
   // دالة مساعدة للتوافق مع الكود القديم (تسديد دفعة)
@@ -476,7 +631,15 @@ class DebtProvider extends ChangeNotifier {
   }) async {
     final db = await _dbHelper.db;
 
-    await db.rawInsert(
+    await _applyBalanceDeltaTxn(txn: db, customerId: customerId, delta: delta);
+  }
+
+  Future<void> _applyBalanceDeltaTxn({
+    required DatabaseExecutor txn,
+    required int customerId,
+    required double delta,
+  }) async {
+    await txn.rawInsert(
       '''
       INSERT INTO customer_balance (customer_id, balance, last_updated)
       VALUES (?, ?, CURRENT_TIMESTAMP)
