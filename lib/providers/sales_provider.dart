@@ -17,6 +17,7 @@ class SalesProvider extends ChangeNotifier {
   final int _limit = 20;
   bool _hasMore = true;
   bool _isLoading = false;
+  int _requestSerial = 0;
 
   bool get isLoading => _isLoading;
   bool get hasMore => _hasMore;
@@ -343,7 +344,6 @@ class SalesProvider extends ChangeNotifier {
     _allSales.clear();
     _displayedSales.clear();
     _hasMore = true;
-    _isLoading = false;
     selectedSaleIds.clear();
     _currentCacheKey = null;
     notifyListeners();
@@ -630,6 +630,7 @@ class SalesProvider extends ChangeNotifier {
     bool forceRefresh = false,
   }) async {
     print('🚀 بدء التحميل: loadMore=$loadMore, page=$_page, hasMore=$_hasMore');
+    final int requestId = loadMore ? _requestSerial : ++_requestSerial;
 
     if (_isLoading) {
       print('❌ التحميل جاري، تم إيقاف الطلب');
@@ -643,6 +644,7 @@ class SalesProvider extends ChangeNotifier {
 
     // ✅ التحقق من الكاش قبل جلب البيانات
     final cacheKey = _generateCacheKey();
+    _currentCacheKey = cacheKey;
     if (!forceRefresh && _salesCache.containsKey(cacheKey)) {
       print('✅ استخدام الكاش للبيانات');
       _allSales = _salesCache[cacheKey]!;
@@ -661,7 +663,17 @@ class SalesProvider extends ChangeNotifier {
     final db = await _dbHelper.db;
 
     try {
-      String table = "sales s";
+      final String table = isArchiveMode
+          ? '''(
+              SELECT id, date, total_amount, total_profit, customer_id, payment_type,
+                     paid_amount, remaining_amount, show_for_tax, user_id
+              FROM sales
+              UNION ALL
+              SELECT id, date, total_amount, total_profit, customer_id, payment_type,
+                     paid_amount, remaining_amount, show_for_tax, user_id
+              FROM sales_archive
+            ) s'''
+          : 'sales s';
       int totalCount = 0;
 
       List<dynamic> args = [];
@@ -725,6 +737,11 @@ class SalesProvider extends ChangeNotifier {
       LIMIT $_limit OFFSET $offset
       ''', args);
 
+      if (requestId != _requestSerial) {
+        print('⚠️ تم تجاهل نتيجة قديمة لطلب سابق');
+        return;
+      }
+
       if (result.isNotEmpty) {
         final sales = result.map((row) => Sale.fromMap(row)).toList();
         if (loadMore) {
@@ -751,8 +768,10 @@ class SalesProvider extends ChangeNotifier {
     } catch (e) {
       log('❌ خطأ أثناء جلب البيانات: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (requestId == _requestSerial) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -761,7 +780,6 @@ class SalesProvider extends ChangeNotifier {
     _allSales.clear();
     _displayedSales.clear();
     _hasMore = true;
-    _isLoading = false;
     print('🧹 تم مسح بيانات الفواتير السابقة');
     notifyListeners();
   }
@@ -770,53 +788,19 @@ class SalesProvider extends ChangeNotifier {
     bool loadMore = false,
     bool forceRefresh = false,
   }) async {
-    if (_isLoading) return;
-
-    _isLoading = true;
-    if (!loadMore) {
-      _allSales.clear();
-      _hasMore = true;
-      notifyListeners();
+    if (_isLoading) {
+      print('⏳ تم تجاهل fetchSales لأن التحميل ما زال جاريًا');
+      return;
     }
 
-    final db = await _dbHelper.db;
-
-    try {
-      // بناء الاستعلام...
-      String whereClause = "1=1"; // قاعدة البداية
-
-      List<dynamic> args = [];
-
-      // إضافة الشروط...
-
-      int offset = loadMore ? _allSales.length : 0;
-
-      final result = await db.rawQuery('''
-      SELECT * FROM sales 
-      WHERE $whereClause 
-      ORDER BY date DESC, id DESC 
-      LIMIT $_limit OFFSET $offset
-    ''', args);
-
-      final newSales = result.map((e) => Sale.fromMap(e)).toList();
-
-      if (loadMore) {
-        _allSales.addAll(newSales);
-      } else {
-        _allSales = newSales;
-      }
-
-      // إذا كانت النتائج أقل من الـ limit، يعني ما فيه زيادة
-      _hasMore = newSales.length == _limit;
-
-      _displayedSales = List.from(_allSales);
-    } catch (e) {
-      print('خطأ: $e');
-      _hasMore = false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+    final shouldClearBeforeFetch = !loadMore && !hasLoadedSales;
+    if (shouldClearBeforeFetch) {
+      resetForNewSearch();
     }
+    await _fetchSalesWithFilters(
+      loadMore: loadMore,
+      forceRefresh: forceRefresh,
+    );
   }
 
   Future<void> loadMoreSales() async {
@@ -861,7 +845,14 @@ class SalesProvider extends ChangeNotifier {
     await db.transaction((txn) async {
       final saleResult = await txn.query(
         'sales',
-        columns: ['id', 'total_amount', 'payment_type', 'customer_id'],
+        columns: [
+          'id',
+          'total_amount',
+          'payment_type',
+          'customer_id',
+          'paid_amount',
+          'remaining_amount',
+        ],
         where: 'id = ?',
         whereArgs: [saleId],
         limit: 1,
@@ -875,6 +866,12 @@ class SalesProvider extends ChangeNotifier {
       final oldPaymentType = saleData['payment_type'] as String;
       final oldCustomerId = saleData['customer_id'] as int?;
       final totalAmount = (saleData['total_amount'] as num).toDouble();
+      final oldPaidAmount =
+          (saleData['paid_amount'] as num?)?.toDouble() ??
+          (oldPaymentType == 'cash' ? totalAmount : 0.0);
+      final oldRemainingAmount =
+          (saleData['remaining_amount'] as num?)?.toDouble() ??
+          (oldPaymentType == 'credit' ? totalAmount : 0.0);
 
       resolvedCustomerId =
           paymentType == 'credit' ? (customerId ?? oldCustomerId) : null;
@@ -883,11 +880,24 @@ class SalesProvider extends ChangeNotifier {
         throw Exception('يجب اختيار عميل قبل تحويل الفاتورة إلى آجل.');
       }
 
+      final newPaidAmount =
+          paymentType == 'cash'
+              ? totalAmount
+              : oldPaymentType == 'credit'
+              ? oldPaidAmount
+              : 0.0;
+      final newRemainingAmount =
+          paymentType == 'credit'
+              ? oldPaymentType == 'credit'
+              ? oldRemainingAmount
+              : totalAmount
+              : 0.0;
+
       final updateData = <String, dynamic>{
         'payment_type': paymentType,
         'customer_id': resolvedCustomerId,
-        'paid_amount': paymentType == 'cash' ? totalAmount : 0.0,
-        'remaining_amount': paymentType == 'credit' ? totalAmount : 0.0,
+        'paid_amount': newPaidAmount,
+        'remaining_amount': newRemainingAmount,
       };
 
       final count = await txn.update(
@@ -901,19 +911,19 @@ class SalesProvider extends ChangeNotifier {
         throw Exception('فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.');
       }
 
-      if (oldPaymentType == 'credit' && oldCustomerId != null) {
+      if (oldPaymentType == 'credit' && oldCustomerId != null && oldRemainingAmount > 0) {
         await _applyCustomerBalanceDelta(
           txn: txn,
           customerId: oldCustomerId,
-          delta: -totalAmount,
+          delta: -oldRemainingAmount,
         );
       }
 
-      if (paymentType == 'credit' && resolvedCustomerId != null) {
+      if (paymentType == 'credit' && resolvedCustomerId != null && newRemainingAmount > 0) {
         await _applyCustomerBalanceDelta(
           txn: txn,
           customerId: resolvedCustomerId!,
-          delta: totalAmount,
+          delta: newRemainingAmount,
         );
       }
     });
@@ -929,8 +939,13 @@ class SalesProvider extends ChangeNotifier {
         customerId: resolvedCustomerId,
         customerName: oldSale.customerName,
         paymentType: paymentType,
-        paidAmount: paymentType == 'cash' ? oldSale.totalAmount : 0.0,
-        remainingAmount: paymentType == 'credit' ? oldSale.totalAmount : 0.0,
+        paidAmount: paymentType == 'cash' ? oldSale.totalAmount : oldSale.paidAmount,
+        remainingAmount:
+            paymentType == 'credit'
+                ? oldSale.paymentType == 'credit'
+                    ? oldSale.remainingAmount
+                    : oldSale.totalAmount
+                : 0.0,
         showForTax: oldSale.showForTax,
       );
       _allSales[index] = updatedSale;
@@ -996,6 +1011,9 @@ class SalesProvider extends ChangeNotifier {
 
       final saleData = sale.first;
       final double totalAmount = (saleData['total_amount'] as num).toDouble();
+      final double remainingAmount =
+          (saleData['remaining_amount'] as num?)?.toDouble() ??
+          ((saleData['payment_type'] == 'credit') ? totalAmount : 0.0);
       final String paymentType = saleData['payment_type'] as String;
       final int? customerId = saleData['customer_id'] as int?;
 
@@ -1095,14 +1113,13 @@ class SalesProvider extends ChangeNotifier {
           log('✅ إنشاء دفعة جديدة للمنتج $productId بكمية $quantity');
         }
 
-        // 4️⃣ إرجاع الكمية للمنتج الإجمالي
+        // Restore the aggregate product stock for each returned batch.
         await txn.rawUpdate(
           'UPDATE products SET quantity = quantity + ? WHERE id = ?',
           [quantity, productId],
         );
       }
 
-      // 5️⃣ إذا لم تكن هناك تفاصيل دفعات، نرجع الكميات العادية
       if (batchReturns.isEmpty) {
         final saleItems = await txn.query(
           'sale_items',
@@ -1140,20 +1157,15 @@ class SalesProvider extends ChangeNotifier {
         }
       }
 
-      // 6️⃣ تعديل رصيد الزبون إذا كانت فاتورة آجلة
-      if (paymentType == 'credit' && customerId != null) {
-        await txn.rawUpdate(
-          '''
-        UPDATE customer_balance 
-        SET balance = balance - ?, last_updated = ?
-        WHERE customer_id = ?
-        ''',
-          [totalAmount, DateTime.now().toIso8601String(), customerId],
+      if (paymentType == 'credit' && customerId != null && remainingAmount > 0) {
+        await _applyCustomerBalanceDelta(
+          txn: txn,
+          customerId: customerId,
+          delta: -remainingAmount,
         );
 
-        log('💳 تعديل رصيد الزبون ID: $customerId بمقدار: -$totalAmount');
+        log('Adjusted customer balance for deleted sale $saleId by -$remainingAmount');
       }
-
       // 7️⃣ حذف السجلات
       await txn.delete(
         'sale_batch_log',
@@ -1478,3 +1490,6 @@ class SalesProvider extends ChangeNotifier {
     );
   }
 }
+
+
+

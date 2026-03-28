@@ -44,45 +44,49 @@ class _BaseLayoutState extends State<BaseLayout> {
   void _handlePageChange(String page) {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
+    if (widget.currentPage == page) {
+      return;
+    }
+
     switch (page) {
       case 'home':
-        Navigator.pushNamed(context, '/home');
+        Navigator.pushReplacementNamed(context, '/home');
         break;
       case 'المنتجات':
-        Navigator.pushNamed(context, '/product');
+        Navigator.pushReplacementNamed(context, '/product');
         break;
       case 'المبيعات':
-        Navigator.pushNamed(context, '/salesHistory');
+        Navigator.pushReplacementNamed(context, '/salesHistory');
         break;
       case 'التقارير':
-        Navigator.pushNamed(context, '/report');
+        Navigator.pushReplacementNamed(context, '/report');
         break;
       case 'العملاء':
-        Navigator.pushNamed(context, '/customer');
+        Navigator.pushReplacementNamed(context, '/customer');
         break;
       case 'فاتورة شراء':
-        Navigator.pushNamed(context, '/purchaseInvoice');
+        Navigator.pushReplacementNamed(context, '/purchaseInvoice');
         break;
       case 'الفواتير':
-        Navigator.pushNamed(context, '/purchaseInvoicesList');
+        Navigator.pushReplacementNamed(context, '/purchaseInvoicesList');
         break;
       case 'الموردين':
-        Navigator.pushNamed(context, '/suppliers');
+        Navigator.pushReplacementNamed(context, '/suppliers');
         break;
       case 'المصاريف':
-        Navigator.pushNamed(context, '/expenses');
+        Navigator.pushReplacementNamed(context, '/expenses');
         break;
       case 'الدفعات':
-        Navigator.pushNamed(context, '/batches');
+        Navigator.pushReplacementNamed(context, '/batches');
         break;
       case 'cashier':
-        Navigator.pushNamed(context, '/cashier');
+        Navigator.pushReplacementNamed(context, '/cashier');
         break;
       case 'pos':
-        Navigator.pushNamed(context, '/pos');
+        Navigator.pushReplacementNamed(context, '/pos');
         break;
       case 'settings':
-        Navigator.pushNamed(context, '/settings');
+        Navigator.pushReplacementNamed(context, '/settings');
         break;
       case 'logout':
         authProvider.logout();
@@ -559,3 +563,4 @@ class _BaseLayoutState extends State<BaseLayout> {
     );
   }
 }
+

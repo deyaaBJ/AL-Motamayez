@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:motamayez/constant/constant.dart';
 import 'package:motamayez/db/db_helper.dart';
@@ -34,188 +32,110 @@ class ActivationService {
   static const String _secretKey = AppConstants.secretKey;
   static final String _serverUrl = AppConstants.serverUrl;
 
-  /// Device ID ثابت
-  Future<String> getDeviceId() async {
-    try {
-      // استخدام SharedPreferences كبديل أكثر استقراراً
-      final prefs = await SharedPreferences.getInstance();
-      String? deviceId = prefs.getString('device_id');
-
-      if (deviceId != null && deviceId.isNotEmpty) {
-        print('📱 Device ID from SharedPreferences: $deviceId');
-        return deviceId;
-      }
-
-      // إنشاء ID جديد
-      deviceId = const Uuid().v4();
-      await prefs.setString('device_id', deviceId);
-      print('🆕 New Device ID generated: $deviceId');
-      return deviceId;
-    } catch (e) {
-      print('❌ Error getDeviceId: $e');
-      rethrow;
-    }
+  String? _maskValue(String? value) {
+    if (value == null || value.isEmpty) return value;
+    if (value.length <= 8) return '***';
+    return '${value.substring(0, 4)}...${value.substring(value.length - 4)}';
   }
 
-  /// توليد توقيع للجهاز
+  Future<String> getDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? deviceId = prefs.getString('device_id');
+
+    if (deviceId != null && deviceId.isNotEmpty) {
+      return deviceId;
+    }
+
+    deviceId = const Uuid().v4();
+    await prefs.setString('device_id', deviceId);
+    return deviceId;
+  }
+
   String _generateSignature(String deviceId) {
     final raw = '$deviceId|$_secretKey';
-    final signature = sha256.convert(utf8.encode(raw)).toString();
-    print('🔄 Generated signature: $signature');
-    print('🔄 From deviceId: $deviceId');
-    print('🔄 And secretKey: $_secretKey');
-    return signature;
+    return sha256.convert(utf8.encode(raw)).toString();
   }
 
-  /// حفظ التوقيع مشفر في SQLite
+  Future<void> _ensureActivationTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS activation (
+        id INTEGER PRIMARY KEY,
+        signature TEXT,
+        activation_code TEXT
+      )
+    ''');
+  }
+
   Future<void> _saveSignature(String signature) async {
-    try {
-      print('💾 Saving signature to database...');
-      final encrypted = EncryptionService.encrypt(signature);
-      print('🔐 Encrypted signature: $encrypted');
+    final encrypted = EncryptionService.encrypt(signature);
+    final db = await _dbHelper.db;
+    await _ensureActivationTable(db);
+    await db.delete('activation');
+    await db.insert(
+      'activation',
+      {'id': 1, 'signature': encrypted},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
 
-      final db = await _dbHelper.db;
-
-      // تأكد من وجود جدول activation
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='activation'",
-      );
-
-      if (tables.isEmpty) {
-        print('⚠️ Activation table not found, creating...');
-        await db.execute('''
-          CREATE TABLE activation (
-            id INTEGER PRIMARY KEY,
-            signature TEXT,
-            activation_code TEXT
-          )
-        ''');
-      }
-
-      // حذف أي بيانات موجودة
-      await db.delete('activation');
-
-      // إدراج البيانات الجديدة
-      final result = await db.insert('activation', {
-        'id': 1,
-        'signature': encrypted,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-
-      print('✅ Signature inserted successfully, ID: $result');
-
-      // التحقق من الحفظ
-      final check = await db.query('activation');
-      print('📋 Activation data after saving: $check');
-
-      // حفظ نسخة في SharedPreferences أيضاً كنسخة احتياطية
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('activation_signature', encrypted);
-      print('📱 Backup saved to SharedPreferences');
-    } catch (e) {
-      print('❌ Error saving signature: $e');
-      print('Stack trace: ${e.toString()}');
-      rethrow;
-    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('activation_signature', encrypted);
   }
 
-  /// حفظ كود التفعيل
   Future<void> _saveActivationCode(String code) async {
-    try {
-      final db = await _dbHelper.db;
-      await db.update('activation', {'activation_code': code}, where: 'id = 1');
+    final db = await _dbHelper.db;
+    await _ensureActivationTable(db);
+    await db.update('activation', {'activation_code': code}, where: 'id = 1');
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('activation_code', code);
-
-      print('💾 Saved activation code: $code');
-    } catch (e) {
-      print('❌ Error saving activation code: $e');
-    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('activation_code', code);
   }
 
-  /// قراءة التوقيع وفك التشفير
   Future<String?> _getStoredSignature() async {
     try {
-      print('🔍 Reading signature...');
-
-      // أولاً: حاول من SQLite
       final db = await _dbHelper.db;
-
-      // تحقق من وجود الجدول
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='activation'",
-      );
-
-      if (tables.isEmpty) {
-        print('📭 Activation table does not exist');
-        return null;
-      }
+      await _ensureActivationTable(db);
 
       final result = await db.query('activation', limit: 1);
-
       if (result.isNotEmpty) {
         final encrypted = result.first['signature'] as String?;
-        if (encrypted == null) return null;
-
-        print('💾 Signature from SQLite: $encrypted');
-        final decrypted = EncryptionService.decrypt(encrypted);
-        print('🔓 Decrypted signature: $decrypted');
-        return decrypted;
+        if (encrypted == null || encrypted.isEmpty) return null;
+        return EncryptionService.decrypt(encrypted);
       }
 
-      // ثانياً: حاول من SharedPreferences إذا فشل SQLite
       final prefs = await SharedPreferences.getInstance();
       final encrypted = prefs.getString('activation_signature');
+      if (encrypted == null || encrypted.isEmpty) return null;
 
-      if (encrypted != null) {
-        print('📱 Signature from SharedPreferences: $encrypted');
-        final decrypted = EncryptionService.decrypt(encrypted);
-        print('🔓 Decrypted signature: $decrypted');
-
-        // حفظ في SQLite للاستخدام المستقبلي
-        await db.insert('activation', {
-          'id': 1,
-          'signature': encrypted,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
-
-        return decrypted;
-      }
-
-      print('⚠️ No signatures stored');
-      return null;
-    } catch (e) {
-      print('❌ Error reading signature: $e');
+      await db.insert(
+        'activation',
+        {'id': 1, 'signature': encrypted},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      return EncryptionService.decrypt(encrypted);
+    } catch (_) {
       return null;
     }
   }
 
-  /// الحصول على كود التفعيل المخزن
   Future<String?> getStoredActivationCode() async {
     try {
       final db = await _dbHelper.db;
+      await _ensureActivationTable(db);
       final result = await db.query('activation', limit: 1);
-
       if (result.isNotEmpty && result.first.containsKey('activation_code')) {
         return result.first['activation_code'] as String?;
       }
 
       final prefs = await SharedPreferences.getInstance();
       return prefs.getString('activation_code');
-    } catch (e) {
-      print('❌ Error getting activation code: $e');
+    } catch (_) {
       return null;
     }
   }
 
-  /// تفعيل الجهاز عبر السيرفر
   Future<bool> activate(String activationCode) async {
     try {
-      print('🚀 Starting activation process...');
-
       final deviceId = await getDeviceId();
-      print('📱 Device ID: $deviceId');
-
-      // إرسال طلب التفعيل
       final response = await http
           .post(
             Uri.parse(_serverUrl),
@@ -224,133 +144,90 @@ class ActivationService {
           )
           .timeout(const Duration(seconds: 30));
 
-      print('🌐 Server response: ${response.statusCode} - ${response.body}');
-
       if (response.statusCode != 200) {
-        print('❌ Failed to connect to server');
         return false;
       }
 
       final data = jsonDecode(response.body);
-      if (data['success'] == true) {
-        print('✅ Code activated successfully');
-
-        // توليد وحفظ التوقيع
-        final signature = _generateSignature(deviceId);
-        await _saveSignature(signature);
-        await _saveActivationCode(activationCode);
-
-        // التحقق من الحفظ
-        final stored = await _getStoredSignature();
-        if (stored == signature) {
-          print('🎉 Activation confirmed and saved successfully!');
-          return true;
-        } else {
-          print(
-            '⚠️ Signature verification failed, but activation was approved by server',
-          );
-          return true; // نعيد true لأن السيرفر وافق
-        }
-      }
-
-      print('❌ Invalid activation code');
-      return false;
-    } on TimeoutException catch (_) {
-      print('⏰ Connection timeout');
-      return false;
-    } catch (e) {
-      print('❌ Activation error: $e');
-      return false;
-    }
-  }
-
-  /// فحص التفعيل مع رمي استثناء عند خطأ
-  Future<bool> isActivated() async {
-    try {
-      print('🔍 Checking activation status...');
-
-      final storedSignature = await _getStoredSignature();
-
-      if (storedSignature == null) {
-        print('📭 No stored signature found');
+      if (data['success'] != true) {
         return false;
       }
 
-      final deviceId = await getDeviceId();
-      final expectedSignature = _generateSignature(deviceId);
-
-      print('🔍 Comparing signatures:');
-      print('   Stored: $storedSignature');
-      print('   Expected: $expectedSignature');
-
-      if (storedSignature != expectedSignature) {
-        print('❌ Signatures do not match');
-        throw ActivationException(
-          'التوقيع غير صحيح - لا تملك صلاحية الدخول',
-          storedSignature: storedSignature,
-          expectedSignature: expectedSignature,
-        );
-      }
-
-      print('✅ Activation is valid');
+      final signature = _generateSignature(deviceId);
+      await _saveSignature(signature);
+      await _saveActivationCode(activationCode);
       return true;
-    } catch (e) {
-      print('❌ Error checking activation: $e');
-      rethrow;
+    } on TimeoutException {
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 
-  /// فحص التفعيل بدون رمي استثناء
+  Future<bool> isActivated() async {
+    final storedSignature = await _getStoredSignature();
+    if (storedSignature == null) {
+      return false;
+    }
+
+    final deviceId = await getDeviceId();
+    final expectedSignature = _generateSignature(deviceId);
+
+    if (storedSignature != expectedSignature) {
+      throw ActivationException(
+        'Activation signature mismatch.',
+        storedSignature: _maskValue(storedSignature),
+        expectedSignature: _maskValue(expectedSignature),
+      );
+    }
+
+    return true;
+  }
+
   Future<bool> checkActivationSilently() async {
     try {
       final storedSignature = await _getStoredSignature();
       if (storedSignature == null) return false;
-
       final deviceId = await getDeviceId();
-      final expectedSignature = _generateSignature(deviceId);
-
-      return storedSignature == expectedSignature;
-    } catch (e) {
+      return storedSignature == _generateSignature(deviceId);
+    } catch (_) {
       return false;
     }
   }
 
-  /// إلغاء التفعيل وحذف التوقيع
   Future<void> clearActivation() async {
     try {
       final db = await _dbHelper.db;
+      await _ensureActivationTable(db);
       await db.delete('activation');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('activation_signature');
       await prefs.remove('activation_code');
       await prefs.remove('device_id');
-
-      print('🧹 Activation data cleared');
-    } catch (e) {
-      print('❌ Error clearing activation: $e');
-    }
+    } catch (_) {}
   }
 
-  /// الحصول على معلومات التفعيل
   Future<Map<String, dynamic>> getActivationInfo() async {
     try {
       final db = await _dbHelper.db;
+      await _ensureActivationTable(db);
       final result = await db.query('activation', limit: 1);
 
       final prefs = await SharedPreferences.getInstance();
-      final deviceId = prefs.getString('device_id') ?? 'غير موجود';
+      final deviceId = prefs.getString('device_id') ?? 'Unavailable';
       final activationCode = prefs.getString('activation_code');
 
       final storedSignature = await _getStoredSignature();
-      final expectedSignature = _generateSignature(deviceId);
+      final expectedSignature =
+          deviceId == 'Unavailable' ? null : _generateSignature(deviceId);
 
       return {
-        'device_id': deviceId,
+        'device_id': _maskValue(deviceId),
         'activation_code': activationCode,
-        'stored_signature': storedSignature,
-        'expected_signature': expectedSignature,
-        'is_valid': storedSignature == expectedSignature,
+        'stored_signature': _maskValue(storedSignature),
+        'expected_signature': _maskValue(expectedSignature),
+        'is_valid': storedSignature != null && storedSignature == expectedSignature,
         'has_activation': result.isNotEmpty,
       };
     } catch (e) {
@@ -358,30 +235,17 @@ class ActivationService {
     }
   }
 
-  /// فحص قاعدة البيانات
   Future<void> checkDatabase() async {
-    try {
-      final db = await _dbHelper.db;
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table'",
-      );
-      print('=== Database Check ===');
-      for (var table in tables) {
-        final tableName = table['name'];
-        try {
-          final count = await db.rawQuery(
-            "SELECT COUNT(*) as count FROM $tableName",
-          );
-          final data = await db.query(tableName.toString(), limit: 3);
-          print('Table: $tableName - Records: ${count.first['count']}');
-          print('   Data: $data');
-        } catch (e) {
-          print('Table: $tableName - Error: $e');
-        }
-      }
-      print('=== End Check ===');
-    } catch (e) {
-      print('Database check error: $e');
+    final db = await _dbHelper.db;
+    final tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table'",
+    );
+    for (final table in tables) {
+      final tableName = table['name'];
+      if (tableName == null) continue;
+      try {
+        await db.rawQuery("SELECT COUNT(*) as count FROM $tableName");
+      } catch (_) {}
     }
   }
 }

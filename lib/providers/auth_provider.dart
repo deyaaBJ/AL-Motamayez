@@ -4,6 +4,7 @@ import 'package:motamayez/utils/app_config.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../db/db_helper.dart';
+import '../services/password_service.dart';
 import '../services/secure_storage_service.dart';
 import 'package:archive/archive_io.dart';
 import 'dart:developer';
@@ -26,26 +27,48 @@ class AuthProvider with ChangeNotifier {
   }) async {
     try {
       final db = await _dbHelper.db;
+      final normalizedEmail = email.trim().toLowerCase();
       final result = await db.query(
         'users',
-        where: 'email = ? AND password = ?',
-        whereArgs: [email, password],
+        where: 'email = ?',
+        whereArgs: [normalizedEmail],
+        limit: 1,
       );
 
-      if (result.isNotEmpty) {
-        _currentUser = result.first;
-
-        // ✅ حفظ البيانات إذا اختار "تذكرني"
-        if (rememberMe) {
-          await SecureStorageService.saveCredentials(email, password);
-          log('✅ Saved credentials for: $email');
-        }
-
-        notifyListeners();
-        return true;
-      } else {
+      if (result.isEmpty) {
         return false;
       }
+
+      final user = result.first;
+      final storedPassword = user['password']?.toString() ?? '';
+      if (!PasswordService.verifyPassword(password, storedPassword)) {
+        return false;
+      }
+
+      if (PasswordService.isLegacyPlaintext(storedPassword)) {
+        final upgradedPassword = PasswordService.hashPassword(password);
+        await db.update(
+          'users',
+          {'password': upgradedPassword},
+          where: 'id = ?',
+          whereArgs: [user['id']],
+        );
+        _currentUser = {...user, 'password': upgradedPassword};
+      } else {
+        _currentUser = user;
+      }
+
+      if (rememberMe) {
+        await SecureStorageService.saveCredentials(
+          normalizedEmail,
+          userId: user['id']?.toString(),
+        );
+      } else {
+        await SecureStorageService.clearCredentials();
+      }
+
+      notifyListeners();
+      return true;
     } catch (e) {
       log('Login error: $e');
       return false;
@@ -103,7 +126,6 @@ class AuthProvider with ChangeNotifier {
       }
 
       final db = await _dbHelper.db;
-      await db.execute('VACUUM');
 
       final dbPath = db.path;
       final sourceFile = File(dbPath);
@@ -313,17 +335,12 @@ class AuthProvider with ChangeNotifier {
   }) async {
     try {
       final db = await _dbHelper.db;
-
-      // ✅ تطهير الإيميل
       final cleanEmail = email.trim().toLowerCase().replaceAll(
         RegExp(r'\s+'),
         '',
       );
       final cleanName = name.trim();
 
-      print('🔍 إضافة مستخدم: $cleanName / $cleanEmail');
-
-      // ✅ التحقق من وجود الإيميل
       final existing = await db.query(
         'users',
         where: 'email = ?',
@@ -331,26 +348,21 @@ class AuthProvider with ChangeNotifier {
       );
 
       if (existing.isNotEmpty) {
-        print('❌ الإيميل موجود مسبقاً');
         return false;
       }
 
-      print('✅ إدراج جديد...');
-
-      // ✅ إدراج بدون created_at
       final id = await db.insert('users', {
         'name': cleanName,
         'email': cleanEmail,
-        'password': password,
+        'password': PasswordService.hashPassword(password),
         'role': role,
-        // ❌ تم إزالة 'created_at'
       }, conflictAlgorithm: ConflictAlgorithm.fail);
 
-      print('✅ تم الإدراج بـ ID: $id');
+      log('Created user with ID: $id');
       notifyListeners();
       return true;
     } catch (e) {
-      print('❌ خطأ: $e');
+      log('Error creating user: $e');
       return false;
     }
   }
@@ -433,47 +445,58 @@ class AuthProvider with ChangeNotifier {
   /// تغيير كلمة المرور
   Future<bool> changePasswordByRole({
     required String role,
-    String? userId, // ✅ إضافة ID للكاشير المحدد
+    String? userId,
     String? oldPassword,
     required String newPassword,
   }) async {
     try {
       final db = await _dbHelper.db;
-
-      int result;
+      Map<String, dynamic>? targetUser;
 
       if (userId != null) {
-        // ✅ تغيير كلمة مرور كاشير محدد
-        result = await db.update(
-          'users',
-          {'password': newPassword},
-          where: 'id = ? AND role = ?',
-          whereArgs: [userId, role],
-        );
-      } else {
-        // تغيير بالـ role + oldPassword (للأدمن)
         final users = await db.query(
           'users',
-          where: 'role = ? AND password = ?',
-          whereArgs: [role, oldPassword],
+          where: 'id = ? AND role = ?',
+          whereArgs: [userId, role],
+          limit: 1,
         );
-
-        if (users.isEmpty) {
-          return false;
-        }
-
-        result = await db.update(
+        if (users.isEmpty) return false;
+        targetUser = users.first;
+      } else {
+        final users = await db.query(
           'users',
-          {'password': newPassword},
           where: 'role = ?',
           whereArgs: [role],
+          limit: 1,
         );
+        if (users.isEmpty) return false;
+        targetUser = users.first;
+
+        final normalizedOldPassword = oldPassword?.trim() ?? '';
+        final shouldRequireVerification =
+            normalizedOldPassword.isNotEmpty &&
+            normalizedOldPassword != '********';
+
+        if (shouldRequireVerification &&
+            !PasswordService.verifyPassword(
+              normalizedOldPassword,
+              targetUser['password']?.toString() ?? '',
+            )) {
+          return false;
+        }
       }
 
-      log('✅ تم تغيير كلمة المرور للمستخدم ID: $userId, Role: $role');
+      final result = await db.update(
+        'users',
+        {'password': PasswordService.hashPassword(newPassword)},
+        where: 'id = ?',
+        whereArgs: [targetUser['id']],
+      );
+
+      log('Password changed for user ID: ${targetUser['id']}');
       return result > 0;
     } catch (e) {
-      log('❌ Error changing password: $e');
+      log('Error changing password: $e');
       return false;
     }
   }
@@ -499,3 +522,4 @@ class AuthProvider with ChangeNotifier {
     }
   }
 }
+

@@ -23,6 +23,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     with WidgetsBindingObserver {
   final ScrollController _verticalScrollController = ScrollController();
   Timer? _filterDebounceTimer;
+  DateTime? _lastResumeRefreshAt;
 
   // ✅ متغير لمنع التحميل المتكرر
   bool _isInitializing = false;
@@ -44,9 +45,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
 
     final provider = context.read<SalesProvider>();
 
-    // ✅ تحميل السنة الحالية مسبقاً
-    provider.prefetchCurrentYear();
+    if (provider.hasLoadedSales) {
+      _isInitializing = false;
+      return;
+    }
 
+    // ✅ تحميل السنة الحالية مسبقاً
     if (provider.selectedYear == null) {
       provider.setYearFilter(DateTime.now().year);
     } else {
@@ -67,7 +71,20 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      context.read<SalesProvider>().fetchSales(forceRefresh: true);
+      final now = DateTime.now();
+      final provider = context.read<SalesProvider>();
+      final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+
+      if (!isCurrentRoute || provider.isLoading || provider.hasLoadedSales) {
+        return;
+      }
+      if (_lastResumeRefreshAt != null &&
+          now.difference(_lastResumeRefreshAt!) < const Duration(seconds: 2)) {
+        return;
+      }
+
+      _lastResumeRefreshAt = now;
+      provider.fetchSales(forceRefresh: true);
     }
   }
 

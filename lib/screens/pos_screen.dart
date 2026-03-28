@@ -1207,15 +1207,13 @@ class _PosScreenState extends State<PosScreen>
   }
 
   Future<void> _openReceiptPreview() async {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    final admins = await auth.getUsersByRole('admin');
-    final phone = admins.isNotEmpty ? admins.first['phone'] : null;
-
     if (_cartItems.isEmpty) {
       showAppToast(context, 'السلة فارغة', ToastType.warning);
       return;
     }
+
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final auth = Provider.of<AuthProvider>(context, listen: false);
 
     final printerIp = settings.printerIp;
     if (printerIp == null || printerIp.isEmpty) {
@@ -1227,11 +1225,25 @@ class _PosScreenState extends State<PosScreen>
       return;
     }
 
+    // -------- PAYMENT POPUP --------
+    final paymentResult = await _showPaymentDialog();
+    if (paymentResult == null) return; // المستخدم ضغط إلغاء
+
+    final double paidAmount = paymentResult['paid']!;
+    final double changeAmount = paymentResult['change']!;
+    final double dueAmount = paymentResult['due']!;
+
+    // -------- GET CASHIER NAME --------
+    final currentUser = auth.currentUser; // عدّل حسب AuthProvider عندك
+    final cashierName = currentUser?['name'] ?? 'غير معروف';
+
+    // -------- GET ADMIN PHONE --------
+    final admins = await auth.getUsersByRole('admin');
+    final phone = admins.isNotEmpty ? admins.first['phone'] : null;
+
     try {
-      // احصل على اسم المتجر من الإعدادات أو استخدم اسم افتراضي
       final marketName = settings.marketName ?? 'متجري';
 
-      // احصل على رقم الفاتورة إذا كان في وضع التعديل
       int? receiptNumber;
       if (widget.isEditMode && _originalSale != null) {
         receiptNumber = _originalSale!.id;
@@ -1243,6 +1255,10 @@ class _PosScreenState extends State<PosScreen>
         adminPhone: phone,
         totalAmount: _totalAmount,
         finalAmount: _finalAmount,
+        paidAmount: paidAmount,
+        changeAmount: changeAmount,
+        dueAmount: dueAmount,
+        cashierName: cashierName,
         isTotalModified: _isTotalModified,
         dateTime: DateTime.now(),
         receiptNumber: receiptNumber,
@@ -1256,12 +1272,164 @@ class _PosScreenState extends State<PosScreen>
       _completeSale();
     } catch (e) {
       log('خطأ في الطباعة: $e');
+      print('❌ خطأ تفصيلي: $e');
       showAppToast(
         context,
-        'فشل في الطباعة: ${e.toString().replaceAll("Exception: ", "")}',
+        e.toString(), // عرض الخطأ كامل
         ToastType.error,
       );
     }
+  }
+
+  // -------- PAYMENT DIALOG --------
+  Future<Map<String, double>?> _showPaymentDialog() async {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final currency = settings.currencyName;
+    final TextEditingController paidController = TextEditingController();
+    double changeAmount = 0;
+    double dueAmount = 0;
+
+    return showDialog<Map<String, double>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            void calculate() {
+              final paid = double.tryParse(paidController.text) ?? 0;
+              if (paid >= _finalAmount) {
+                changeAmount = paid - _finalAmount;
+                dueAmount = 0;
+              } else {
+                changeAmount = 0;
+                dueAmount = _finalAmount - paid;
+              }
+              setState(() {});
+            }
+
+            return AlertDialog(
+              title: const Text('تفاصيل الدفع', textAlign: TextAlign.right),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // المجموع النهائي
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '$currency ${_finalAmount.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Colors.green,
+                        ),
+                      ),
+                      const Text(
+                        'المجموع النهائي:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // حقل المبلغ المدفوع
+                  TextField(
+                    controller: paidController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textAlign: TextAlign.right,
+                    decoration: InputDecoration(
+                      labelText: 'المبلغ المدفوع ($currency)',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.payments_outlined),
+                    ),
+                    onChanged: (_) => calculate(),
+                    autofocus: true,
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // الباقي للزبون
+                  if (changeAmount > 0)
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '$currency ${changeAmount.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const Text('الباقي للزبون:'),
+                        ],
+                      ),
+                    ),
+
+                  // المبلغ المستحق
+                  if (dueAmount > 0)
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '$currency ${dueAmount.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const Text('المبلغ المستحق:'),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, null),
+                  child: const Text('إلغاء'),
+                ),
+                ElevatedButton.icon(
+                  onPressed:
+                      paidController.text.isEmpty
+                          ? null
+                          : () {
+                            final paid =
+                                double.tryParse(paidController.text) ?? 0;
+                            Navigator.pop(ctx, {
+                              'paid': paid,
+                              'change': changeAmount,
+                              'due': dueAmount,
+                            });
+                          },
+                  icon: const Icon(Icons.print),
+                  label: const Text('طباعة الفاتورة'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _clearCart() {

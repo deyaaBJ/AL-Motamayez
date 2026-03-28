@@ -86,11 +86,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _adminNameController.text = (admin['name'] ?? '').toString();
         _adminEmailController.text = (admin['email'] ?? '').toString();
         _adminPhoneController.text = (admin['phone'] ?? '').toString();
-        _currentPasswordAdminController.text = admin['password'] ?? '';
+        _currentPasswordAdminController.text = '********';
       } else {
         _adminNameController.text = 'admin';
         _adminEmailController.text = 'admin@gmail.com';
-        _currentPasswordAdminController.text = '123456';
+        _currentPasswordAdminController.text = '********';
         _adminPhoneController.text = '';
       }
 
@@ -100,11 +100,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final cashier = cashiers.first;
         _cashierNameController.text = (cashier['name'] ?? '').toString();
         _cashierEmailController.text = (cashier['email'] ?? '').toString();
-        _currentPasswordCashierController.text = cashier['password'] ?? '';
+        _currentPasswordCashierController.text = '********';
       } else {
         _cashierNameController.text = 'cashier';
         _cashierEmailController.text = 'cashier@gmail.com';
-        _currentPasswordCashierController.text = '123456';
+        _currentPasswordCashierController.text = '********';
       }
 
       // جلب بيانات حساب الضريبة
@@ -113,11 +113,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final taxAcaunt = tax.first;
         _taxNameController.text = (taxAcaunt['name'] ?? '').toString();
         _taxEmailController.text = (taxAcaunt['email'] ?? '').toString();
-        _currentPasswordTaxController.text = taxAcaunt['password'] ?? '';
+        _currentPasswordTaxController.text = '********';
       } else {
         _taxNameController.text = 'tax';
         _taxEmailController.text = 'tax@gmail.com';
-        _currentPasswordTaxController.text = '123456';
+        _currentPasswordTaxController.text = '********';
       }
 
       setState(() {});
@@ -1997,3 +1997,7 @@ class PrinterSettingsScreen extends StatelessWidget {
     );
   }
 }
+
+
+
+

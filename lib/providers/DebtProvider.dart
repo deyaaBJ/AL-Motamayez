@@ -350,9 +350,18 @@ class DebtProvider extends ChangeNotifier {
       try {
         final salesResult = await db.rawQuery(
           '''
-        SELECT COALESCE(SUM(total_amount), 0) as total_credit
+        SELECT COALESCE(
+          SUM(
+            CASE
+              WHEN payment_type = 'credit'
+                THEN COALESCE(remaining_amount, total_amount)
+              ELSE 0
+            END
+          ),
+          0
+        ) as total_credit
         FROM sales 
-        WHERE customer_id = ? AND payment_type = 'credit'
+        WHERE customer_id = ?
         ''',
           [customerId],
         );

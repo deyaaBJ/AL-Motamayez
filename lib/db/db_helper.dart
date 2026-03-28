@@ -2,10 +2,11 @@ import 'package:path/path.dart';
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:developer';
+import 'package:motamayez/services/password_service.dart';
 
 class DBHelper {
   static Database? _db;
-  static const int _version = 4; // ⬅️ إصلاح إنشاء sales وإضافة تتبع السداد
+  static const int _version = 6;
 
   Future<Database> get db async {
     if (_db != null) return _db!;
@@ -27,9 +28,15 @@ class DBHelper {
     Database database = await openDatabase(
       path,
       version: _version,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: _onCreate,
-      onUpgrade: _onUpgrade, // ⬅️ جديد: دالة الترقية
+      onUpgrade: _onUpgrade,
     );
+
+    await _upgradeArchiveSchema(database);
+    await archiveHistoricalSales(database: database);
 
     return database;
   }
@@ -48,6 +55,14 @@ class DBHelper {
 
     if (oldVersion < 4) {
       await _upgradeToVersion4(db);
+    }
+
+    if (oldVersion < 5) {
+      await _upgradeToVersion5(db);
+    }
+
+    if (oldVersion < 6) {
+      await _upgradeToVersion6(db);
     }
   }
 
@@ -156,6 +171,17 @@ class DBHelper {
     }
   }
 
+  Future<void> _upgradeToVersion5(Database db) async {
+    await _migrateLegacyPasswords(db);
+    await _createIndexes(db);
+  }
+
+  Future<void> _upgradeToVersion6(Database db) async {
+    await _upgradeArchiveSchema(db);
+    await _createIndexes(db);
+    await archiveHistoricalSales(database: db);
+  }
+
   Future _onCreate(Database db, int version) async {
     // ========== جدول المنتجات ==========
     await db.execute('''
@@ -217,24 +243,7 @@ class DBHelper {
     ''');
 
     // إضافة مستخدمين افتراضيين
-    await db.insert('users', {
-      'name': 'Admin',
-      'email': 'admin@gmail.com',
-      'password': '123456',
-      'role': 'admin',
-    });
-    await db.insert('users', {
-      'name': 'Cashier',
-      'email': 'cashier@gmail.com',
-      'password': '123456',
-      'role': 'cashier',
-    });
-    await db.insert('users', {
-      'name': 'Deyaa',
-      'email': 'deyaa@system.com',
-      'password': '123456',
-      'role': 'tax',
-    });
+    await _seedDefaultUsers(db);
 
     // ========== جدول الزبائن ==========
     await db.execute('''
@@ -347,7 +356,11 @@ class DBHelper {
         total_profit REAL NOT NULL DEFAULT 0,
         customer_id INTEGER, 
         payment_type TEXT NOT NULL DEFAULT 'cash', 
-        show_for_tax INTEGER
+        paid_amount REAL NOT NULL DEFAULT 0,
+        remaining_amount REAL NOT NULL DEFAULT 0,
+        show_for_tax INTEGER,
+        user_id INTEGER,
+        archived_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
     ''');
 
@@ -484,10 +497,320 @@ class DBHelper {
       'numberOfCopies': 1,
     });
 
+    await _createIndexes(db);
+
     log('✅ تم إنشاء جميع الجداول بنجاح!');
   }
 
   // ========== دوال مساعدة ==========
+  Future<void> _seedDefaultUsers(Database db) async {
+    final defaultPasswordHash = PasswordService.hashPassword('123456');
+    await db.insert('users', {
+      'name': 'Admin',
+      'email': 'admin@gmail.com',
+      'password': defaultPasswordHash,
+      'role': 'admin',
+    });
+    await db.insert('users', {
+      'name': 'Cashier',
+      'email': 'cashier@gmail.com',
+      'password': defaultPasswordHash,
+      'role': 'cashier',
+    });
+    await db.insert('users', {
+      'name': 'Deyaa',
+      'email': 'deyaa@system.com',
+      'password': defaultPasswordHash,
+      'role': 'tax',
+    });
+  }
+
+  Future<void> _migrateLegacyPasswords(Database db) async {
+    final users = await db.query('users', columns: ['id', 'password']);
+    for (final user in users) {
+      final storedPassword = user['password']?.toString() ?? '';
+      if (!PasswordService.isLegacyPlaintext(storedPassword)) {
+        continue;
+      }
+
+      await db.update(
+        'users',
+        {'password': PasswordService.hashPassword(storedPassword)},
+        where: 'id = ?',
+        whereArgs: [user['id']],
+      );
+    }
+  }
+
+  Future<void> _createIndexes(Database db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(date DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales(customer_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sales_payment_type ON sales(payment_type)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sales_tax_date ON sales(show_for_tax, date DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sales_customer_date ON sales(customer_id, date DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sales_archive_date ON sales_archive(date DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sales_archive_customer_date ON sales_archive(customer_id, date DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sales_archive_payment_type ON sales_archive(payment_type)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sales_archive_archived_at ON sales_archive(archived_at DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_transactions_customer_date ON transactions(customer_id, date DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sale_items_archive_sale_id ON sale_items_archive(sale_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sale_allocations_sale_id ON sale_payment_allocations(sale_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_product_units_product_id ON product_units(product_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_product_batches_product_id ON product_batches(product_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_purchase_invoices_supplier_date ON purchase_invoices(supplier_id, date DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier_date ON supplier_transactions(supplier_id, date DESC)',
+    );
+  }
+
+  Future<void> _upgradeArchiveSchema(Database db) async {
+    final salesArchiveColumns = await db.rawQuery(
+      'PRAGMA table_info(sales_archive)',
+    );
+    final saleItemsArchiveColumns = await db.rawQuery(
+      'PRAGMA table_info(sale_items_archive)',
+    );
+
+    if (salesArchiveColumns.isEmpty) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS sales_archive (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT NOT NULL,
+          total_amount REAL NOT NULL,
+          total_profit REAL NOT NULL DEFAULT 0,
+          customer_id INTEGER,
+          payment_type TEXT NOT NULL DEFAULT 'cash',
+          paid_amount REAL NOT NULL DEFAULT 0,
+          remaining_amount REAL NOT NULL DEFAULT 0,
+          show_for_tax INTEGER,
+          user_id INTEGER,
+          archived_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+    } else {
+      await _addColumnIfMissing(
+        db,
+        tableName: 'sales_archive',
+        columns: salesArchiveColumns,
+        columnName: 'paid_amount',
+        statement:
+            'ALTER TABLE sales_archive ADD COLUMN paid_amount REAL NOT NULL DEFAULT 0',
+      );
+      await _addColumnIfMissing(
+        db,
+        tableName: 'sales_archive',
+        columns: salesArchiveColumns,
+        columnName: 'remaining_amount',
+        statement:
+            'ALTER TABLE sales_archive ADD COLUMN remaining_amount REAL NOT NULL DEFAULT 0',
+      );
+      await _addColumnIfMissing(
+        db,
+        tableName: 'sales_archive',
+        columns: salesArchiveColumns,
+        columnName: 'user_id',
+        statement: 'ALTER TABLE sales_archive ADD COLUMN user_id INTEGER',
+      );
+      await _addColumnIfMissing(
+        db,
+        tableName: 'sales_archive',
+        columns: salesArchiveColumns,
+        columnName: 'archived_at',
+        statement:
+            'ALTER TABLE sales_archive ADD COLUMN archived_at TEXT DEFAULT CURRENT_TIMESTAMP',
+      );
+    }
+
+    if (saleItemsArchiveColumns.isEmpty) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS sale_items_archive (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sale_id INTEGER NOT NULL,
+          item_type TEXT NOT NULL DEFAULT 'product',
+          product_id INTEGER,
+          unit_id INTEGER,
+          quantity REAL NOT NULL DEFAULT 1,
+          unit_type TEXT NOT NULL,
+          custom_unit_name TEXT,
+          price REAL NOT NULL,
+          cost_price REAL NOT NULL DEFAULT 0,
+          subtotal REAL NOT NULL,
+          profit REAL NOT NULL DEFAULT 0,
+          batch_details TEXT
+        )
+      ''');
+    }
+
+    await db.execute('''
+      UPDATE sales_archive
+      SET
+        paid_amount = CASE
+          WHEN payment_type = 'cash' AND COALESCE(paid_amount, 0) = 0 THEN total_amount
+          ELSE COALESCE(paid_amount, total_amount - COALESCE(remaining_amount, 0))
+        END,
+        remaining_amount = CASE
+          WHEN payment_type = 'credit' THEN COALESCE(remaining_amount, 0)
+          ELSE 0
+        END,
+        archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP)
+    ''');
+  }
+
+  Future<void> _addColumnIfMissing(
+    Database db, {
+    required String tableName,
+    required List<Map<String, Object?>> columns,
+    required String columnName,
+    required String statement,
+  }) async {
+    final hasColumn = columns.any((column) => column['name'] == columnName);
+    if (!hasColumn) {
+      log('Adding missing column $columnName to $tableName');
+      await db.execute(statement);
+    }
+  }
+
+  Future<int> archiveHistoricalSales({Database? database}) async {
+    final db = database ?? await this.db;
+    // ✅ محاسبي دقيق: أرشيف فواتير أقدم من 365 يوم + بدون دين
+    int archivedSalesCount = 0;
+
+    await db.transaction((txn) async {
+      final eligibleSales = await txn.rawQuery('''
+        SELECT id
+        FROM sales
+        WHERE julianday('now') - julianday(date) >= 365
+          AND (
+            payment_type != 'credit'
+            OR COALESCE(remaining_amount, total_amount) <= 0.0001
+          )
+      ''');
+
+      if (eligibleSales.isEmpty) {
+        return;
+      }
+
+      final ids = eligibleSales.map((row) => row['id'] as int).toList();
+      final placeholders = List.filled(ids.length, '?').join(',');
+
+      await txn.rawInsert('''
+        INSERT OR REPLACE INTO sales_archive (
+          id,
+          date,
+          total_amount,
+          total_profit,
+          customer_id,
+          payment_type,
+          paid_amount,
+          remaining_amount,
+          show_for_tax,
+          user_id,
+          archived_at
+        )
+        SELECT
+          id,
+          date,
+          total_amount,
+          total_profit,
+          customer_id,
+          payment_type,
+          COALESCE(paid_amount, CASE WHEN payment_type = 'cash' THEN total_amount ELSE 0 END),
+          COALESCE(remaining_amount, CASE WHEN payment_type = 'credit' THEN total_amount ELSE 0 END),
+          show_for_tax,
+          user_id,
+          CURRENT_TIMESTAMP
+        FROM sales
+        WHERE id IN ($placeholders)
+        ''', ids);
+
+      await txn.rawInsert('''
+        INSERT OR REPLACE INTO sale_items_archive (
+          id,
+          sale_id,
+          item_type,
+          product_id,
+          unit_id,
+          quantity,
+          unit_type,
+          custom_unit_name,
+          price,
+          cost_price,
+          subtotal,
+          profit,
+          batch_details
+        )
+        SELECT
+          id,
+          sale_id,
+          item_type,
+          product_id,
+          unit_id,
+          quantity,
+          unit_type,
+          custom_unit_name,
+          price,
+          cost_price,
+          subtotal,
+          profit,
+          batch_details
+        FROM sale_items
+        WHERE sale_id IN ($placeholders)
+        ''', ids);
+
+      await txn.delete(
+        'sale_batch_log',
+        where: 'sale_id IN ($placeholders)',
+        whereArgs: ids,
+      );
+      await txn.delete(
+        'sale_items',
+        where: 'sale_id IN ($placeholders)',
+        whereArgs: ids,
+      );
+      await txn.delete('sales', where: 'id IN ($placeholders)', whereArgs: ids);
+
+      archivedSalesCount = ids.length;
+    });
+
+    if (archivedSalesCount > 0) {
+      log('Archived $archivedSalesCount historical sales records');
+    }
+
+    return archivedSalesCount;
+  }
 
   Future<void> resetDatabase() async {
     try {

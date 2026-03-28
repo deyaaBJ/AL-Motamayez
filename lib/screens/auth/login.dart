@@ -56,12 +56,8 @@ class _LoginScreenState extends State<LoginScreen>
     if (savedCreds != null) {
       setState(() {
         _emailController.text = savedCreds['email'] ?? '';
-        _passwordController.text = savedCreds['password'] ?? '';
-        _rememberMe = true; // ✅ فعل الـ checkbox لأن في بيانات محفوظة
+        _rememberMe = true;
       });
-      print('✅ Auto-filled last user: ${savedCreds['email']}');
-    } else {
-      print('ℹ️ No saved user found');
     }
 
     setState(() {
@@ -263,3 +259,5 @@ class BackgroundPainter extends CustomPainter {
     return true;
   }
 }
+
+

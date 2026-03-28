@@ -1272,6 +1272,9 @@ class ProductProvider with ChangeNotifier {
 
       final saleData = sale.first;
       final double totalAmount = (saleData['total_amount'] as num).toDouble();
+      final double remainingAmount =
+          (saleData['remaining_amount'] as num?)?.toDouble() ??
+          ((saleData['payment_type'] == 'credit') ? totalAmount : 0.0);
       final String paymentType = saleData['payment_type'] as String;
       final int? customerId = saleData['customer_id'] as int?;
 
@@ -1402,14 +1405,16 @@ class ProductProvider with ChangeNotifier {
       }
 
       // 5️⃣ تعديل رصيد الزبون إذا كانت فاتورة آجلة
-      if (paymentType == 'credit' && customerId != null) {
+      if (paymentType == 'credit' &&
+          customerId != null &&
+          remainingAmount > 0) {
         await txn.rawUpdate(
           '''
           UPDATE customer_balance 
           SET balance = balance - ?, last_updated = ?
           WHERE customer_id = ?
           ''',
-          [totalAmount, DateTime.now().toIso8601String(), customerId],
+          [remainingAmount, DateTime.now().toIso8601String(), customerId],
         );
       }
 

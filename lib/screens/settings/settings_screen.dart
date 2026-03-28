@@ -104,11 +104,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nameCtrl.text = (user['name'] ?? role).toString();
       emailCtrl.text = (user['email'] ?? '$role@gmail.com').toString();
       phoneCtrl?.text = (user['phone'] ?? '').toString();
-      passCtrl.text = user['password'] ?? '123456';
+      passCtrl.text = '********';
     } else {
       nameCtrl.text = role;
       emailCtrl.text = '$role@gmail.com';
-      passCtrl.text = '123456';
+      passCtrl.text = '********';
     }
   }
 
@@ -457,3 +457,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 }
+
+
+
+

@@ -410,7 +410,7 @@ class _CashierDetailScreenState extends State<CashierDetailScreen> {
       text: widget.cashier['email']?.toString() ?? '',
     );
     _passwordController = TextEditingController(
-      text: widget.cashier['password']?.toString() ?? '',
+      text: '********',
     );
   }
 
@@ -686,3 +686,5 @@ class _CashierDetailScreenState extends State<CashierDetailScreen> {
     );
   }
 }
+
+

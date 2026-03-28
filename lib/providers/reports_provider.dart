@@ -235,8 +235,8 @@ class ReportsProvider extends ChangeNotifier {
       await _loadFilteredTopProducts(whereClause, whereArgs);
       await _loadFilteredTopCustomers(whereClause, whereArgs);
 
-      // 7. التحقق من الحسابات
-      _debugCalculations();
+      // 7. التحقق معطل (logs طويلة)
+      // _debugCalculations();
     } catch (e) {
       log('Error in _filterSales: $e');
       rethrow;
@@ -429,14 +429,11 @@ class ReportsProvider extends ChangeNotifier {
           (creditAddedResult.first['total_credit_added'] as num?)?.toDouble() ??
           0;
 
-      final collectedResult = await db.rawQuery(
-        '''
+      final collectedResult = await db.rawQuery('''
         SELECT COALESCE(SUM(amount), 0) as total_collected
         FROM transactions
         WHERE $whereClause AND type = 'payment'
-        ''',
-        whereArgs,
-      );
+        ''', whereArgs);
 
       _periodDebtCollected =
           (collectedResult.first['total_collected'] as num?)?.toDouble() ?? 0;
@@ -597,8 +594,6 @@ class ReportsProvider extends ChangeNotifier {
 
       await _loadTopProductsForCustomDate(fromDate, toDate);
       await _loadTopCustomersForCustomDate(fromDate, toDate);
-
-      _debugCalculations();
     } catch (e) {
       log('Error in _filterSalesByCustomDate: $e');
       rethrow;
@@ -1028,35 +1023,6 @@ class ReportsProvider extends ChangeNotifier {
         'dayName': _getShortDayName(date.weekday),
       });
     }
-  }
-
-  void _debugCalculations() {
-    log('''
-    ===== فحص الحسابات =====
-    1. إجمالي المبيعات: $_totalSalesAmount
-    2. المبيعات النقدية: $_cashSalesAmount
-    3. المبيعات الآجلة: $_creditSalesAmount
-    4. المجموع المفترض: ${_cashSalesAmount + _creditSalesAmount}
-    5. الفرق: ${(_totalSalesAmount - (_cashSalesAmount + _creditSalesAmount)).toStringAsFixed(2)}
-    
-    6. إجمالي الأرباح: $_totalProfit
-    7. الأرباح النقدية: $_totalCashProfit
-    8. إجمالي المصاريف: $_totalExpensesAll
-    9. المصاريف النقدية: $_totalCashExpenses
-    
-    10. صافي الربح (الأرباح - المصاريف): $_netProfit
-    11. صافي الربح النقدي (أرباح نقدية - مصاريف نقدية): $_netCashProfit
-    12. إجمالي العملاء: $_totalCustomers
-    13. إجمالي الديون الحالية: $_currentDebtBalance
-    14. ديون مضافة خلال الفترة: $_periodCreditAdded
-    15. محصل من الديون: $_periodDebtCollected
-    16. صافي تغير الديون: $_debtNetChange
-    
-    = الحسابات الدقيقة =
-    - صافي الربح المحسوب يدوياً: ${(_totalProfit - _totalExpensesAll).toStringAsFixed(2)}
-    - هل يتطابق؟ ${(_netProfit - (_totalProfit - _totalExpensesAll)).abs() < 0.01 ? '✅ نعم' : '❌ لا'}
-    ====================
-    ''');
   }
 
   // دالة لاستخدامها في التقارير لضمان الحصول على القيم الصحيحة

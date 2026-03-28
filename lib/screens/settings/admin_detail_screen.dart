@@ -200,3 +200,4 @@ class _AdminDetailScreenState extends State<AdminDetailScreen> {
     );
   }
 }
+

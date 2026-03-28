@@ -182,3 +182,4 @@ class _TaxDetailScreenState extends State<TaxDetailScreen> {
     );
   }
 }
+
