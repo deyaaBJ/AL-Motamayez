@@ -208,11 +208,20 @@ class _BaseLayoutState extends State<BaseLayout> {
                   horizontal: 10,
                   vertical: 8,
                 ),
-                itemCount: _rightSidebarItems.length,
+                itemCount:
+                    _rightSidebarItems
+                        .where(
+                          (item) => _hasPermission(item['page']),
+                        ) // ✅ فلترة
+                        .length,
                 separatorBuilder:
                     (context, index) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
-                  final item = _rightSidebarItems[index];
+                  final visibleItems =
+                      _rightSidebarItems
+                          .where((item) => _hasPermission(item['page']))
+                          .toList();
+                  final item = visibleItems[index];
                   final isSelected = widget.currentPage == item['page'];
 
                   return _buildSidebarItem(
@@ -425,29 +434,35 @@ class _BaseLayoutState extends State<BaseLayout> {
 
           return Row(
             children: [
-              // ✅ "المتميز" فاخر بدون container بنفسجي
+              // العنوان
               Container(
                 width: titleWidth,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: _buildFancyTitle(screenWidth),
               ),
 
-              // ✅ الـ 6 items
+              // ✅ تصفية العناصر حسب الدور
               Expanded(
                 child: Row(
                   children:
-                      _topSidebarItems.map((item) {
-                        final isSelected = widget.currentPage == item['page'];
-                        return _buildTopSidebarItem(
-                          item: item,
-                          isSelected: isSelected,
-                          onTap: () => _handlePageChange(item['page']),
-                        );
-                      }).toList(),
+                      _topSidebarItems
+                          .where(
+                            (item) => _hasPermission(item['page']),
+                          ) // ✅ فلترة حسب الصلاحية
+                          .map((item) {
+                            final isSelected =
+                                widget.currentPage == item['page'];
+                            return _buildTopSidebarItem(
+                              item: item,
+                              isSelected: isSelected,
+                              onTap: () => _handlePageChange(item['page']),
+                            );
+                          })
+                          .toList(),
                 ),
               ),
 
-              // ✅ الإجراءات
+              // الإجراءات
               if (widget.actions != null)
                 Container(
                   width: actionsWidth,
@@ -562,5 +577,41 @@ class _BaseLayoutState extends State<BaseLayout> {
       floatingActionButton: widget.floatingActionButton,
     );
   }
-}
 
+  // في BaseLayout - أضف هذه الدالة للتحقق من الصلاحيات
+  bool _hasPermission(String page) {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final role = auth.role;
+
+    // Admin يرى كل شيء
+    if (role == 'admin') return true;
+
+    // Cashier - يُسمح له فقط بـ: نقاط البيع، العملاء
+    if (role == 'cashier') {
+      final blockedPages = [
+        'التقارير', // التقارير
+        'cashier', // نشاط الكاشير
+        'settings', // الإعدادات
+        'فاتورة شراء', // فواتير الشراء
+        'الفواتير', // الفواتير
+        'الموردين', // الموردين
+      ];
+      return !blockedPages.contains(page);
+    }
+
+    // Tax (محاسب ضريبة) - يُمنع من: التقارير، الكاشير، الإعدادات، فواتير الشراء، الفواتير، الموردين
+    if (role == 'tax') {
+      final blockedPages = [
+        'التقارير', // التقارير
+        'cashier', // نشاط الكاشير
+        'settings', // الإعدادات
+        'فاتورة شراء', // فواتير الشراء
+        'الفواتير', // الفواتير
+        'الموردين', // الموردين
+      ];
+      return !blockedPages.contains(page);
+    }
+
+    return false;
+  }
+}

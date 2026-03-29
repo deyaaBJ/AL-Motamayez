@@ -42,6 +42,13 @@ class ReportsProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _topCustomers = [];
   List<Map<String, dynamic>> _weeklySalesData = [];
 
+  // إحصائيات فواتير الشراء
+  double _totalPurchaseInvoicesAmount = 0; // إجمالي مبلغ فواتير الشراء
+  int _purchaseInvoicesCount = 0; // عدد فواتير الشراء
+  double _cashPurchasesAmount = 0; // إجمالي المشتريات النقدية
+  double _creditPurchasesAmount = 0; // إجمالي المشتريات الآجلة
+  double _totalSupplierBalance = 0; // إجمالي رصيد الموردين
+
   // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
   // ████████████████████████████████ Getters ████████████████████████████████████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
@@ -67,6 +74,13 @@ class ReportsProvider extends ChangeNotifier {
   List<Map<String, dynamic>> get topProducts => _topProducts;
   List<Map<String, dynamic>> get topCustomers => _topCustomers;
   List<Map<String, dynamic>> get weeklySalesData => _weeklySalesData;
+
+  // Getters لفواتير الشراء
+  double get totalPurchaseInvoicesAmount => _totalPurchaseInvoicesAmount;
+  int get purchaseInvoicesCount => _purchaseInvoicesCount;
+  double get cashPurchasesAmount => _cashPurchasesAmount;
+  double get creditPurchasesAmount => _creditPurchasesAmount;
+  double get totalSupplierBalance => _totalSupplierBalance;
 
   // █████████████████████████████████████████████████████████████████████████████████████████████████████████████
   // ████████████████████████████████ دوال التحميل الرئيسية ██████████████████████████████████████████████████████
@@ -231,11 +245,14 @@ class ReportsProvider extends ChangeNotifier {
       // 5. حساب جميع مقاييس الربحية
       _calculateAllProfitMetrics();
 
-      // 6. تحميل أفضل المنتجات والعملاء
+      // 6. حساب فواتير الشراء مع نفس الفلتر
+      await _calculatePurchaseInvoicesWithFilter(whereClause, whereArgs);
+
+      // 7. تحميل أفضل المنتجات والعملاء
       await _loadFilteredTopProducts(whereClause, whereArgs);
       await _loadFilteredTopCustomers(whereClause, whereArgs);
 
-      // 7. التحقق معطل (logs طويلة)
+      // 8. التحقق معطل (logs طويلة)
       // _debugCalculations();
     } catch (e) {
       log('Error in _filterSales: $e');
@@ -448,6 +465,121 @@ class ReportsProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _calculatePurchaseInvoicesWithFilter(
+    String whereClause,
+    List<dynamic> whereArgs,
+  ) async {
+    try {
+      final db = await _dbHelper.db;
+
+      // حساب إجمالي فواتير الشراء
+      final purchaseInvoicesResult = await db.rawQuery('''
+        SELECT 
+          COUNT(id) as count,
+          COALESCE(SUM(total_cost), 0) as total_amount,
+          COALESCE(SUM(CASE WHEN payment_type = 'cash' THEN total_cost ELSE 0 END), 0) as cash_total,
+          COALESCE(SUM(CASE WHEN payment_type = 'credit' THEN total_cost ELSE 0 END), 0) as credit_total
+        FROM purchase_invoices
+        WHERE $whereClause
+        ''', whereArgs);
+
+      final result =
+          purchaseInvoicesResult.isNotEmpty
+              ? purchaseInvoicesResult.first
+              : {
+                'count': 0,
+                'total_amount': 0,
+                'cash_total': 0,
+                'credit_total': 0,
+              };
+
+      _purchaseInvoicesCount = (result['count'] as int?) ?? 0;
+      _totalPurchaseInvoicesAmount =
+          (result['total_amount'] as num?)?.toDouble() ?? 0;
+      _cashPurchasesAmount = (result['cash_total'] as num?)?.toDouble() ?? 0;
+      _creditPurchasesAmount =
+          (result['credit_total'] as num?)?.toDouble() ?? 0;
+
+      // حساب إجمالي رصيد الموردين
+      final supplierBalanceResult = await db.rawQuery('''
+        SELECT COALESCE(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END), 0)
+          as total_supplier_balance
+        FROM supplier_balance
+      ''');
+
+      _totalSupplierBalance =
+          (supplierBalanceResult.first['total_supplier_balance'] as num?)
+              ?.toDouble() ??
+          0;
+    } catch (e) {
+      log('Error in _calculatePurchaseInvoicesWithFilter: $e');
+      _purchaseInvoicesCount = 0;
+      _totalPurchaseInvoicesAmount = 0;
+      _cashPurchasesAmount = 0;
+      _creditPurchasesAmount = 0;
+      _totalSupplierBalance = 0;
+    }
+  }
+
+  Future<void> _calculatePurchaseInvoicesForCustomDate(
+    String fromDate,
+    String toDate,
+  ) async {
+    try {
+      final db = await _dbHelper.db;
+
+      // حساب إجمالي فواتير الشراء
+      final purchaseInvoicesResult = await db.rawQuery(
+        '''
+        SELECT 
+          COUNT(id) as count,
+          COALESCE(SUM(total_cost), 0) as total_amount,
+          COALESCE(SUM(CASE WHEN payment_type = 'cash' THEN total_cost ELSE 0 END), 0) as cash_total,
+          COALESCE(SUM(CASE WHEN payment_type = 'credit' THEN total_cost ELSE 0 END), 0) as credit_total
+        FROM purchase_invoices
+        WHERE date(date) BETWEEN ? AND ?
+        ''',
+        [fromDate, toDate],
+      );
+
+      final result =
+          purchaseInvoicesResult.isNotEmpty
+              ? purchaseInvoicesResult.first
+              : {
+                'count': 0,
+                'total_amount': 0,
+                'cash_total': 0,
+                'credit_total': 0,
+              };
+
+      _purchaseInvoicesCount = (result['count'] as int?) ?? 0;
+      _totalPurchaseInvoicesAmount =
+          (result['total_amount'] as num?)?.toDouble() ?? 0;
+      _cashPurchasesAmount = (result['cash_total'] as num?)?.toDouble() ?? 0;
+      _creditPurchasesAmount =
+          (result['credit_total'] as num?)?.toDouble() ?? 0;
+
+      // حساب إجمالي رصيد الموردين
+      final supplierBalanceResult = await db.rawQuery('''
+        SELECT COALESCE(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END), 0)
+          as total_supplier_balance
+        FROM supplier_balance
+      ''');
+
+      _totalSupplierBalance =
+          (supplierBalanceResult.first['total_supplier_balance'] as num?)
+              ?.toDouble() ??
+          0;
+    } catch (e) {
+      log('Error in _calculatePurchaseInvoicesForCustomDate: $e');
+      _purchaseInvoicesCount = 0;
+      _totalPurchaseInvoicesAmount = 0;
+      _cashPurchasesAmount = 0;
+      _creditPurchasesAmount = 0;
+      _totalSupplierBalance = 0;
+    }
+  }
+
   Future<void> _loadFilteredTopProducts(
     String whereClause,
     List<dynamic> whereArgs,
@@ -591,6 +723,8 @@ class ReportsProvider extends ChangeNotifier {
       await _calculateDebtMetricsForCustomDate(fromDate, toDate);
 
       _calculateAllProfitMetrics();
+
+      await _calculatePurchaseInvoicesForCustomDate(fromDate, toDate);
 
       await _loadTopProductsForCustomDate(fromDate, toDate);
       await _loadTopCustomersForCustomDate(fromDate, toDate);

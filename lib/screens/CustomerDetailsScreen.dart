@@ -190,16 +190,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     try {
       final debtProvider = Provider.of<DebtProvider>(context, listen: false);
 
-      // إعادة تعيين المتغيرات
       _transactionPage = 0;
       _hasMoreTransactions = true;
       _groupedTransactions.clear();
 
-      // تحميل المعاملات الجديدة
       await _loadTransactionsPage(0);
 
-      // إعادة تحميل رصيد العميل
-      await debtProvider.recalculateAndUpdateBalance(widget.customer.id!);
+      // ✅ حطها بديلاً:
+      await debtProvider.loadCustomerBalance(widget.customer.id!);
     } catch (e) {
       log('Error refreshing data: $e');
     } finally {
@@ -242,9 +240,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         // تحديث البيانات بعد الإضافة
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _refreshData();
-
-          // إعادة تحميل رصيد العميل
-          setState(() {});
         });
       },
     );
@@ -335,10 +330,15 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                             final sale = openSales[index];
                             final saleId = sale['id'] as int;
                             final remaining =
-                                (sale['remaining_amount'] as num?)?.toDouble() ?? 0.0;
+                                (sale['remaining_amount'] as num?)
+                                    ?.toDouble() ??
+                                0.0;
                             final total =
-                                (sale['total_amount'] as num?)?.toDouble() ?? 0.0;
-                            final date = _formatSaleDate(sale['date']?.toString());
+                                (sale['total_amount'] as num?)?.toDouble() ??
+                                0.0;
+                            final date = _formatSaleDate(
+                              sale['date']?.toString(),
+                            );
 
                             return CheckboxListTile(
                               value: selectedIds.contains(saleId),
@@ -410,9 +410,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         // تحديث البيانات بعد الإضافة
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _refreshData();
-
-          // إعادة تحميل رصيد العميل
-          setState(() {});
         });
       },
     );

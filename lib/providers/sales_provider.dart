@@ -94,7 +94,13 @@ class SalesProvider extends ChangeNotifier {
   // ████████████████████████████████ Getters جديدة ███████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
 
-  List<String> get paymentTypes => ['الكل', 'cash', 'credit', 'debt', 'settled'];
+  List<String> get paymentTypes => [
+    'الكل',
+    'cash',
+    'credit',
+    'debt',
+    'settled',
+  ];
 
   List<String> get customerNames {
     final Set<String> names = {'الكل'};
@@ -106,8 +112,7 @@ class SalesProvider extends ChangeNotifier {
         names.add('بدون عميل');
       }
     }
-    final customerList = names.where((name) => name != 'الكل').toList()
-      ..sort();
+    final customerList = names.where((name) => name != 'الكل').toList()..sort();
     return ['الكل', ...customerList];
   }
 
@@ -419,10 +424,7 @@ class SalesProvider extends ChangeNotifier {
     _fetchSalesWithFilters(forceRefresh: true);
   }
 
-  void applyMonthFilter({
-    required int month,
-    required int year,
-  }) {
+  void applyMonthFilter({required int month, required int year}) {
     _selectedPaymentType = 'الكل';
     _selectedCustomer = 'الكل';
     _selectedTaxFilter = 'الكل';
@@ -642,17 +644,16 @@ class SalesProvider extends ChangeNotifier {
       return;
     }
 
-    // ✅ التحقق من الكاش قبل جلب البيانات
     final cacheKey = _generateCacheKey();
     _currentCacheKey = cacheKey;
-    if (!forceRefresh && _salesCache.containsKey(cacheKey)) {
+
+    // ✅ استخدم الكاش فقط إذا ما كان loadMore
+    if (!forceRefresh && !loadMore && _salesCache.containsKey(cacheKey)) {
       print('✅ استخدام الكاش للبيانات');
       _allSales = _salesCache[cacheKey]!;
-      final int displayCount = ((_page + 1) * _limit)
-          .clamp(0, _allSales.length)
-          .toInt();
-      _displayedSales = _allSales.sublist(0, displayCount);
-      _hasMore = _allSales.length > _displayedSales.length;
+      _displayedSales = _allSales;
+      // ✅ احسب hasMore من الكاش مقارنةً بالعدد الكلي
+      _hasMore = false; // بنخليها false هون وبنتحقق من DB لو احتجنا
       notifyListeners();
       return;
     }
@@ -663,8 +664,9 @@ class SalesProvider extends ChangeNotifier {
     final db = await _dbHelper.db;
 
     try {
-      final String table = isArchiveMode
-          ? '''(
+      final String table =
+          isArchiveMode
+              ? '''(
               SELECT id, date, total_amount, total_profit, customer_id, payment_type,
                      paid_amount, remaining_amount, show_for_tax, user_id
               FROM sales
@@ -673,7 +675,7 @@ class SalesProvider extends ChangeNotifier {
                      paid_amount, remaining_amount, show_for_tax, user_id
               FROM sales_archive
             ) s'''
-          : 'sales s';
+              : 'sales s';
       int totalCount = 0;
 
       List<dynamic> args = [];
@@ -726,8 +728,16 @@ class SalesProvider extends ChangeNotifier {
 
       totalCount = countResult.first['total'] as int? ?? 0;
 
+      // ✅ إذا loadMore، زيادة الصفحة قبل حساب offset
+      if (loadMore) {
+        _page = _page + 1; // زيادة الصفحة أولاً
+      }
+
       // ✅ جلب البيانات مع حدود الصفحة
       final offset = _page * _limit;
+      print(
+        '🔢 Pagination: loadMore=$loadMore, _page=$_page, offset=$offset, limit=$_limit',
+      );
       final result = await db.rawQuery('''
       SELECT s.*, c.name as customer_name
       FROM $table
@@ -746,15 +756,18 @@ class SalesProvider extends ChangeNotifier {
         final sales = result.map((row) => Sale.fromMap(row)).toList();
         if (loadMore) {
           _allSales.addAll(sales);
+          // ✅ لا نزيد _page هنا لأننا زيدناها قبل الاستعلام
         } else {
           _allSales = sales;
+          // ✅ أول استعلام بـ _page = 0
         }
-        final int displayCount = ((_page + 1) * _limit)
-            .clamp(0, _allSales.length)
-            .toInt();
-        _displayedSales = _allSales.sublist(0, displayCount);
-        _page = loadMore ? _page + 1 : 1;
+        // ✅ عرض كل ما تم تحميله بدل حساب displayCount
+        _displayedSales = _allSales;
+        // ✅ تحديد hasMore هل في المزيد في الـ database
         _hasMore = _allSales.length < totalCount;
+        print(
+          '📊 بعد الاستعلام: _page=$_page, _allSales.length=${_allSales.length}, totalCount=$totalCount, _hasMore=$_hasMore',
+        );
       } else {
         if (!loadMore) {
           _allSales = [];
@@ -810,18 +823,11 @@ class SalesProvider extends ChangeNotifier {
     print('   - الصفحة الحالية: $_page');
     print('   - الفواتير الحالية: ${_allSales.length}');
 
-    if (!_hasMore) {
-      print('❌ لا يوجد المزيد، تم إيقاف التحميل');
-      return;
-    }
-
-    if (_isLoading) {
-      print('❌ التحميل جاري، تم إيقاف التحميل');
-      return;
-    }
+    if (!_hasMore || _isLoading) return;
 
     print('✅ بدء تحميل المزيد من الفواتير');
-    await _fetchSalesWithFilters(loadMore: true);
+    // ✅ forceRefresh: true عشان يتجاوز الكاش
+    await _fetchSalesWithFilters(loadMore: true, forceRefresh: true);
     print('✅ تم تحميل المزيد. الفواتير الآن: ${_allSales.length}');
   }
 
@@ -859,7 +865,9 @@ class SalesProvider extends ChangeNotifier {
       );
 
       if (saleResult.isEmpty) {
-        throw Exception('فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.');
+        throw Exception(
+          'فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.',
+        );
       }
 
       final saleData = saleResult.first;
@@ -889,8 +897,8 @@ class SalesProvider extends ChangeNotifier {
       final newRemainingAmount =
           paymentType == 'credit'
               ? oldPaymentType == 'credit'
-              ? oldRemainingAmount
-              : totalAmount
+                  ? oldRemainingAmount
+                  : totalAmount
               : 0.0;
 
       final updateData = <String, dynamic>{
@@ -908,10 +916,14 @@ class SalesProvider extends ChangeNotifier {
       );
 
       if (count == 0) {
-        throw Exception('فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.');
+        throw Exception(
+          'فشل التعديل: لم يتم العثور على الفاتورة بالرقم المحدد.',
+        );
       }
 
-      if (oldPaymentType == 'credit' && oldCustomerId != null && oldRemainingAmount > 0) {
+      if (oldPaymentType == 'credit' &&
+          oldCustomerId != null &&
+          oldRemainingAmount > 0) {
         await _applyCustomerBalanceDelta(
           txn: txn,
           customerId: oldCustomerId,
@@ -919,7 +931,9 @@ class SalesProvider extends ChangeNotifier {
         );
       }
 
-      if (paymentType == 'credit' && resolvedCustomerId != null && newRemainingAmount > 0) {
+      if (paymentType == 'credit' &&
+          resolvedCustomerId != null &&
+          newRemainingAmount > 0) {
         await _applyCustomerBalanceDelta(
           txn: txn,
           customerId: resolvedCustomerId!,
@@ -939,7 +953,8 @@ class SalesProvider extends ChangeNotifier {
         customerId: resolvedCustomerId,
         customerName: oldSale.customerName,
         paymentType: paymentType,
-        paidAmount: paymentType == 'cash' ? oldSale.totalAmount : oldSale.paidAmount,
+        paidAmount:
+            paymentType == 'cash' ? oldSale.totalAmount : oldSale.paidAmount,
         remainingAmount:
             paymentType == 'credit'
                 ? oldSale.paymentType == 'credit'
@@ -1157,14 +1172,18 @@ class SalesProvider extends ChangeNotifier {
         }
       }
 
-      if (paymentType == 'credit' && customerId != null && remainingAmount > 0) {
+      if (paymentType == 'credit' &&
+          customerId != null &&
+          remainingAmount > 0) {
         await _applyCustomerBalanceDelta(
           txn: txn,
           customerId: customerId,
           delta: -remainingAmount,
         );
 
-        log('Adjusted customer balance for deleted sale $saleId by -$remainingAmount');
+        log(
+          'Adjusted customer balance for deleted sale $saleId by -$remainingAmount',
+        );
       }
       // 7️⃣ حذف السجلات
       await txn.delete(
@@ -1304,7 +1323,10 @@ class SalesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<double> settleSelectedSales({String? note}) async {
+  Future<double> settleSelectedSales({
+    String? note,
+    required DebtProvider debtProvider, // ✅ أضف هاد
+  }) async {
     if (selectedSaleIds.isEmpty) {
       throw Exception('لم يتم تحديد أي فواتير للتسديد.');
     }
@@ -1312,15 +1334,12 @@ class SalesProvider extends ChangeNotifier {
     final uniqueIds = selectedSaleIds.toSet().toList();
     final db = await _dbHelper.db;
     final placeholders = List.filled(uniqueIds.length, '?').join(',');
-    final selectedSales = await db.rawQuery(
-      '''
+    final selectedSales = await db.rawQuery('''
       SELECT id, customer_id, payment_type, total_amount, remaining_amount
       FROM sales
       WHERE id IN ($placeholders)
       ORDER BY date ASC, id ASC
-      ''',
-      uniqueIds,
-    );
+      ''', uniqueIds);
 
     if (selectedSales.isEmpty) {
       throw Exception('الفواتير المحددة غير موجودة.');
@@ -1336,7 +1355,8 @@ class SalesProvider extends ChangeNotifier {
             .whereType<int>()
             .toSet();
 
-    if (customerIds.length != 1 || selectedSales.any((sale) => sale['customer_id'] == null)) {
+    if (customerIds.length != 1 ||
+        selectedSales.any((sale) => sale['customer_id'] == null)) {
       throw Exception('يجب أن تكون كل الفواتير المحددة لنفس العميل.');
     }
 
@@ -1350,7 +1370,7 @@ class SalesProvider extends ChangeNotifier {
       throw Exception('كل الفواتير المحددة مسددة مسبقاً.');
     }
 
-    await DebtProvider().recordCustomerPayment(
+    await debtProvider.recordCustomerPayment(
       customerId: customerIds.first,
       amount: totalSettled,
       note: note ?? 'تسديد ${selectedSales.length} فاتورة محددة',
@@ -1489,7 +1509,14 @@ class SalesProvider extends ChangeNotifier {
       [customerId, delta],
     );
   }
+
+  void invalidateAndRefresh() {
+    _salesCache.clear();
+    _currentCacheKey = null;
+    _page = 0;
+    _allSales.clear();
+    _displayedSales.clear();
+    _hasMore = true;
+    _fetchSalesWithFilters(forceRefresh: true);
+  }
 }
-
-
-

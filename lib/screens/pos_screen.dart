@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:motamayez/providers/sales_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/components/posPageCompoments/search_section.dart';
@@ -1477,6 +1478,8 @@ class _PosScreenState extends State<PosScreen>
       }
 
       if (mounted) {
+        context.read<SalesProvider>().invalidateAndRefresh();
+
         showAppToast(context, 'تم تحديث الفاتورة بنجاح', ToastType.success);
         Navigator.pop(context);
       }
@@ -1523,6 +1526,8 @@ class _PosScreenState extends State<PosScreen>
       );
 
       if (mounted) {
+        context.read<SalesProvider>().invalidateAndRefresh();
+
         showAppToast(context, 'تم إتمام البيع بنجاح', ToastType.success);
         _clearCart();
       }
@@ -1811,6 +1816,8 @@ class _PosScreenState extends State<PosScreen>
       );
 
       if (mounted) {
+        context.read<SalesProvider>().invalidateAndRefresh();
+
         showAppToast(
           context,
           'تم تسجيل بيع مؤجل للعميل ${customer.name} بنجاح',

@@ -43,6 +43,8 @@ import 'services/activation_service.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final RouteObserver<ModalRoute<void>> routeObserver =
+    RouteObserver<ModalRoute<void>>();
 
 void main() async {
   await ('ar', null);
@@ -123,6 +125,7 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: navigatorKey,
+      navigatorObservers: [routeObserver],
       debugShowCheckedModeBanner: false,
       title: 'المتميز',
       theme: ThemeData(primarySwatch: Colors.purple, fontFamily: 'Poppins'),

@@ -513,7 +513,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 icon: Icons.group,
                 color: const Color(0xFF6A3093),
                 label: 'إجمالي العملاء',
-                value: _isStatsLoading ? '...' : _totalCustomersOverall.toString(),
+                value:
+                    _isStatsLoading ? '...' : _totalCustomersOverall.toString(),
               ),
               _buildStatItem(
                 icon: Icons.money_off,
@@ -537,8 +538,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 icon: Icons.person,
                 color: Colors.orange,
                 label: 'مدينون',
-                value:
-                    _isStatsLoading ? '...' : '$_customersWithDebtOverall',
+                value: _isStatsLoading ? '...' : '$_customersWithDebtOverall',
               ),
             ],
           ),

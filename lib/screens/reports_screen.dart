@@ -92,6 +92,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
       'periodCreditAdded': reportsProvider.periodCreditAdded,
       'periodDebtCollected': reportsProvider.periodDebtCollected,
       'debtNetChange': reportsProvider.debtNetChange,
+      // إحصائيات فواتير الشراء
+      'totalPurchaseInvoices': reportsProvider.totalPurchaseInvoicesAmount,
+      'purchaseInvoicesCount': reportsProvider.purchaseInvoicesCount,
+      'cashPurchases': reportsProvider.cashPurchasesAmount,
+      'creditPurchases': reportsProvider.creditPurchasesAmount,
+      'totalSupplierBalance': reportsProvider.totalSupplierBalance,
     };
 
     return ReportData(
@@ -515,6 +521,39 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Icons.account_balance_wallet,
             provider.netCashProfit >= 0 ? Colors.green : Colors.red,
             'الأرباح النقدية - المصاريف النقدية',
+          ),
+
+          // المجموعة 5: فواتير الشراء
+          _buildStatCard(
+            'إجمالي فواتير الشراء',
+            '${provider.totalPurchaseInvoicesAmount.toStringAsFixed(2)} $currencyName',
+            Icons.shopping_bag,
+            Colors.purple,
+            '${provider.purchaseInvoicesCount} فاتورة شراء',
+          ),
+
+          _buildStatCard(
+            'المشتريات النقدية',
+            '${provider.cashPurchasesAmount.toStringAsFixed(2)} $currencyName',
+            Icons.local_shipping,
+            Colors.purple.shade400,
+            'المشتريات المدفوعة نقداً',
+          ),
+
+          _buildStatCard(
+            'المشتريات الآجلة',
+            '${provider.creditPurchasesAmount.toStringAsFixed(2)} $currencyName',
+            Icons.pending_actions,
+            Colors.purple.shade400,
+            'المشتريات الآجلة من الموردين',
+          ),
+
+          _buildStatCard(
+            'رصيد الموردين',
+            '${provider.totalSupplierBalance.toStringAsFixed(2)} $currencyName',
+            Icons.account_balance,
+            Colors.indigo,
+            'ما يستحق للموردين',
           ),
 
           // المجموعة 5: إحصائيات إضافية

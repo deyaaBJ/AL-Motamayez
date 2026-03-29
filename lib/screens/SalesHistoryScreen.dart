@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:motamayez/providers/DebtProvider.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/helpers/helpers.dart';
@@ -975,7 +976,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                         if (year != null) {
                           provider.applyMonthFilter(
                             month:
-                                filterState.selectedMonth ?? DateTime.now().month,
+                                filterState.selectedMonth ??
+                                DateTime.now().month,
                             year: year,
                           );
                         }
@@ -2642,32 +2644,23 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'هل تريد تسجيل تسديد كامل لـ $count فاتورة محددة؟',
-                ),
+                Text('هل تريد تسجيل تسديد كامل لـ $count فاتورة محددة؟'),
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.green[50],
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.green[200]!,
-                    ),
+                    border: Border.all(color: Colors.green[200]!),
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: Colors.green[700],
-                      ),
+                      Icon(Icons.info_outline, color: Colors.green[700]),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'سيتم إنشاء دفعة فعلية وتصفير المتبقي على الفواتير المحددة دون تغيير نوع الفاتورة.',
-                          style: TextStyle(
-                            color: Colors.green[700],
-                          ),
+                          style: TextStyle(color: Colors.green[700]),
                         ),
                       ),
                     ],
@@ -2682,9 +2675,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                 child: Text('تأكيد التسديد ($count فاتورة)'),
               ),
             ],
@@ -2693,7 +2684,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
 
     if (confirmed == true) {
       try {
-        final amount = await salesProvider.settleSelectedSales();
+        final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+        final amount = await salesProvider.settleSelectedSales(
+          debtProvider: debtProvider,
+        );
         showAppToast(
           context,
           'تم تسديد $count فاتورة بقيمة ${amount.toStringAsFixed(2)}',

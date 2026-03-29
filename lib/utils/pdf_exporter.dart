@@ -16,28 +16,21 @@ class PDFExportResult {
 }
 
 class PDFExporter {
-  // خط عربي واحد فقط
   late pw.Font arabicFont;
   pw.Image? logoImage;
 
-  // تحميل الخط العربي والصورة
   Future<void> _loadResources() async {
     try {
-      // تحميل الخط العربي
       final fontData = await rootBundle.load('fonts/Cairo-Regular.ttf');
       arabicFont = pw.Font.ttf(fontData);
-
-      // تحميل صورة الشعار
       try {
         final logoData = await rootBundle.load('assets/images/shop_logo.png');
         final logoBytes = logoData.buffer.asUint8List();
         logoImage = pw.Image(pw.MemoryImage(logoBytes));
       } catch (e) {
-        // تجاهل الخطأ إذا لم توجد الصورة
         logoImage = null;
       }
     } catch (e) {
-      // استخدم خط PDF الافتراضي
       arabicFont = pw.Font.helvetica();
     }
   }
@@ -48,19 +41,23 @@ class PDFExporter {
     required String marketName,
   }) async {
     try {
-      // تحميل الموارد أولاً
       await _loadResources();
 
       final pdf = pw.Document();
 
-      // حساب عدد الصفوف في الجدول لتحديد إذا كنا نحتاج صفحة ثانية
-      final statsCount = _getStatisticsCount(reportData.statistics);
-      final needsTwoPages = statsCount > 10; // إذا كان هناك أكثر من 10 صفوف
+      // جلب كل الإحصائيات مرة واحدة وتقسيمها فعلياً
+      final allStats = _prepareStatisticsList(reportData.statistics);
 
+      // الصفحة الأولى: معلومات + أول 8 إحصائيات
+      const int firstPageLimit = 8;
+      final firstPageStats = allStats.take(firstPageLimit).toList();
+      final remainingStats = allStats.skip(firstPageLimit).toList();
+
+      // الصفحة الأولى دائماً
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
-          margin: pw.EdgeInsets.all(12), // هامش معقول
+          margin: pw.EdgeInsets.all(12),
           build: (pw.Context context) {
             return pw.Directionality(
               textDirection: pw.TextDirection.rtl,
@@ -71,16 +68,18 @@ class PDFExporter {
                 ),
                 padding: pw.EdgeInsets.all(15),
                 child:
-                    needsTwoPages
-                        ? _buildFirstPageContent(
+                    remainingStats.isEmpty
+                        ? _buildSinglePageContent(
                           reportData,
                           adminName,
                           marketName,
+                          firstPageStats,
                         )
-                        : _buildSinglePageContent(
+                        : _buildFirstPageContent(
                           reportData,
                           adminName,
                           marketName,
+                          firstPageStats,
                         ),
               ),
             );
@@ -88,27 +87,38 @@ class PDFExporter {
         ),
       );
 
-      // إذا احتجنا لصفحة ثانية للجدول
-      if (needsTwoPages) {
-        pdf.addPage(
-          pw.Page(
-            pageFormat: PdfPageFormat.a4,
-            margin: pw.EdgeInsets.all(12),
-            build: (pw.Context context) {
-              return pw.Directionality(
-                textDirection: pw.TextDirection.rtl,
-                child: pw.Container(
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.blue, width: 1.5),
-                    borderRadius: pw.BorderRadius.circular(8),
+      // باقي الإحصائيات موزعة على صفحات (15 لكل صفحة)
+      if (remainingStats.isNotEmpty) {
+        const int statsPerPage = 15;
+        for (int i = 0; i < remainingStats.length; i += statsPerPage) {
+          final pageStats = remainingStats.skip(i).take(statsPerPage).toList();
+          final isLastPage = (i + statsPerPage) >= remainingStats.length;
+
+          pdf.addPage(
+            pw.Page(
+              pageFormat: PdfPageFormat.a4,
+              margin: pw.EdgeInsets.all(12),
+              build: (pw.Context context) {
+                return pw.Directionality(
+                  textDirection: pw.TextDirection.rtl,
+                  child: pw.Container(
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.blue, width: 1.5),
+                      borderRadius: pw.BorderRadius.circular(8),
+                    ),
+                    padding: pw.EdgeInsets.all(15),
+                    child: _buildStatisticsPage(
+                      marketName,
+                      pageStats,
+                      reportData.currency,
+                      isLastPage,
+                    ),
                   ),
-                  padding: pw.EdgeInsets.all(15),
-                  child: _buildStatisticsPage(reportData, marketName),
-                ),
-              );
-            },
-          ),
-        );
+                );
+              },
+            ),
+          );
+        }
       }
 
       final dir = await getApplicationDocumentsDirectory();
@@ -124,97 +134,83 @@ class PDFExporter {
     }
   }
 
-  // بناء محتوى الصفحة الأولى (للتقارير الكبيرة)
-  pw.Widget _buildFirstPageContent(
+  // صفحة واحدة فقط (إذا الإحصائيات قليلة)
+  pw.Widget _buildSinglePageContent(
     ReportData reportData,
     String adminName,
     String marketName,
+    List<Map<String, dynamic>> stats,
   ) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        // العنوان الرئيسي مع الشعار
         _buildHeader(marketName),
         pw.SizedBox(height: 12),
-
-        // معلومات البرنامج واسم المتجر
         _buildProgramInfo(marketName),
         pw.SizedBox(height: 12),
-
-        // معلومات المسؤول والتاريخ
         _buildAdminAndDateInfo(adminName),
         pw.SizedBox(height: 12),
-
-        // معلومات الفترة
         _buildPeriodInfo(reportData),
         pw.SizedBox(height: 12),
+        _buildStatisticsTableFromList(stats, reportData.currency, true),
+      ],
+    );
+  }
 
-        // ملاحظة أن الإحصائيات في الصفحة التالية
+  // الصفحة الأولى عند وجود صفحات إضافية
+  pw.Widget _buildFirstPageContent(
+    ReportData reportData,
+    String adminName,
+    String marketName,
+    List<Map<String, dynamic>> stats,
+  ) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        _buildHeader(marketName),
+        pw.SizedBox(height: 12),
+        _buildProgramInfo(marketName),
+        pw.SizedBox(height: 12),
+        _buildAdminAndDateInfo(adminName),
+        pw.SizedBox(height: 12),
+        _buildPeriodInfo(reportData),
+        pw.SizedBox(height: 12),
+        _buildStatisticsTableFromList(stats, reportData.currency, false),
+        pw.SizedBox(height: 10),
         pw.Container(
           width: double.infinity,
-          padding: pw.EdgeInsets.all(12),
+          padding: pw.EdgeInsets.all(10),
           decoration: pw.BoxDecoration(
             color: PdfColors.yellow50,
             borderRadius: pw.BorderRadius.circular(8),
             border: pw.Border.all(color: PdfColors.yellow200),
           ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.center,
-            children: [
-              pw.SizedBox(width: 8),
-              pw.Text(
-                'يتبع: الإحصائيات المالية في الصفحة التالية',
-                style: pw.TextStyle(
-                  font: arabicFont,
-                  fontSize: 12,
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.orange800,
-                ),
+          child: pw.Center(
+            child: pw.Text(
+              'يتبع: الإحصائيات المالية في الصفحة التالية',
+              style: pw.TextStyle(
+                font: arabicFont,
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.orange800,
               ),
-            ],
+            ),
           ),
         ),
       ],
     );
   }
 
-  // بناء محتوى الصفحة الواحدة (للتقارير الصغيرة)
-  pw.Widget _buildSinglePageContent(
-    ReportData reportData,
-    String adminName,
+  // صفحة تكملة الإحصائيات
+  pw.Widget _buildStatisticsPage(
     String marketName,
+    List<Map<String, dynamic>> stats,
+    String currency,
+    bool includeFooter,
   ) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        // العنوان الرئيسي مع الشعار
-        _buildHeader(marketName),
-        pw.SizedBox(height: 12),
-
-        // معلومات البرنامج واسم المتجر
-        _buildProgramInfo(marketName),
-        pw.SizedBox(height: 12),
-
-        // معلومات المسؤول والتاريخ
-        _buildAdminAndDateInfo(adminName),
-        pw.SizedBox(height: 12),
-
-        // معلومات الفترة
-        _buildPeriodInfo(reportData),
-        pw.SizedBox(height: 12),
-
-        // الإحصائيات المالية
-        _buildStatisticsTable(reportData, true),
-      ],
-    );
-  }
-
-  // بناء صفحة الإحصائيات
-  pw.Widget _buildStatisticsPage(ReportData reportData, String marketName) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        // عنوان الصفحة الثانية
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.center,
           children: [
@@ -243,10 +239,146 @@ class PDFExporter {
           ],
         ),
         pw.SizedBox(height: 15),
-
-        // الجدول الكامل
-        _buildStatisticsTable(reportData, false),
+        _buildStatisticsTableFromList(stats, currency, includeFooter),
       ],
+    );
+  }
+
+  // الجدول - 3 أعمدة: البند | التوضيح | القيمة
+  pw.Widget _buildStatisticsTableFromList(
+    List<Map<String, dynamic>> statsList,
+    String currency,
+    bool includeFooter,
+  ) {
+    List<pw.TableRow> rows = [];
+
+    // رأس الجدول
+    rows.add(
+      pw.TableRow(
+        decoration: pw.BoxDecoration(
+          color: PdfColors.blue100,
+          borderRadius: pw.BorderRadius.only(
+            topLeft: pw.Radius.circular(4),
+            topRight: pw.Radius.circular(4),
+          ),
+        ),
+        children: [
+          _headerCell('القيمة'),
+          _headerCell('التوضيح'),
+          _headerCell('البند'),
+        ],
+      ),
+    );
+
+    for (int i = 0; i < statsList.length; i++) {
+      final stat = statsList[i];
+      final label = stat['label'] as String;
+      final description = stat['description'] as String? ?? '';
+      final value = stat['value'];
+      final type = stat['type'] as String;
+      final key = stat['key'] as String;
+
+      final formattedValue = _formatStatValue(value, type, currency);
+      final color = _getColorForStat(key, value);
+      final bgColor = i % 2 == 0 ? PdfColors.white : PdfColors.grey50;
+
+      rows.add(
+        pw.TableRow(
+          decoration: pw.BoxDecoration(color: bgColor),
+          children: [
+            // القيمة
+            pw.Container(
+              padding: pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+              child: pw.Text(
+                formattedValue,
+                style: pw.TextStyle(
+                  font: arabicFont,
+                  fontSize: 10,
+                  color: color,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                textAlign: pw.TextAlign.right,
+              ),
+            ),
+            // التوضيح
+            pw.Container(
+              padding: pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+              child: pw.Text(
+                description,
+                style: pw.TextStyle(
+                  font: arabicFont,
+                  fontSize: 9,
+                  color: PdfColors.grey600,
+                  fontStyle: pw.FontStyle.italic,
+                ),
+                textAlign: pw.TextAlign.right,
+              ),
+            ),
+            // البند
+            pw.Container(
+              padding: pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+              child: pw.Text(
+                label,
+                style: pw.TextStyle(
+                  font: arabicFont,
+                  fontSize: 10,
+                  color: PdfColors.grey800,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                textAlign: pw.TextAlign.right,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'الإحصائيات المالية',
+          style: pw.TextStyle(
+            font: arabicFont,
+            fontSize: 16,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColors.black,
+          ),
+        ),
+        pw.SizedBox(height: 10),
+        pw.Container(
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.grey300),
+            borderRadius: pw.BorderRadius.circular(6),
+          ),
+          child: pw.Table(
+            border: null,
+            columnWidths: {
+              0: pw.FlexColumnWidth(2.0), // القيمة
+              1: pw.FlexColumnWidth(2.8), // التوضيح
+              2: pw.FlexColumnWidth(2.2), // البند
+            },
+            children: rows,
+          ),
+        ),
+        if (includeFooter) ...[pw.SizedBox(height: 15), _buildFooter()],
+      ],
+    );
+  }
+
+  pw.Widget _headerCell(String text) {
+    return pw.Container(
+      padding: pw.EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          font: arabicFont,
+          fontSize: 11,
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.blue900,
+        ),
+        textAlign: pw.TextAlign.right,
+      ),
     );
   }
 
@@ -254,10 +386,8 @@ class PDFExporter {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
-        // الشعار إذا كان موجوداً
         if (logoImage != null)
           pw.Container(width: 70, height: 70, child: logoImage!),
-
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
@@ -272,8 +402,6 @@ class PDFExporter {
             ),
           ],
         ),
-
-        // عنصر فارغ للموازنة
         if (logoImage != null) pw.Container(width: 70),
       ],
     );
@@ -312,9 +440,7 @@ class PDFExporter {
               ),
             ],
           ),
-
           pw.VerticalDivider(color: PdfColors.blue200, width: 1),
-
           pw.Column(
             children: [
               pw.Text(
@@ -377,7 +503,6 @@ class PDFExporter {
               ),
             ],
           ),
-
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
@@ -405,7 +530,6 @@ class PDFExporter {
     );
   }
 
-  // utils/pdf_exporter.dart (الجزء المعدل فقط)
   pw.Widget _buildPeriodInfo(ReportData reportData) {
     return pw.Container(
       width: double.infinity,
@@ -430,165 +554,15 @@ class PDFExporter {
           pw.SizedBox(height: 8),
           pw.Divider(color: PdfColors.grey300, height: 1),
           pw.SizedBox(height: 8),
-
-          // استخدام Row بسيط مع Expanded
           pw.Column(
             children: [
-              // نوع التقرير
-              pw.Row(
-                children: [
-                  // الليبل على اليمين
-                  pw.Expanded(
-                    child: pw.Container(
-                      padding: pw.EdgeInsets.symmetric(vertical: 4),
-                      child: pw.Text(
-                        'نوع التقرير:',
-                        style: pw.TextStyle(
-                          font: arabicFont,
-                          fontSize: 12,
-                          color: PdfColors.grey600,
-                        ),
-                        textAlign: pw.TextAlign.right,
-                      ),
-                    ),
-                  ),
-                  pw.SizedBox(width: 10),
-                  // الداتا على اليسار
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Container(
-                      padding: pw.EdgeInsets.symmetric(vertical: 4),
-                      child: pw.Text(
-                        _getPeriodText(reportData.period),
-                        style: pw.TextStyle(
-                          font: arabicFont,
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.black,
-                        ),
-                        textAlign: pw.TextAlign.left, // محاذاة لليسار
-                      ),
-                    ),
-                  ),
-                ],
+              _buildPeriodRow(
+                'نوع التقرير:',
+                _getPeriodText(reportData.period),
               ),
-
-              // العملة
-              pw.Row(
-                children: [
-                  // الليبل على اليمين
-                  pw.Expanded(
-                    child: pw.Container(
-                      padding: pw.EdgeInsets.symmetric(vertical: 4),
-                      child: pw.Text(
-                        'العملة:',
-                        style: pw.TextStyle(
-                          font: arabicFont,
-                          fontSize: 12,
-                          color: PdfColors.grey600,
-                        ),
-                        textAlign: pw.TextAlign.right,
-                      ),
-                    ),
-                  ),
-                  pw.SizedBox(width: 10),
-                  // الداتا على اليسار
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Container(
-                      padding: pw.EdgeInsets.symmetric(vertical: 4),
-                      child: pw.Text(
-                        reportData.currency,
-                        style: pw.TextStyle(
-                          font: arabicFont,
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.black,
-                        ),
-                        textAlign: pw.TextAlign.left,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              // من تاريخ
-              pw.Row(
-                children: [
-                  // الليبل على اليمين
-                  pw.Expanded(
-                    child: pw.Container(
-                      padding: pw.EdgeInsets.symmetric(vertical: 4),
-                      child: pw.Text(
-                        'من تاريخ:',
-                        style: pw.TextStyle(
-                          font: arabicFont,
-                          fontSize: 12,
-                          color: PdfColors.grey600,
-                        ),
-                        textAlign: pw.TextAlign.right,
-                      ),
-                    ),
-                  ),
-                  pw.SizedBox(width: 10),
-                  // الداتا على اليسار
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Container(
-                      padding: pw.EdgeInsets.symmetric(vertical: 4),
-                      child: pw.Text(
-                        _formatDate(reportData.fromDate),
-                        style: pw.TextStyle(
-                          font: arabicFont,
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.black,
-                        ),
-                        textAlign: pw.TextAlign.left,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              // إلى تاريخ
-              pw.Row(
-                children: [
-                  // الليبل على اليمين
-                  pw.Expanded(
-                    child: pw.Container(
-                      padding: pw.EdgeInsets.symmetric(vertical: 4),
-                      child: pw.Text(
-                        'إلى تاريخ:',
-                        style: pw.TextStyle(
-                          font: arabicFont,
-                          fontSize: 12,
-                          color: PdfColors.grey600,
-                        ),
-                        textAlign: pw.TextAlign.right,
-                      ),
-                    ),
-                  ),
-                  pw.SizedBox(width: 10),
-                  // الداتا على اليسار
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Container(
-                      padding: pw.EdgeInsets.symmetric(vertical: 4),
-                      child: pw.Text(
-                        _formatDate(reportData.toDate),
-                        style: pw.TextStyle(
-                          font: arabicFont,
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.black,
-                        ),
-                        textAlign: pw.TextAlign.left,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              _buildPeriodRow('العملة:', reportData.currency),
+              _buildPeriodRow('من تاريخ:', _formatDate(reportData.fromDate)),
+              _buildPeriodRow('إلى تاريخ:', _formatDate(reportData.toDate)),
             ],
           ),
         ],
@@ -596,135 +570,40 @@ class PDFExporter {
     );
   }
 
-  // وإذا كنت تريد دالة عاملة يمكن استخدامها في أماكن أخرى
-
-  pw.Widget _buildStatisticsTable(ReportData reportData, bool includeFooter) {
-    final stats = reportData.statistics;
-    final statsList = _prepareStatisticsList(stats);
-
-    // بناء صفوف الجدول
-    List<pw.TableRow> rows = [];
-
-    // رأس الجدول
-    rows.add(
-      pw.TableRow(
-        decoration: pw.BoxDecoration(
-          color: PdfColors.blue100,
-          borderRadius: pw.BorderRadius.only(
-            topLeft: pw.Radius.circular(4),
-            topRight: pw.Radius.circular(4),
-          ),
-        ),
-        children: [
-          pw.Container(
-            padding: pw.EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-            child: pw.Text(
-              'القيمة',
-              style: pw.TextStyle(
-                font: arabicFont,
-                fontSize: 12,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.blue900,
-              ),
-              textAlign: pw.TextAlign.right,
-            ),
-          ),
-          pw.Container(
-            padding: pw.EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-            child: pw.Text(
-              'البند',
-              style: pw.TextStyle(
-                font: arabicFont,
-                fontSize: 12,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.blue900,
-              ),
-              textAlign: pw.TextAlign.right,
-            ),
-          ),
-        ],
-      ),
-    );
-
-    // بيانات الجدول
-    for (int i = 0; i < statsList.length; i++) {
-      final stat = statsList[i];
-      final label = stat['label'] as String;
-      final value = stat['value'];
-      final type = stat['type'] as String;
-      final key = stat['key'] as String;
-
-      final formattedValue = _formatStatValue(value, type, reportData.currency);
-      final color = _getColorForStat(key, value);
-
-      rows.add(
-        pw.TableRow(
-          decoration: pw.BoxDecoration(
-            color: i % 2 == 0 ? PdfColors.white : PdfColors.grey50,
-          ),
-          children: [
-            // القيمة (على اليسار)
-            pw.Container(
-              padding: pw.EdgeInsets.symmetric(vertical: 6, horizontal: 10),
-              child: pw.Text(
-                formattedValue,
-                style: pw.TextStyle(
-                  font: arabicFont,
-                  fontSize: 11,
-                  color: color,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-                textAlign: pw.TextAlign.right,
-              ),
-            ),
-            // البند (على اليمين)
-            pw.Container(
-              padding: pw.EdgeInsets.symmetric(vertical: 6, horizontal: 10),
-              child: pw.Text(
-                label,
-                style: pw.TextStyle(
-                  font: arabicFont,
-                  fontSize: 11,
-                  color: PdfColors.grey800,
-                ),
-                textAlign: pw.TextAlign.right,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
+  pw.Widget _buildPeriodRow(String label, String value) {
+    return pw.Row(
       children: [
-        pw.Text(
-          'الإحصائيات المالية',
-          style: pw.TextStyle(
-            font: arabicFont,
-            fontSize: 16,
-            fontWeight: pw.FontWeight.bold,
-            color: PdfColors.black,
+        pw.Expanded(
+          child: pw.Container(
+            padding: pw.EdgeInsets.symmetric(vertical: 4),
+            child: pw.Text(
+              label,
+              style: pw.TextStyle(
+                font: arabicFont,
+                fontSize: 12,
+                color: PdfColors.grey600,
+              ),
+              textAlign: pw.TextAlign.right,
+            ),
           ),
         ),
-        pw.SizedBox(height: 10),
-
-        pw.Container(
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: PdfColors.grey300),
-            borderRadius: pw.BorderRadius.circular(6),
-          ),
-          child: pw.Table(
-            border: null, // إزالة الحدود الداخلية للتحكم بها يدوياً
-            columnWidths: {
-              0: pw.FlexColumnWidth(1.8),
-              1: pw.FlexColumnWidth(2.5),
-            },
-            children: rows,
+        pw.SizedBox(width: 10),
+        pw.Expanded(
+          flex: 2,
+          child: pw.Container(
+            padding: pw.EdgeInsets.symmetric(vertical: 4),
+            child: pw.Text(
+              value,
+              style: pw.TextStyle(
+                font: arabicFont,
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.black,
+              ),
+              textAlign: pw.TextAlign.left,
+            ),
           ),
         ),
-
-        if (includeFooter) ...[pw.SizedBox(height: 15), _buildFooter()],
       ],
     );
   }
@@ -751,123 +630,187 @@ class PDFExporter {
     );
   }
 
-  // إعداد قائمة الإحصائيات
+  // ✅ كل الإحصائيات مع توضيح مستخرج من شاشة التقارير
   List<Map<String, dynamic>> _prepareStatisticsList(
     Map<String, dynamic> stats,
   ) {
     List<Map<String, dynamic>> allStats = [];
 
     final basicStats = [
+      // ── المبيعات ──
       {
         'key': 'totalSales',
         'label': 'إجمالي المبيعات',
-        'type': 'currency',
-        'priority': 1,
-      },
-      {
-        'key': 'totalProfit',
-        'label': 'إجمالي الأرباح',
+        'description': 'مجموع كل الفواتير المباعة',
         'type': 'currency',
         'priority': 1,
       },
       {
         'key': 'cashSales',
         'label': 'المبيعات النقدية',
+        'description': 'المدفوعات نقداً فقط',
         'type': 'currency',
-        'priority': 2,
+        'priority': 1,
       },
       {
         'key': 'creditSales',
         'label': 'المبيعات الآجلة',
+        'description': 'مبيعات لم تُدفع بعد',
         'type': 'currency',
-        'priority': 2,
+        'priority': 1,
       },
       {
         'key': 'salesCount',
         'label': 'عدد الفواتير',
+        'description': 'إجمالي الفواتير الصادرة',
         'type': 'count',
-        'priority': 2,
+        'priority': 1,
       },
       {
         'key': 'averageSale',
         'label': 'متوسط الفاتورة',
-        'type': 'currency',
-        'priority': 3,
-      },
-      {
-        'key': 'netProfit',
-        'label': 'صافي الربح',
+        'description': 'إجمالي المبيعات ÷ عدد الفواتير',
         'type': 'currency',
         'priority': 1,
       },
+      // ── الأرباح ──
       {
-        'key': 'totalExpensesAll',
-        'label': 'إجمالي المصاريف',
-        'type': 'currency',
-        'priority': 1,
-      },
-      {
-        'key': 'totalCashExpenses',
-        'label': 'المصاريف النقدية',
+        'key': 'totalProfit',
+        'label': 'إجمالي الأرباح',
+        'description': 'الربح من كل المبيعات (نقدية وآجلة)',
         'type': 'currency',
         'priority': 2,
       },
       {
-        'key': 'profitPercentage',
-        'label': 'نسبة الربح',
-        'type': 'percentage',
-        'priority': 3,
+        'key': 'totalCashProfit',
+        'label': 'الأرباح النقدية',
+        'description': 'أرباح المبيعات النقدية فقط',
+        'type': 'currency',
+        'priority': 2,
+      },
+      {
+        'key': 'netProfit',
+        'label': 'صافي الربح',
+        'description': 'إجمالي الأرباح - المصاريف النقدية',
+        'type': 'currency',
+        'priority': 2,
       },
       {
         'key': 'netCashProfit',
         'label': 'صافي الربح الكاش',
+        'description': 'الأرباح النقدية - المصاريف النقدية',
         'type': 'currency',
         'priority': 2,
       },
       {
         'key': 'adjustedNetProfit',
         'label': 'صافي الربح المعدل',
+        'description': 'الربح بعد احتساب كل التعديلات',
         'type': 'currency',
-        'priority': 3,
+        'priority': 2,
+      },
+      {
+        'key': 'profitPercentage',
+        'label': 'نسبة الربح',
+        'description': 'الربح كنسبة من إجمالي المبيعات',
+        'type': 'percentage',
+        'priority': 2,
       },
       {
         'key': 'bestSalesDay',
         'label': 'أفضل يوم مبيعات',
+        'description': 'اليوم الأعلى مبيعاً في الفترة',
         'type': 'text',
+        'priority': 2,
+      },
+      // ── المصاريف ──
+      {
+        'key': 'totalExpensesAll',
+        'label': 'إجمالي المصاريف',
+        'description': 'كل المصاريف (نقدية وغير نقدية)',
+        'type': 'currency',
         'priority': 3,
       },
       {
-        'key': 'currentDebtBalance',
-        'label': 'إجمالي الذمم الحالية على الزبائن',
+        'key': 'totalCashExpenses',
+        'label': 'المصاريف النقدية',
+        'description': 'المصاريف المدفوعة نقداً فقط',
         'type': 'currency',
-        'priority': 2,
+        'priority': 3,
+      },
+      // ── الذمم ──
+      {
+        'key': 'currentDebtBalance',
+        'label': 'إجمالي الذمم على الزبائن',
+        'description': 'مجموع ما يستحق من الزبائن حتى الآن',
+        'type': 'currency',
+        'priority': 4,
       },
       {
         'key': 'periodCreditAdded',
-        'label': 'ديون جديدة انضافت خلال الفترة',
+        'label': 'ديون جديدة في الفترة',
+        'description': 'مبيعات آجلة انضافت خلال هذه الفترة',
         'type': 'currency',
-        'priority': 2,
+        'priority': 4,
       },
       {
         'key': 'periodDebtCollected',
-        'label': 'مبالغ تم تحصيلها من الديون',
+        'label': 'مبالغ محصلة من الديون',
+        'description': 'مدفوعات استُلمت من الزبائن في الفترة',
         'type': 'currency',
-        'priority': 2,
+        'priority': 4,
       },
       {
         'key': 'debtNetChange',
-        'label': 'الفرق بين الديون الجديدة والمحصلة',
+        'label': 'صافي تغير الذمم',
+        'description': 'الديون الجديدة - المبالغ المحصلة',
         'type': 'currency',
-        'priority': 2,
+        'priority': 4,
+      },
+      // ── فواتير الشراء ──
+      {
+        'key': 'totalPurchaseInvoices',
+        'label': 'إجمالي فواتير الشراء',
+        'description': 'مجموع ما تم شراؤه من الموردين',
+        'type': 'currency',
+        'priority': 5,
+      },
+      {
+        'key': 'cashPurchases',
+        'label': 'المشتريات النقدية',
+        'description': 'مشتريات مدفوعة نقداً للموردين',
+        'type': 'currency',
+        'priority': 5,
+      },
+      {
+        'key': 'creditPurchases',
+        'label': 'المشتريات الآجلة',
+        'description': 'مشتريات آجلة من الموردين',
+        'type': 'currency',
+        'priority': 5,
+      },
+      {
+        'key': 'purchaseInvoicesCount',
+        'label': 'عدد فواتير الشراء',
+        'description': 'عدد الفواتير الواردة من الموردين',
+        'type': 'count',
+        'priority': 5,
+      },
+      {
+        'key': 'totalSupplierBalance',
+        'label': 'رصيد الموردين',
+        'description': 'ما يستحق للموردين حتى الآن',
+        'type': 'currency',
+        'priority': 5,
       },
     ];
 
-    // تصفية فقط الإحصائيات الموجودة
     for (var stat in basicStats) {
       final key = stat['key'] as String;
       if (stats.containsKey(key) && stats[key] != null) {
         allStats.add({
           'label': stat['label'],
+          'description': stat['description'],
           'value': stats[key],
           'type': stat['type'],
           'key': key,
@@ -876,7 +819,6 @@ class PDFExporter {
       }
     }
 
-    // ترتيب الإحصائيات حسب الأولوية
     allStats.sort(
       (a, b) => (a['priority'] as int).compareTo(b['priority'] as int),
     );
@@ -884,107 +826,53 @@ class PDFExporter {
     return allStats;
   }
 
-  // حساب عدد الإحصائيات
-  int _getStatisticsCount(Map<String, dynamic> stats) {
-    final basicStats = [
-      'totalSales',
-      'totalProfit',
-      'cashSales',
-      'creditSales',
-      'salesCount',
-      'averageSale',
-      'netProfit',
-      'totalExpensesAll',
-      'totalCashExpenses',
-      'profitPercentage',
-      'netCashProfit',
-      'adjustedNetProfit',
-      'bestSalesDay',
-      'currentDebtBalance',
-      'periodCreditAdded',
-      'periodDebtCollected',
-      'debtNetChange',
-    ];
-
-    int count = 0;
-    for (var key in basicStats) {
-      if (stats.containsKey(key) && stats[key] != null) {
-        count++;
-      }
-    }
-    return count;
-  }
-
   String _formatStatValue(dynamic value, String type, String currency) {
     if (value == null) return '-';
-
     if (value is num) {
       if (type == 'currency') {
-        if (value % 1 == 0) {
-          return '${value.toInt()} $currency';
-        } else {
-          return '${value.toStringAsFixed(2)} $currency';
-        }
+        return value % 1 == 0
+            ? '${value.toInt()} $currency'
+            : '${value.toStringAsFixed(2)} $currency';
       } else if (type == 'percentage') {
         return '${value.toStringAsFixed(1)}%';
       } else if (type == 'count') {
         return value.toInt().toString();
-      } else {
-        return value.toString();
       }
+      return value.toString();
     }
-
-    // للقيم النصية (مثل bestSalesDay)
     return value.toString();
   }
 
   PdfColor _getColorForStat(String key, dynamic value) {
-    if (key.contains('Profit')) {
-      if (value is num && value < 0) {
-        return PdfColors.red;
-      }
+    if (key.contains('Profit') || key.contains('profit')) {
+      if (value is num && value < 0) return PdfColors.red;
       return PdfColors.green;
     }
-
-    if (key.contains('Sales')) {
+    if (key.contains('Sales') || key == 'salesCount' || key == 'averageSale') {
       return PdfColors.blue;
     }
-
-    if (key.contains('Expenses')) {
-      return PdfColors.red;
+    if (key.contains('Expenses')) return PdfColors.red700;
+    if (key.contains('Purchase') ||
+        key.contains('purchase') ||
+        key.contains('Supplier')) {
+      return PdfColors.purple;
     }
-
     if (key.contains('Debt') || key.contains('debt')) {
-      if (key == 'periodDebtCollected') {
-        return PdfColors.green;
-      }
+      if (key == 'periodDebtCollected') return PdfColors.green;
       if (key == 'debtNetChange' && value is num && value < 0) {
         return PdfColors.green;
       }
       return PdfColors.orange;
     }
-
-    if (key.contains('Percentage')) {
-      return PdfColors.purple;
-    }
-
-    if (key.contains('Count')) {
-      return PdfColors.orange;
-    }
-
-    if (key == 'bestSalesDay') {
-      return PdfColors.teal;
-    }
-
+    if (key.contains('Percentage')) return PdfColors.purple;
+    if (key == 'bestSalesDay') return PdfColors.teal;
     return PdfColors.black;
   }
 
-  String _formatDate(DateTime date) {
-    return DateFormat('yyyy/MM/dd').format(date);
-  }
+  String _formatDate(DateTime date) => DateFormat('yyyy/MM/dd').format(date);
 
   String _getPeriodText(String period) {
-    final periodMap = {
+    const periodMap = {
       'اليوم': 'يومي',
       'الأسبوع': 'أسبوعي',
       'الشهر': 'شهري',
