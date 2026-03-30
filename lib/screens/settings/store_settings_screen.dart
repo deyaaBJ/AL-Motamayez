@@ -46,6 +46,8 @@ class StoreSettingsScreen extends StatelessWidget {
                     const SizedBox(height: 24),
                     _buildCurrencySection(settings),
                     const SizedBox(height: 24),
+                    _buildTaxSection(settings),
+                    const SizedBox(height: 24),
                     _buildStockSection(settings),
                     const SizedBox(height: 24),
                     _buildBackupSection(settings),
@@ -102,6 +104,55 @@ class StoreSettingsScreen extends StatelessWidget {
           DropdownMenuItem(value: 'ILS', child: Text("🇮🇱 الشيكل الإسرائيلي")),
         ],
         onChanged: (v) => settings.updateCurrency(v!),
+      ),
+    );
+  }
+
+  Widget _buildTaxSection(SettingsProvider settings) {
+    return SettingsSection(
+      title: 'إعدادات الضريبة',
+      icon: Icons.receipt,
+      color: const Color(0xFF9C27B0),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'المبيعات مضمنة الضريبة',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  settings.defaultTaxSetting == 1
+                      ? '✓ المبيعات الجديدة ستكون مضمنة الضريبة'
+                      : '✗ المبيعات الجديدة ستكون غير مضمنة الضريبة',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color:
+                        settings.defaultTaxSetting == 1
+                            ? Colors.green
+                            : Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+            Switch(
+              value: settings.defaultTaxSetting == 1,
+              onChanged:
+                  (value) => settings.updateDefaultTaxSetting(value ? 1 : 0),
+              activeColor: const Color(0xFF9C27B0),
+            ),
+          ],
+        ),
       ),
     );
   }

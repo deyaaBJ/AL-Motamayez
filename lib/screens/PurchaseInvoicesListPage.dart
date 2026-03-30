@@ -638,7 +638,7 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
             if (_searchQuery.isEmpty)
               ElevatedButton.icon(
                 onPressed: () {
-                  Navigator.pushNamed(context, '/purchase-invoice');
+                  Navigator.pushNamed(context, '/purchaseInvoice');
                 },
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('إنشاء فاتورة جديدة'),
@@ -849,7 +849,7 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
           ),
           floatingActionButton: FloatingActionButton(
             onPressed: () {
-              Navigator.pushNamed(context, '/purchase-invoice');
+              Navigator.pushNamed(context, '/purchaseInvoice');
             },
             backgroundColor: Colors.blue,
             foregroundColor: Colors.white,

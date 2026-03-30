@@ -227,8 +227,9 @@ class ThermalReceiptPrinter {
 
     // -------- ITEMS --------
     for (final item in cartItems) {
-      String unit = _translateUnit(item.unitName);
-      String productName = item.product!.name;
+      String unit = item.isService ? 'خدمة' : _translateUnit(item.unitName);
+      String productName =
+          item.isService ? (item.serviceName ?? 'خدمة') : item.product!.name;
 
       if (productName.length > maxNameLength) {
         productName = productName.substring(0, maxNameLength);

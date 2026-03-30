@@ -625,7 +625,9 @@ class _SupplierAccountStatementPageState
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      if (remainingAmount != null && remainingAmount > 0)
+                      if (!isPayment &&
+                          remainingAmount != null &&
+                          remainingAmount > 0)
                         Tooltip(
                           message:
                               'متبقي: ${Formatters.formatCurrency(remainingAmount.toDouble())}',
@@ -775,7 +777,8 @@ class _SupplierAccountStatementPageState
                     'طريقة الدفع',
                     _translatePaymentType(transaction['payment_type']),
                   ),
-                if (transaction['remaining_amount'] != null &&
+                if (!isPayment &&
+                    transaction['remaining_amount'] != null &&
                     (transaction['remaining_amount'] as num) > 0)
                   _buildDetailRow(
                     'المبلغ المتبقي',

@@ -8,10 +8,13 @@ import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/models/customer.dart';
 import 'package:motamayez/providers/DebtProvider.dart';
 import 'package:motamayez/providers/customer_provider.dart';
+import 'package:motamayez/providers/sales_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/screens/CustomerDetailsScreen.dart';
 import 'package:motamayez/widgets/customer_form_dialog.dart';
 import 'package:motamayez/widgets/quick_payment_dialog.dart';
+
+enum _CustomerPaymentMode { general, invoiceLinked }
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key});
@@ -1225,6 +1228,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           _customerDebts[customer.id!] = updatedDebt;
 
           if (mounted) {
+            context.read<SalesProvider>().invalidateAndRefresh();
             setState(() {});
             await _loadDashboardStats();
             showAppToast(context, 'تم صرف الرصيد بنجاح', ToastType.success);
@@ -1238,6 +1242,155 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
+  Future<_CustomerPaymentMode?> _showPaymentModeDialog(int openInvoicesCount) {
+    return showDialog<_CustomerPaymentMode>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('نوع التسديد'),
+            content: Text(
+              'يوجد $openInvoicesCount فاتورة آجلة مفتوحة لهذا العميل. هل تريد تسجيل السداد على الحساب أم ربطه بفواتير محددة؟',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إلغاء'),
+              ),
+              TextButton(
+                onPressed:
+                    () => Navigator.pop(context, _CustomerPaymentMode.general),
+                child: const Text('سداد عام'),
+              ),
+              ElevatedButton(
+                onPressed:
+                    () => Navigator.pop(
+                      context,
+                      _CustomerPaymentMode.invoiceLinked,
+                    ),
+                child: const Text('اختيار فواتير'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<List<int>?> _showInvoiceSelectionDialog({
+    required List<Map<String, dynamic>> openSales,
+    required double paymentAmount,
+  }) {
+    final selectedIds = <int>{};
+
+    return showDialog<List<int>>(
+      context: context,
+      builder:
+          (context) => StatefulBuilder(
+            builder: (context, setState) {
+              final double selectedRemaining = openSales
+                  .where((sale) => selectedIds.contains(sale['id']))
+                  .fold<double>(
+                    0.0,
+                    (sum, sale) =>
+                        sum +
+                        ((sale['remaining_amount'] as num?)?.toDouble() ?? 0.0),
+                  );
+
+              return AlertDialog(
+                title: const Text('اختيار الفواتير'),
+                content: SizedBox(
+                  width: 420,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'حدد الفواتير التي تريد ربط مبلغ ${paymentAmount.toStringAsFixed(2)} بها.',
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          'إجمالي المتبقي للمحدد: ${selectedRemaining.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color:
+                                selectedRemaining + 0.0001 >= paymentAmount
+                                    ? Colors.green[700]
+                                    : Colors.red[700],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Flexible(
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: openSales.length,
+                          itemBuilder: (context, index) {
+                            final sale = openSales[index];
+                            final saleId = sale['id'] as int;
+                            final remaining =
+                                (sale['remaining_amount'] as num?)
+                                    ?.toDouble() ??
+                                0.0;
+                            final total =
+                                (sale['total_amount'] as num?)?.toDouble() ??
+                                0.0;
+                            final date = _formatSaleDate(
+                              sale['date']?.toString(),
+                            );
+
+                            return CheckboxListTile(
+                              value: selectedIds.contains(saleId),
+                              onChanged: (value) {
+                                setState(() {
+                                  if (value == true) {
+                                    selectedIds.add(saleId);
+                                  } else {
+                                    selectedIds.remove(saleId);
+                                  }
+                                });
+                              },
+                              title: Text('فاتورة #$saleId'),
+                              subtitle: Text(
+                                'التاريخ: $date\nالمبلغ: ${total.toStringAsFixed(2)} | المتبقي: ${remaining.toStringAsFixed(2)}',
+                              ),
+                              controlAffinity: ListTileControlAffinity.leading,
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('إلغاء'),
+                  ),
+                  ElevatedButton(
+                    onPressed:
+                        selectedIds.isEmpty ||
+                                selectedRemaining + 0.0001 < paymentAmount
+                            ? null
+                            : () =>
+                                Navigator.pop(context, selectedIds.toList()),
+                    child: const Text('تأكيد الربط'),
+                  ),
+                ],
+              );
+            },
+          ),
+    );
+  }
+
+  String _formatSaleDate(String? rawDate) {
+    if (rawDate == null || rawDate.isEmpty) return 'غير محدد';
+    try {
+      final date = DateTime.parse(rawDate);
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (_) {
+      return rawDate;
+    }
+  }
+
   void _showPaymentDialog(Customer customer, double currentDebt) {
     QuickPaymentDialog.showPayment(
       context: context,
@@ -1245,12 +1398,28 @@ class _CustomersScreenState extends State<CustomersScreen> {
       currentDebt: currentDebt,
       onPayment: (customer, amount, note) async {
         final debtProvider = context.read<DebtProvider>();
+        final openSales = await debtProvider.getOpenCreditSales(customer.id!);
+
+        List<int>? selectedSaleIds;
+        if (openSales.isNotEmpty && mounted) {
+          final paymentMode = await _showPaymentModeDialog(openSales.length);
+          if (paymentMode == null) return;
+
+          if (paymentMode == _CustomerPaymentMode.invoiceLinked) {
+            selectedSaleIds = await _showInvoiceSelectionDialog(
+              openSales: openSales,
+              paymentAmount: amount,
+            );
+            if (selectedSaleIds == null) return;
+          }
+        }
 
         try {
-          await debtProvider.addPayment(
+          await debtProvider.recordCustomerPayment(
             customerId: customer.id!,
             amount: amount,
             note: note,
+            saleIds: selectedSaleIds,
           );
 
           final updatedDebt = await debtProvider.getTotalDebtByCustomerId(
@@ -1259,6 +1428,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           _customerDebts[customer.id!] = updatedDebt;
 
           if (mounted) {
+            context.read<SalesProvider>().invalidateAndRefresh();
             setState(() {});
             await _loadDashboardStats();
             showAppToast(context, 'تم تسديد الدفعة بنجاح', ToastType.success);

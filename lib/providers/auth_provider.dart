@@ -58,6 +58,8 @@ class AuthProvider with ChangeNotifier {
         _currentUser = user;
       }
 
+      log('✅ Login successful - user role: ${_currentUser?['role']}');
+
       if (rememberMe) {
         await SecureStorageService.saveCredentials(
           normalizedEmail,
@@ -522,4 +524,3 @@ class AuthProvider with ChangeNotifier {
     }
   }
 }
-

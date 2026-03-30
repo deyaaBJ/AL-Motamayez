@@ -1,5 +1,6 @@
 // screens/customer_details_screen.dart
 import 'package:flutter/material.dart' hide Transaction;
+import 'package:motamayez/providers/sales_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/customer.dart';
@@ -237,7 +238,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           saleIds: selectedSaleIds,
         );
 
-        // تحديث البيانات بعد الإضافة
+        if (!mounted) return;
+
+        context.read<SalesProvider>().invalidateAndRefresh();
+
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _refreshData();
         });
@@ -407,7 +411,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           note: note,
         );
 
-        // تحديث البيانات بعد الإضافة
+        if (!mounted) return;
+
+        // ✅ تحديث المبيعات + بيانات العميل
+        context.read<SalesProvider>().invalidateAndRefresh();
+
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _refreshData();
         });

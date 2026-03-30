@@ -1,5 +1,6 @@
 // screens/sales_history_screen.dart
 import 'dart:async';
+import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:motamayez/providers/DebtProvider.dart';
@@ -8,6 +9,7 @@ import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/providers/auth_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/screens/pos_screen.dart';
 import '../providers/sales_provider.dart';
 import '../widgets/SaleDetailsDialog.dart';
@@ -39,23 +41,32 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     });
   }
 
-  // ✅ دالة منفصلة للتهيئة مع حماية
   void _initializeData() {
     if (_isInitializing) return;
     _isInitializing = true;
 
     final provider = context.read<SalesProvider>();
+    final auth = context.read<AuthProvider>();
+
+    if (auth.role == 'tax') {
+      provider.enableTaxMode();
+      provider.reset();
+      provider.fetchSales(forceRefresh: true);
+      _isInitializing = false;
+      return;
+    }
+
+    provider.disableTaxMode();
 
     if (provider.hasLoadedSales) {
       _isInitializing = false;
       return;
     }
 
-    // ✅ تحميل السنة الحالية مسبقاً
     if (provider.selectedYear == null) {
       provider.setYearFilter(DateTime.now().year);
     } else {
-      provider.fetchSales();
+      provider.fetchSales(forceRefresh: true);
     }
 
     _isInitializing = false;
@@ -74,9 +85,20 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     if (state == AppLifecycleState.resumed) {
       final now = DateTime.now();
       final provider = context.read<SalesProvider>();
+      final auth = context.read<AuthProvider>();
       final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
 
-      if (!isCurrentRoute || provider.isLoading || provider.hasLoadedSales) {
+      if (!isCurrentRoute || provider.isLoading) {
+        return;
+      }
+
+      // 🔹 إذا كان المستخدم ضريبة، أعد تحميل البيانات دائماً
+      if (auth.role == 'tax') {
+        provider.invalidateAndRefresh();
+        return;
+      }
+
+      if (provider.hasLoadedSales) {
         return;
       }
       if (_lastResumeRefreshAt != null &&
@@ -175,21 +197,80 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
 
   // ✅ Widget منفصل للمحتوى لعزل الـ Rebuilds
   Widget _buildSalesContent(bool isMobile, bool isTablet, bool isDesktop) {
-    return Consumer2<SalesProvider, SettingsProvider>(
-      builder: (context, salesProvider, settingsProvider, _) {
-        if (salesProvider.sales.isEmpty && !salesProvider.isLoading) {
+    return Consumer3<SalesProvider, SettingsProvider, AuthProvider>(
+      builder: (context, salesProvider, settingsProvider, authProvider, _) {
+        if (salesProvider.isLoading && salesProvider.sales.isEmpty) {
+          return Center(
+            child: CircularProgressIndicator(color: Color(0xFF6A3093)),
+          );
+        }
+
+        if (authProvider.role == 'tax') {
+          if (salesProvider.sales.isEmpty && !salesProvider.isLoading) {
+            return _buildNoTaxedSalesState();
+          }
+        }
+
+        List<Sale> filteredSales = salesProvider.sales;
+
+        if (filteredSales.isEmpty && !salesProvider.isLoading) {
           return _buildEmptyState(salesProvider);
         }
 
         return isMobile
-            ? _buildMobileSalesList(salesProvider, settingsProvider)
+            ? _buildMobileSalesList(
+              salesProvider,
+              settingsProvider,
+              filteredSales,
+            )
             : _buildDesktopDataTable(
               salesProvider,
               settingsProvider,
               isTablet,
               isDesktop,
+              filteredSales,
             );
       },
+    );
+  }
+
+  // Widget لحالة عدم وجود فواتير مضمنة بالضريبة
+  Widget _buildNoTaxedSalesState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.receipt_long, size: 80, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            'لا توجد فواتير مضمنة بالضريبة',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'جميع الفواتير الموجودة غير مضمنة بالضريبة',
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () {
+              final provider = context.read<SalesProvider>();
+              provider.setYearFilter(DateTime.now().year);
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('تحديث البيانات'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6A3093),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1280,6 +1361,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
   Widget _buildMobileSalesList(
     SalesProvider salesProvider,
     SettingsProvider settingsProvider,
+    List<Sale> filteredSales,
   ) {
     return Column(
       children: [
@@ -1287,13 +1369,13 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
         Expanded(
           child: ListView.builder(
             controller: _verticalScrollController,
-            itemCount: salesProvider.sales.length + 1,
+            itemCount: filteredSales.length + 1,
             itemBuilder: (context, index) {
-              if (index == salesProvider.sales.length) {
+              if (index == filteredSales.length) {
                 if (salesProvider.isLoading) {
                   return _buildLoadingIndicator(salesProvider);
                 }
-                if (!salesProvider.hasMore && salesProvider.sales.isNotEmpty) {
+                if (!salesProvider.hasMore && filteredSales.isNotEmpty) {
                   return _buildEndOfListIndicator(salesProvider);
                 }
                 if (salesProvider.hasMore && !salesProvider.isLoading) {
@@ -1302,7 +1384,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                 return Container();
               }
 
-              final sale = salesProvider.sales[index];
+              final sale = filteredSales[index];
               return _buildMobileSaleCard(
                 sale,
                 salesProvider,
@@ -1580,10 +1662,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     SettingsProvider settingsProvider,
     bool isTablet,
     bool isDesktop,
+    List<Sale> filteredSales,
   ) {
     final hasSelectedSales = salesProvider.selectedSaleIds.isNotEmpty;
 
-    if (salesProvider.sales.isEmpty && !salesProvider.isLoading) {
+    if (filteredSales.isEmpty && !salesProvider.isLoading) {
       return _buildEmptyState(salesProvider);
     }
 
@@ -1707,7 +1790,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                         rows: _buildDataTableRows(
                           salesProvider,
                           settingsProvider,
-                          salesProvider.sales,
+                          filteredSales,
                           showProfitColumn,
                           showTimeColumn,
                           showCustomerColumn,
@@ -1719,12 +1802,12 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                 if (salesProvider.isLoading)
                   _buildLoadingIndicator(salesProvider),
                 if (!salesProvider.hasMore &&
-                    salesProvider.sales.isNotEmpty &&
+                    filteredSales.isNotEmpty &&
                     !salesProvider.isLoading)
                   _buildEndOfListIndicator(salesProvider),
                 if (salesProvider.hasMore &&
                     !salesProvider.isLoading &&
-                    salesProvider.sales.isNotEmpty)
+                    filteredSales.isNotEmpty)
                   _buildLoadMoreButton(salesProvider),
               ],
             ),

@@ -57,6 +57,7 @@ class SalesProvider extends ChangeNotifier {
   // █████████████████████████████████████████████████████████████████████████
   // ████████████████████████████████ الفلاتر المؤقتة (للاختيار) ███████████████████████████████████████
   // █████████████████████████████████████████████████████████████████████████
+  bool _taxUserMode = false;
 
   String _tempSelectedPaymentType = 'الكل';
   String _tempSelectedCustomer = 'الكل';
@@ -682,7 +683,9 @@ class SalesProvider extends ChangeNotifier {
       String dateCondition = _buildDateWhereClause(args);
 
       final List<String> conditions = [dateCondition];
-
+      if (_taxUserMode) {
+        conditions.add("s.show_for_tax = 1");
+      }
       if (_selectedPaymentType != 'الكل') {
         final paymentValue = _selectedPaymentType.toLowerCase();
 
@@ -754,6 +757,16 @@ class SalesProvider extends ChangeNotifier {
 
       if (result.isNotEmpty) {
         final sales = result.map((row) => Sale.fromMap(row)).toList();
+
+        // 🔍 تتبع البيانات المحملة من قاعدة البيانات
+        log('📥 Loaded ${sales.length} sales from DB');
+        for (int i = 0; i < (sales.length > 3 ? 3 : sales.length); i++) {
+          final sale = sales[i];
+          log(
+            '  Sale[$i]: id=${sale.id}, showForTax=${sale.showForTax}, amount=${sale.totalAmount}',
+          );
+        }
+
         if (loadMore) {
           _allSales.addAll(sales);
           // ✅ لا نزيد _page هنا لأننا زيدناها قبل الاستعلام
@@ -1517,6 +1530,16 @@ class SalesProvider extends ChangeNotifier {
     _allSales.clear();
     _displayedSales.clear();
     _hasMore = true;
+    _selectedTaxFilter = 'الكل';
+    _tempSelectedTaxFilter = 'الكل';
     _fetchSalesWithFilters(forceRefresh: true);
+  }
+
+  void enableTaxMode() {
+    _taxUserMode = true;
+  }
+
+  void disableTaxMode() {
+    _taxUserMode = false;
   }
 }

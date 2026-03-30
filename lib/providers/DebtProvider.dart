@@ -141,11 +141,11 @@ class DebtProvider extends ChangeNotifier {
       if (selectedSaleIds.isNotEmpty) {
         final placeholders = List.filled(selectedSaleIds.length, '?').join(',');
         final rows = await txn.rawQuery('''
-          SELECT id, customer_id, payment_type, total_amount, paid_amount, remaining_amount, date
-          FROM sales
-          WHERE id IN ($placeholders)
-          ORDER BY date ASC, id ASC
-          ''', selectedSaleIds);
+        SELECT id, customer_id, payment_type, total_amount, paid_amount, remaining_amount, date
+        FROM sales
+        WHERE id IN ($placeholders)
+        ORDER BY date ASC, id ASC
+      ''', selectedSaleIds);
 
         if (rows.isEmpty || rows.length != selectedSaleIds.length) {
           throw Exception('بعض الفواتير المحددة غير موجودة.');
@@ -155,7 +155,6 @@ class DebtProvider extends ChangeNotifier {
           if (sale['payment_type'] != 'credit') {
             throw Exception('يمكن ربط السداد بالفواتير الآجلة فقط.');
           }
-
           if (sale['customer_id'] != customerId) {
             throw Exception('تم اختيار فواتير لا تخص هذا العميل.');
           }
@@ -188,6 +187,33 @@ class DebtProvider extends ChangeNotifier {
         if (amount > totalRemaining + 0.0001) {
           throw Exception('مبلغ السداد أكبر من المتبقي في الفواتير المحددة.');
         }
+      } else {
+        // سداد عام — يوزع تلقائياً على الفواتير المفتوحة من الأقدم للأحدث
+        final rows = await txn.rawQuery(
+          '''
+        SELECT id, total_amount, paid_amount, remaining_amount
+        FROM sales
+        WHERE customer_id = ?
+          AND payment_type = 'credit'
+          AND COALESCE(remaining_amount, total_amount) > 0
+        ORDER BY date ASC, id ASC
+      ''',
+          [customerId],
+        );
+
+        targetSales =
+            rows
+                .map(
+                  (row) => {
+                    'id': row['id'] as int,
+                    'total_amount': _safeToDouble(row['total_amount']),
+                    'paid_amount': _safeToDouble(row['paid_amount']),
+                    'remaining_amount': _safeToDouble(
+                      row['remaining_amount'] ?? row['total_amount'],
+                    ),
+                  },
+                )
+                .toList();
       }
 
       final transactionId = await txn.insert('transactions', {
@@ -199,7 +225,7 @@ class DebtProvider extends ChangeNotifier {
             note ??
             (targetSales.isEmpty
                 ? 'سداد عام على الحساب'
-                : 'سداد مربوط بـ ${targetSales.length} فاتورة'),
+                : 'سداد عام - مربوط بـ ${targetSales.length} فاتورة'),
       });
 
       double remainingPayment = amount;

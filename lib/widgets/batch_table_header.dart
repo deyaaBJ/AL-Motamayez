@@ -1,11 +1,6 @@
 // lib/widgets/batch_table_header.dart
 import 'package:flutter/material.dart';
 
-// lib/widgets/batch_table_header.dart
-// lib/widgets/batch_table_header.dart
-// في lib/widgets/batch_table_header.dart
-// أو يمكنك تركها كما هي، أو إضافة تلميح صغير
-
 class BatchTableHeader extends StatelessWidget {
   const BatchTableHeader({super.key});
 

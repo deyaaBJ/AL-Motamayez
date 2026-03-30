@@ -1591,4 +1591,46 @@ class ProductProvider with ChangeNotifier {
       log('❌ خطأ في تحميل الفواتير: $e');
     }
   }
+
+  // 🔍 دالة تشخيصية: اطبع جميع البيانات من قاعدة البيانات
+  Future<void> debugPrintAllSalesFromDB() async {
+    try {
+      final db = await _dbHelper.db;
+
+      // اطبع جميع الفواتير بدون فلترة
+      final allSales = await db.query('sales', orderBy: 'date DESC');
+      log('🔍 DEBUG: Total sales in DB: ${allSales.length}');
+
+      // اطبع الفواتير بـ show_for_tax = 1
+      final taxSales = await db.query(
+        'sales',
+        where: 'show_for_tax = ?',
+        whereArgs: [1],
+        orderBy: 'date DESC',
+      );
+      log('🔍 DEBUG: Sales with show_for_tax=1: ${taxSales.length}');
+
+      // اطبع تفاصيل أول 5 فواتير
+      for (int i = 0; i < (allSales.length > 5 ? 5 : allSales.length); i++) {
+        final sale = allSales[i];
+        log(
+          '  Sale[$i]: id=${sale['id']}, show_for_tax=${sale['show_for_tax']}, total=${sale['total_amount']}, date=${sale['date']}',
+        );
+      }
+
+      // اطبع البيانات مع user_id
+      final salesWithUser = await db.rawQuery('''
+        SELECT id, user_id, show_for_tax, date, total_amount
+        FROM sales
+        ORDER BY date DESC
+        LIMIT 5
+      ''');
+      log('🔍 DEBUG: First 5 sales with user_id:');
+      for (var sale in salesWithUser) {
+        log('  ${sale}');
+      }
+    } catch (e) {
+      log('❌ DEBUG error: $e');
+    }
+  }
 }

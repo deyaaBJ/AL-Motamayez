@@ -1270,16 +1270,17 @@ class _PosScreenState extends State<PosScreen>
       );
 
       showAppToast(context, 'تم إرسال الفاتورة إلى الطابعة', ToastType.success);
-      _completeSale();
     } catch (e) {
       log('خطأ في الطباعة: $e');
-      print('❌ خطأ تفصيلي: $e');
       showAppToast(
         context,
-        e.toString(), // عرض الخطأ كامل
-        ToastType.error,
+        'فشلت الطباعة - سيتم إتمام البيع',
+        ToastType.warning,
       );
     }
+    await Future.delayed(const Duration(seconds: 2));
+
+    _completeSale();
   }
 
   // -------- PAYMENT DIALOG --------
@@ -1457,7 +1458,12 @@ class _PosScreenState extends State<PosScreen>
       for (final item in _cartItems) {
         if (!item.isService && item.product != null) {
           final product = item.product!;
-          if (product.quantity < item.quantity) {
+          final double requiredQty =
+              item.selectedUnit != null
+                  ? item.quantity * item.selectedUnit!.containQty
+                  : item.quantity;
+
+          if (product.quantity < requiredQty) {
             showAppToast(
               context,
               'الكمية غير كافية لـ ${product.name}',
@@ -1505,7 +1511,11 @@ class _PosScreenState extends State<PosScreen>
       for (final item in _cartItems) {
         if (!item.isService && item.product != null) {
           final product = item.product!;
-          if (product.quantity < item.quantity) {
+          final double requiredQty =
+              item.selectedUnit != null
+                  ? item.quantity * item.selectedUnit!.containQty
+                  : item.quantity;
+          if (product.quantity < requiredQty) {
             showAppToast(
               context,
               'الكمية غير كافية لـ ${product.name}',
@@ -1795,7 +1805,11 @@ class _PosScreenState extends State<PosScreen>
       for (final item in _cartItems) {
         if (!item.isService && item.product != null) {
           final product = item.product!;
-          if (product.quantity < item.quantity) {
+          final double requiredQty =
+              item.selectedUnit != null
+                  ? item.quantity * item.selectedUnit!.containQty
+                  : item.quantity;
+          if (product.quantity < requiredQty) {
             showAppToast(
               context,
               'الكمية غير كافية لـ ${product.name}',
