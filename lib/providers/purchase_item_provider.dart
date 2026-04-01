@@ -7,38 +7,38 @@ class PurchaseItemProvider with ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
 
   // إضافة عنصر شراء + تحديث المخزون (نسخة معدلة لدعم الوحدات)
-  Future<void> addPurchaseItem({
+  Future<int> addPurchaseItem({
     required int purchaseId,
     required int productId,
-    required double quantity, // الكمية الفعلية (القطع)
-    required double
-    costPrice, // سعر تكلفة القطعة الواحدة (تم حسابها في _addItem)
+    required double quantity,
+    required double costPrice,
     bool isUnit = false,
     int? unitId,
     double unitContainQty = 1.0,
   }) async {
     final db = await _dbHelper.db;
+    int purchaseItemId = 0;
 
     await db.transaction((txn) async {
       double displayQuantity = quantity;
 
       if (isUnit && unitContainQty > 1) {
-        displayQuantity = quantity / unitContainQty; // عدد الوحدات
+        displayQuantity = quantity / unitContainQty;
       }
 
-      // 1️⃣ إضافة عنصر الفاتورة مع معلومات الوحدة
-      // ⬅️ مش محتاج unit_cost_price، بس cost_price (سعر القطعة الواحدة)
-      await txn.insert('purchase_items', {
+      // ✅ التعديل هنا: شيلنا purchase_item_id من الإدراج
+      purchaseItemId = await txn.insert('purchase_items', {
         'purchase_id': purchaseId,
         'product_id': productId,
-        'quantity': quantity, // الكمية الفعلية (القطع)
-        'cost_price': costPrice, // سعر تكلفة القطعة الواحدة (هذا فقط)
+        'quantity': quantity,
+        'cost_price': costPrice,
         'subtotal': quantity * costPrice,
-        'unit_id': unitId, // حفظ معرف الوحدة
+        'unit_id': unitId,
         'display_quantity': displayQuantity,
+        // ❌ ما تحط purchase_item_id هنا
       });
 
-      // 2️⃣ جلب بيانات المنتج الحالية
+      // جلب بيانات المنتج الحالية
       final productResult = await txn.query(
         'products',
         where: 'id = ?',
@@ -53,20 +53,18 @@ class PurchaseItemProvider with ChangeNotifier {
       final oldQty = (product['quantity'] as num).toDouble();
       final oldCost = (product['cost_price'] as num).toDouble();
 
-      // 3️⃣ حساب المتوسط المرجح للتكلفة
+      // حساب المتوسط المرجح للتكلفة
       final totalOldCost = oldQty * oldCost;
-      final totalNewCost =
-          quantity * costPrice; // ⬅️ نستخدم costPrice (سعر القطعة)
+      final totalNewCost = quantity * costPrice;
       final totalQty = oldQty + quantity;
 
-      // حساب متوسط التكلفة الجديد
       double newAverageCost = costPrice;
 
       if (totalQty > 0) {
         newAverageCost = (totalOldCost + totalNewCost) / totalQty;
       }
 
-      // تحديث المنتج بالكمية الفعلية ومتوسط السعر الجديد
+      // تحديث المنتج
       await txn.update(
         'products',
         {'quantity': totalQty, 'cost_price': newAverageCost},
@@ -74,12 +72,12 @@ class PurchaseItemProvider with ChangeNotifier {
         whereArgs: [productId],
       );
 
-      // 4️⃣ تسجيل المعلومات في اللوغ للمراقبة
       log('''
     📊 عملية شراء منتج:
     المنتج ID: $productId
     -------------------------
     معلومات الشراء:
+    - Purchase Item ID: $purchaseItemId
     - الكمية الفعلية: $quantity قطعة
     - سعر تكلفة القطعة: ${Formatters.formatCurrency(costPrice)}
     - إجمالي التكلفة: ${Formatters.formatCurrency(totalNewCost)}
@@ -95,6 +93,7 @@ class PurchaseItemProvider with ChangeNotifier {
     });
 
     notifyListeners();
+    return purchaseItemId; // ✅ ترجع الـ ID الفعلي
   }
 
   // في PurchaseItemProvider، أضف هذه الدالة:

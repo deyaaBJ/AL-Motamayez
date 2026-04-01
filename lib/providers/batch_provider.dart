@@ -37,7 +37,6 @@ class BatchProvider with ChangeNotifier {
     _batches.clear();
   }
 
-  // تحميل الدفعات مع JOIN على products
   Future<List<Batch>> loadBatches({
     bool reset = false,
     BatchFilter? filter,
@@ -62,24 +61,31 @@ class BatchProvider with ChangeNotifier {
 
       final db = await _dbHelper.db;
 
-      // بناء الاستعلام مع JOIN
+      // ✅ استعلام يجلب جميع الدفعات (مع وبدون صلاحية)
       String query = '''
-        SELECT 
-          pb.*,
-          p.name as product_name,
-          p.barcode as product_barcode,
-          CASE 
-            WHEN pb.expiry_date IS NULL THEN 9999
-            ELSE julianday(pb.expiry_date) - julianday('now')
-          END as days_remaining
-        FROM product_batches pb
-        LEFT JOIN products p ON pb.product_id = p.id
-        WHERE pb.active = 1
-      ''';
+      SELECT 
+        pb.*,
+        p.name as product_name,
+        p.barcode as product_barcode,
+        p.has_expiry,
+        s.name as supplier_name,
+        pi.id as purchase_invoice_id,
+        pit.purchase_id,
+        CASE 
+          WHEN pb.expiry_date = '2099-12-31' THEN 9999
+          WHEN pb.expiry_date IS NULL THEN 9999
+          ELSE julianday(pb.expiry_date) - julianday('now')
+        END as days_remaining
+      FROM product_batches pb
+      LEFT JOIN products p ON pb.product_id = p.id
+      LEFT JOIN purchase_items pit ON pb.purchase_item_id = pit.id
+      LEFT JOIN purchase_invoices pi ON pit.purchase_id = pi.id
+      LEFT JOIN suppliers s ON pi.supplier_id = s.id
+      WHERE pb.active = 1
+    ''';
 
       final List<Object?> args = [];
 
-      // تطبيق الفلاتر
       if (_currentFilter != null) {
         final filterClause = _currentFilter!.buildWhereClause(args);
         if (filterClause.isNotEmpty) {
@@ -87,11 +93,16 @@ class BatchProvider with ChangeNotifier {
         }
       }
 
-      // ترتيب النتائج
       query += '''
-        ORDER BY pb.expiry_date ASC
-        LIMIT ? OFFSET ?
-      ''';
+      ORDER BY 
+        CASE 
+          WHEN pb.expiry_date = '2099-12-31' THEN 1
+          WHEN pb.expiry_date IS NULL THEN 1
+          ELSE 0
+        END,
+        pb.expiry_date ASC
+      LIMIT ? OFFSET ?
+    ''';
 
       args.addAll([_limit, _page * _limit]);
 
@@ -103,24 +114,41 @@ class BatchProvider with ChangeNotifier {
           _batches = [];
         }
       } else {
-        // تحويل النتائج
         final newBatches =
             result.map((map) {
+              // ✅ معالجة اسم المورد
+              String? supplierName = map['supplier_name'] as String?;
+              if (supplierName == null || supplierName.isEmpty) {
+                supplierName = 'غير محدد';
+              }
+
+              // ✅ معالجة الأيام المتبقية
+              int daysRemaining;
+              final expiryDate = map['expiry_date'] as String?;
+              if (expiryDate == '2099-12-31' ||
+                  expiryDate == null ||
+                  expiryDate.isEmpty) {
+                daysRemaining = 9999; // عدد كبير يعني بدون صلاحية
+              } else {
+                daysRemaining =
+                    (map['days_remaining'] as num?)?.toInt() ?? 9999;
+              }
+
               return Batch.fromMap(
                 map,
                 productName: map['product_name'] as String?,
                 productBarcode: map['product_barcode'] as String?,
+                supplierName: supplierName,
+                purchaseInvoiceId: map['purchase_invoice_id'] as int?,
               );
             }).toList();
 
-        // تحديث الحالة
         _page++;
 
         if (newBatches.length < _limit) {
           _hasMore = false;
         }
 
-        // إضافة الدفعات الجديدة للقائمة
         if (reset) {
           _batches = newBatches;
         } else {
@@ -128,9 +156,7 @@ class BatchProvider with ChangeNotifier {
         }
       }
 
-      // تحميل العدد الإجمالي
       await _loadTotalBatches();
-
       return _batches;
     } catch (e) {
       log('Error loading batches: $e');
@@ -175,26 +201,32 @@ class BatchProvider with ChangeNotifier {
   }
 
   // البحث عن دفعات
+  // البحث عن دفعات مع اسم المورد
   Future<List<Batch>> searchBatches(String query) async {
     try {
       final db = await _dbHelper.db;
 
       final result = await db.rawQuery(
         '''
-        SELECT 
-          pb.*,
-          p.name as product_name,
-          p.barcode as product_barcode,
-          CASE 
-            WHEN pb.expiry_date IS NULL THEN 9999
-            ELSE julianday(pb.expiry_date) - julianday('now')
-          END as days_remaining
-        FROM product_batches pb
-        LEFT JOIN products p ON pb.product_id = p.id
-        WHERE pb.active = 1 AND (p.name LIKE ? OR p.barcode LIKE ?)
-        ORDER BY pb.expiry_date ASC
-      ''',
-        ['%$query%', '%$query%'],
+      SELECT 
+        pb.*,
+        p.name as product_name,
+        p.barcode as product_barcode,
+        s.name as supplier_name,
+        pi.id as purchase_invoice_id,
+        CASE 
+          WHEN pb.expiry_date IS NULL THEN 9999
+          ELSE julianday(pb.expiry_date) - julianday('now')
+        END as days_remaining
+      FROM product_batches pb
+      LEFT JOIN products p ON pb.product_id = p.id
+      LEFT JOIN purchase_items pit ON pb.purchase_item_id = pit.id
+      LEFT JOIN purchase_invoices pi ON pit.purchase_id = pi.id
+      LEFT JOIN suppliers s ON pi.supplier_id = s.id
+      WHERE pb.active = 1 AND (p.name LIKE ? OR p.barcode LIKE ? OR s.name LIKE ?)
+      ORDER BY pb.expiry_date ASC
+    ''',
+        ['%$query%', '%$query%', '%$query%'],
       );
 
       return result.map((map) {
@@ -202,6 +234,8 @@ class BatchProvider with ChangeNotifier {
           map,
           productName: map['product_name'] as String?,
           productBarcode: map['product_barcode'] as String?,
+          supplierName: map['supplier_name'] as String?,
+          purchaseInvoiceId: map['purchase_invoice_id'] as int?,
         );
       }).toList();
     } catch (e) {
@@ -332,7 +366,6 @@ class BatchProvider with ChangeNotifier {
     try {
       final db = await _dbHelper.db;
 
-      // الحصول على الدفعة الحالية
       final batchData = await db.query(
         'product_batches',
         where: 'id = ?',
@@ -352,37 +385,28 @@ class BatchProvider with ChangeNotifier {
         throw Exception('الكمية المطلوبة أكبر من الكمية المتاحة');
       }
 
-      // تحديث كمية الدفعة
       await db.update(
         'product_batches',
-        {'remaining_quantity': newQuantity},
+        {'remaining_quantity': newQuantity, if (newQuantity == 0) 'active': 0},
         where: 'id = ?',
         whereArgs: [batchId],
       );
 
-      // إذا صارت الكمية 0، نعطل الدفعة تلقائياً
-      if (newQuantity == 0) {
-        await db.update(
-          'product_batches',
-          {'active': 0},
-          where: 'id = ?',
-          whereArgs: [batchId],
-        );
-      }
-
-      // تحديث كمية المنتج (نطرح فقط الكمية التي تم التخلص منها)
       await _updateProductQuantity(productId, disposedQuantity);
 
-      // تحديث القائمة المحلية
+      // ✅ تحديث القائمة المحلية
       final index = _batches.indexWhere((b) => b.id == batchId);
       if (index != -1) {
-        _batches[index].remainingQuantity = newQuantity;
-        if (newQuantity == 0) {
-          _batches[index].active = false;
+        if (newQuantity > 0) {
+          _batches[index].remainingQuantity = newQuantity;
+        } else {
+          _batches.removeAt(index);
         }
       }
 
+      // ✅ لا نعمل loadBatches جديدة، فقط نحدث الواجهة
       notifyListeners();
+
       log('✅ تم التخلص من $disposedQuantity من الدفعة ID: $batchId');
     } catch (e) {
       log('❌ خطأ في التخلص من الدفعة: $e');
@@ -390,25 +414,30 @@ class BatchProvider with ChangeNotifier {
     }
   }
 
-  // دالة للحصول على دفعة معينة
+  // دالة للحصول على دفعة معينة// دالة للحصول على دفعة معينة مع اسم المورد
   Future<Batch?> getBatchById(int batchId) async {
     try {
       final db = await _dbHelper.db;
 
       final result = await db.rawQuery(
         '''
-        SELECT 
-          pb.*,
-          p.name as product_name,
-          p.barcode as product_barcode,
-          CASE 
-            WHEN pb.expiry_date IS NULL THEN 9999
-            ELSE julianday(pb.expiry_date) - julianday('now')
-          END as days_remaining
-        FROM product_batches pb
-        LEFT JOIN products p ON pb.product_id = p.id
-        WHERE pb.id = ?
-      ''',
+      SELECT 
+        pb.*,
+        p.name as product_name,
+        p.barcode as product_barcode,
+        s.name as supplier_name,
+        pi.id as purchase_invoice_id,
+        CASE 
+          WHEN pb.expiry_date IS NULL THEN 9999
+          ELSE julianday(pb.expiry_date) - julianday('now')
+        END as days_remaining
+      FROM product_batches pb
+      LEFT JOIN products p ON pb.product_id = p.id
+      LEFT JOIN purchase_items pit ON pb.purchase_item_id = pit.id
+      LEFT JOIN purchase_invoices pi ON pit.purchase_id = pi.id
+      LEFT JOIN suppliers s ON pi.supplier_id = s.id
+      WHERE pb.id = ?
+    ''',
         [batchId],
       );
 
@@ -417,6 +446,8 @@ class BatchProvider with ChangeNotifier {
           result.first,
           productName: result.first['product_name'] as String?,
           productBarcode: result.first['product_barcode'] as String?,
+          supplierName: result.first['supplier_name'] as String?,
+          purchaseInvoiceId: result.first['purchase_invoice_id'] as int?,
         );
       }
       return null;
@@ -537,17 +568,21 @@ class BatchProvider with ChangeNotifier {
     }
   }
 
+  // إضافة دفعة جديدة (للمنتجات مع صلاحية وبدون صلاحية)
   Future<int> addProductBatch({
     required int productId,
     required int? purchaseItemId,
     required double quantity,
     required double remainingQuantity,
     required double costPrice,
-    required String expiryDate,
+    String? expiryDate, // ✅ صار اختياري (nullable)
     String? productionDate,
   }) async {
     try {
       final db = await _dbHelper.db;
+
+      // ✅ إذا كان expiryDate = null، استخدم تاريخ بعيد (مثلاً 31-12-2099)
+      final finalExpiryDate = expiryDate ?? '2099-12-31';
 
       final batchId = await db.insert('product_batches', {
         'product_id': productId,
@@ -555,38 +590,40 @@ class BatchProvider with ChangeNotifier {
         'quantity': quantity,
         'remaining_quantity': remainingQuantity,
         'cost_price': costPrice,
-        'expiry_date': expiryDate,
+        'expiry_date': finalExpiryDate, // ✅ دائماً له تاريخ
         'production_date': productionDate,
         'active': 1,
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // تحديث القائمة
-      await loadBatches(reset: true, filter: _currentFilter);
-
+      log('✅ تم إضافة دفعة ID: $batchId للمنتج $productId');
       return batchId;
     } catch (e) {
-      print('خطأ في إضافة الدفعة: $e');
+      log('❌ خطأ في إضافة الدفعة: $e');
       rethrow;
     }
   }
 
-  // دالة لتحميل الدفعات حسب المنتج
   Future<List<Batch>> getBatchesByProduct(int productId) async {
     try {
       final db = await _dbHelper.db;
 
       final result = await db.rawQuery(
         '''
-        SELECT 
-          pb.*,
-          p.name as product_name,
-          p.barcode as product_barcode
-        FROM product_batches pb
-        LEFT JOIN products p ON pb.product_id = p.id
-        WHERE pb.product_id = ? AND pb.remaining_quantity > 0
-        ORDER BY pb.expiry_date ASC
-      ''',
+      SELECT 
+        pb.*,
+        p.name as product_name,
+        p.barcode as product_barcode,
+        s.name as supplier_name,
+        pi.id as purchase_invoice_id
+      FROM product_batches pb
+      LEFT JOIN products p ON pb.product_id = p.id
+      LEFT JOIN purchase_items pit ON pb.purchase_item_id = pit.id
+      LEFT JOIN purchase_invoices pi ON pit.purchase_id = pi.id
+      LEFT JOIN suppliers s ON pi.supplier_id = s.id
+      WHERE pb.product_id = ? AND pb.remaining_quantity > 0
+      ORDER BY pb.expiry_date ASC
+    ''',
         [productId],
       );
 
@@ -595,6 +632,8 @@ class BatchProvider with ChangeNotifier {
           map,
           productName: map['product_name'] as String?,
           productBarcode: map['product_barcode'] as String?,
+          supplierName: map['supplier_name'] as String?, // ✅ اسم المورد
+          purchaseInvoiceId: map['purchase_invoice_id'] as int?,
         );
       }).toList();
     } catch (e) {
@@ -896,6 +935,178 @@ class BatchProvider with ChangeNotifier {
       log('✅ تم تحميل ${_batches.length} دفعة مع فلتر: $filterType');
     } catch (e) {
       log('❌ خطأ في تحميل الدفعات مع الفلتر: $e');
+    }
+  }
+
+  // دالة لإرجاع الدفعة للمورد
+  Future<void> returnBatchToSupplier(int batchId, double returnQuantity) async {
+    try {
+      final db = await _dbHelper.db;
+
+      // جلب معلومات الدفعة
+      final batchResult = await db.rawQuery(
+        '''
+      SELECT 
+        pb.*,
+        pit.id as purchase_item_id,
+        pit.purchase_id,
+        pi.supplier_id,
+        s.name as supplier_name,
+        pi.total_cost,
+        pi.remaining_amount
+      FROM product_batches pb
+      LEFT JOIN purchase_items pit ON pb.purchase_item_id = pit.id
+      LEFT JOIN purchase_invoices pi ON pit.purchase_id = pi.id
+      LEFT JOIN suppliers s ON pi.supplier_id = s.id
+      WHERE pb.id = ?
+    ''',
+        [batchId],
+      );
+
+      if (batchResult.isEmpty) throw Exception('الدفعة غير موجودة');
+
+      final batch = batchResult.first;
+      final supplierId = batch['supplier_id'] as int?;
+      if (supplierId == null) throw Exception('لا يوجد مورد مرتبط بهذه الدفعة');
+
+      final currentQty = (batch['remaining_quantity'] as num).toDouble();
+      final costPrice = (batch['cost_price'] as num).toDouble();
+      final productId = batch['product_id'] as int;
+      final purchaseInvoiceId = batch['purchase_id'] as int?;
+      final purchaseItemId = batch['purchase_item_id'] as int?;
+      final returnAmount = returnQuantity * costPrice;
+      final newQty = currentQty - returnQuantity;
+
+      if (newQty < 0) throw Exception('الكمية المطلوبة أكبر من الكمية المتاحة');
+
+      await db.transaction((txn) async {
+        // تحديث كمية الدفعة
+        await txn.update(
+          'product_batches',
+          {'remaining_quantity': newQty, if (newQty == 0) 'active': 0},
+          where: 'id = ?',
+          whereArgs: [batchId],
+        );
+
+        // تحديث كمية المنتج
+        final productData = await txn.query(
+          'products',
+          columns: ['quantity'],
+          where: 'id = ?',
+          whereArgs: [productId],
+        );
+        if (productData.isNotEmpty) {
+          final currentProductQty =
+              (productData.first['quantity'] as num).toDouble();
+          final newProductQty = (currentProductQty - returnQuantity).clamp(
+            0,
+            double.infinity,
+          );
+          await txn.update(
+            'products',
+            {'quantity': newProductQty},
+            where: 'id = ?',
+            whereArgs: [productId],
+          );
+        }
+
+        // تحديث عنصر الفاتورة
+        if (purchaseItemId != null) {
+          final itemResult = await txn.query(
+            'purchase_items',
+            where: 'id = ?',
+            whereArgs: [purchaseItemId],
+          );
+
+          if (itemResult.isNotEmpty) {
+            final currentItemQuantity =
+                (itemResult.first['quantity'] as num).toDouble();
+            final newItemQuantity = (currentItemQuantity - returnQuantity)
+                .clamp(0, double.infinity);
+            final newItemSubtotal = newItemQuantity * costPrice;
+
+            await txn.update(
+              'purchase_items',
+              {'quantity': newItemQuantity, 'subtotal': newItemSubtotal},
+              where: 'id = ?',
+              whereArgs: [purchaseItemId],
+            );
+          }
+        }
+
+        // تسجيل حركة الإرجاع
+        await txn.insert('supplier_transactions', {
+          'supplier_id': supplierId,
+          'purchase_invoice_id': purchaseInvoiceId,
+          'amount': returnAmount,
+          'type': 'return',
+          'date': DateTime.now().toIso8601String(),
+          'note': 'إرجاع ${returnQuantity.toStringAsFixed(2)} وحدة',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+
+        // تحديث رصيد المورد
+        await txn.rawUpdate(
+          '''
+        UPDATE supplier_balance
+        SET balance = balance - ?, last_updated = ?
+        WHERE supplier_id = ?
+      ''',
+          [returnAmount, DateTime.now().toIso8601String(), supplierId],
+        );
+
+        // تحديث الفاتورة
+        if (purchaseInvoiceId != null) {
+          final invoiceResult = await txn.query(
+            'purchase_invoices',
+            where: 'id = ?',
+            whereArgs: [purchaseInvoiceId],
+          );
+
+          if (invoiceResult.isNotEmpty) {
+            final currentTotalCost =
+                (invoiceResult.first['total_cost'] as num).toDouble();
+            final currentRemainingAmount =
+                (invoiceResult.first['remaining_amount'] as num).toDouble();
+
+            final newTotalCost = (currentTotalCost - returnAmount).clamp(
+              0,
+              double.infinity,
+            );
+            final newRemainingAmount = (currentRemainingAmount - returnAmount)
+                .clamp(0, double.infinity);
+
+            await txn.update(
+              'purchase_invoices',
+              {
+                'total_cost': newTotalCost,
+                'remaining_amount': newRemainingAmount,
+                'updated_at': DateTime.now().toIso8601String(),
+              },
+              where: 'id = ?',
+              whereArgs: [purchaseInvoiceId],
+            );
+          }
+        }
+      });
+
+      // ✅ تحديث القائمة المحلية - نحذف الدفعة فقط من القائمة الحالية
+      final index = _batches.indexWhere((b) => b.id == batchId);
+      if (index != -1) {
+        if (newQty > 0) {
+          _batches[index].remainingQuantity = newQty;
+        } else {
+          _batches.removeAt(index);
+        }
+      }
+
+      // ✅ لا نعمل loadBatches جديدة، فقط نحدث الواجهة
+      notifyListeners();
+
+      log('✅ تم إرجاع $returnQuantity وحدة من الدفعة #$batchId');
+    } catch (e) {
+      log('❌ خطأ في إرجاع الدفعة للمورد: $e');
+      rethrow;
     }
   }
 }

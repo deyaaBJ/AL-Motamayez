@@ -461,7 +461,7 @@ class DBHelper {
         supplier_id INTEGER NOT NULL,
         purchase_invoice_id INTEGER,
         amount REAL NOT NULL,
-        type TEXT NOT NULL CHECK (type IN ('purchase', 'payment')),
+        type TEXT NOT NULL CHECK (type IN ('purchase', 'payment','return')),
         date TEXT NOT NULL,
         note TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,

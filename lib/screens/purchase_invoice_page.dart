@@ -1601,47 +1601,46 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
       int batchCount = 0;
 
-      // في دالة _saveInvoice في PurchaseInvoicePage
-      // في دالة _saveInvoice في PurchaseInvoicePage
       for (final item in invoiceItems) {
         final productId = item['product_id'] as int;
-        final quantity =
-            (item['quantity'] as num).toDouble(); // الكمية الفعلية (القطع)
-        final costPrice =
-            (item['cost_price'] as num)
-                .toDouble(); // سعر تكلفة القطعة الواحدة (تم حسابها في _addItem)
+        final quantity = (item['quantity'] as num).toDouble();
+        final costPrice = (item['cost_price'] as num).toDouble();
         final hasExpiry = item['has_expiry'] as bool;
         final isUnit = item['is_unit'] as bool? ?? false;
         final unitId = item['unit_id'] as int?;
         final unitContainQty =
             (item['unit_contain_qty'] as num?)?.toDouble() ?? 1.0;
 
-        // ⬅️ تمرير معلومات الوحدة
-        await purchaseItemProvider.addPurchaseItem(
+        final purchaseItemId = await purchaseItemProvider.addPurchaseItem(
           purchaseId: _invoiceId!,
           productId: productId,
           quantity: quantity,
-          costPrice: costPrice, // ⬅️ سعر تكلفة القطعة الواحدة فقط
+          costPrice: costPrice,
           isUnit: isUnit,
           unitId: unitId,
           unitContainQty: unitContainQty,
         );
 
+        // ✅ إضافة دفعة لكل المنتجات (سواء عندها صلاحية أو لأ)
+        String? expiryDate;
         if (hasExpiry) {
-          final expiryDateStr = item['expiry_date'] as String;
-
-          await productBatchProvider.addProductBatch(
-            productId: productId,
-            purchaseItemId: null,
-            quantity: quantity, // ⬅️ استخدام الكمية الفعلية
-            remainingQuantity: quantity,
-            costPrice: costPrice, // ⬅️ استخدام سعر تكلفة القطعة الواحدة
-            expiryDate: expiryDateStr.split('T')[0],
-            productionDate: null,
-          );
-
-          batchCount++;
+          expiryDate = item['expiry_date'] as String?;
+          if (expiryDate != null && expiryDate.isNotEmpty) {
+            expiryDate = expiryDate.split('T')[0];
+          }
         }
+
+        await productBatchProvider.addProductBatch(
+          productId: productId,
+          purchaseItemId: purchaseItemId,
+          quantity: quantity,
+          remainingQuantity: quantity,
+          costPrice: costPrice,
+          expiryDate: expiryDate, // ✅ null للمنتجات بدون صلاحية
+          productionDate: null,
+        );
+
+        batchCount++;
       }
 
       String successMessage = 'تم حفظ الفاتورة بنجاح رقم #$_invoiceId';

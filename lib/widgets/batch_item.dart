@@ -37,7 +37,7 @@ class BatchItem extends StatelessWidget {
           children: [
             // اسم المنتج
             Expanded(
-              flex: 3,
+              flex: 1,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -68,7 +68,21 @@ class BatchItem extends StatelessWidget {
                 ],
               ),
             ),
-
+            // ✅ المورد (جديد)
+            Expanded(
+              flex: 1,
+              child: Text(
+                batch.supplierName ?? 'غير محدد',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                  color: Colors.blue.shade700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             // الكمية المتبقية
             Expanded(
               flex: 1,
@@ -94,28 +108,18 @@ class BatchItem extends StatelessWidget {
               ),
             ),
 
-            // تاريخ الإنتاج
-            Expanded(
-              flex: 1,
-              child: Text(
-                batch.productionDate != null
-                    ? dateFormat.format(DateTime.parse(batch.productionDate!))
-                    : '--/--/--',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-              ),
-            ),
-
             // تاريخ الانتهاء
             Expanded(
               flex: 1,
               child: Text(
-                dateFormat.format(DateTime.parse(batch.expiryDate)),
+                batch.hasExpiry
+                    ? dateFormat.format(DateTime.parse(batch.expiryDate))
+                    : 'بدون صلاحية',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 11,
-                  color: _getStatusColor(),
+                  color: batch.hasExpiry ? _getStatusColor() : Colors.grey,
                 ),
               ),
             ),
@@ -126,16 +130,24 @@ class BatchItem extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                 decoration: BoxDecoration(
-                  color: _getDaysRemainingColor(),
+                  color:
+                      batch.hasExpiry
+                          ? _getDaysRemainingColor()
+                          : Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  batch.daysRemaining >= 0 ? '${batch.daysRemaining}' : 'انتهى',
+                  batch.hasExpiry
+                      ? (batch.daysRemaining >= 0
+                          ? '${batch.daysRemaining}'
+                          : 'انتهى')
+                      : '---',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 10,
-                    color: Colors.white,
+                    color:
+                        batch.hasExpiry ? Colors.white : Colors.grey.shade700,
                   ),
                 ),
               ),
@@ -147,16 +159,22 @@ class BatchItem extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                 decoration: BoxDecoration(
-                  color: _getStatusBackgroundColor(),
+                  color:
+                      batch.hasExpiry
+                          ? _getStatusBackgroundColor()
+                          : Colors.grey.shade200,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  _getStatusText(),
+                  batch.status,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 10,
-                    color: _getStatusColor(),
+                    color:
+                        batch.hasExpiry
+                            ? _getStatusColor()
+                            : Colors.grey.shade600,
                   ),
                 ),
               ),
@@ -212,18 +230,18 @@ class BatchItem extends StatelessWidget {
                         ),
                       ),
                       PopupMenuItem(
-                        value: 'delete',
+                        value: 'return_to_supplier',
                         child: Row(
                           children: [
                             Icon(
-                              Icons.delete_forever,
-                              color: Colors.red,
+                              Icons.assignment_return,
+                              color: Colors.blue,
                               size: 14,
                             ),
                             SizedBox(width: 6),
                             Text(
-                              'حذف نهائي',
-                              style: TextStyle(fontSize: 12, color: Colors.red),
+                              'إرجاع للمورد',
+                              style: TextStyle(fontSize: 12),
                             ),
                           ],
                         ),
@@ -273,8 +291,8 @@ class BatchItem extends StatelessWidget {
       case 'dispose':
         await _disposeBatch(context);
         break;
-      case 'delete':
-        await _deleteBatch(context);
+      case 'return_to_supplier':
+        await _returnToSupplier(context);
         break;
     }
   }
@@ -470,5 +488,138 @@ class BatchItem extends StatelessWidget {
         );
       }
     }
+  }
+
+  Future<void> _returnToSupplier(BuildContext context) async {
+    if (batch.remainingQuantity == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('هذه الدفعة فارغة!'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final returnQuantity = await _showReturnDialog(context);
+    if (returnQuantity == null || returnQuantity <= 0) return;
+
+    if (returnQuantity > batch.remainingQuantity) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('الكمية المدخلة أكبر من الكمية المتبقية!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final returnAmount = returnQuantity * batch.costPrice;
+
+    final confirmed = await showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('إرجاع للمورد'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('الكمية المُرجَعة: ${returnQuantity.toStringAsFixed(2)}'),
+                SizedBox(height: 6),
+                Text(
+                  'المبلغ المُسترجَع: ${returnAmount.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'سيبقى في الدفعة: ${(batch.remainingQuantity - returnQuantity).toStringAsFixed(2)}',
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('تأكيد الإرجاع'),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await provider.returnBatchToSupplier(batch.id!, returnQuantity);
+        onUpdate(); // ✅ هذا بينادي رفرش الواجهة
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم إرجاع $returnQuantity وحدة'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<double?> _showReturnDialog(BuildContext context) {
+    final controller = TextEditingController(
+      text: batch.remainingQuantity.toStringAsFixed(2),
+    );
+
+    return showDialog<double>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('كمية الإرجاع'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('أدخل الكمية التي تريد إرجاعها للمورد:'),
+                SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: 'الكمية',
+                    suffixText:
+                        'المتبقي: ${batch.remainingQuantity.toStringAsFixed(2)}',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'سعر الشراء: ${batch.costPrice.toStringAsFixed(2)} لكل وحدة',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                onPressed: () {
+                  final value = double.tryParse(controller.text);
+                  Navigator.pop(context, value);
+                },
+                child: const Text('متابعة'),
+              ),
+            ],
+          ),
+    );
   }
 }

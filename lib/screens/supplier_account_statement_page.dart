@@ -497,17 +497,26 @@ class _SupplierAccountStatementPageState
     int index,
     double maxWidth,
   ) {
-    final type = transaction['type'] as String;
+    final type =
+        transaction['type'] as String; // 'purchase', 'payment', 'return'
     final amount = (transaction['amount'] as num).toDouble();
     final date =
         transaction['date'] as String? ??
         transaction['created_at'] as String? ??
         '';
     final note = transaction['note'] as String? ?? '';
-    final isPayment = type == 'payment';
     final invoiceId = transaction['purchase_invoice_id'];
     final remainingAmount = transaction['remaining_amount'] as num?;
     final paymentType = transaction['payment_type'] as String?;
+
+    // ✅ استخدم الألوان حسب النوع
+    final typeColor = _getTransactionTypeColor(type);
+    final typeBgColor = _getTransactionTypeBackgroundColor(type);
+    final typeText = _getTransactionTypeText(type);
+    final typeIcon = _getTransactionTypeIcon(type);
+
+    // تحديد سعر الحركة (الزيادة والنقصان)
+    final bool isIncrease = type == 'payment'; // المدفوعات تزيد الرصيد
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hoveredRowIndex = index),
@@ -533,17 +542,10 @@ class _SupplierAccountStatementPageState
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color:
-                        isPayment
-                            ? Colors.green.shade50
-                            : Colors.orange.shade50,
+                    color: typeBgColor,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(
-                    isPayment ? Icons.arrow_upward : Icons.arrow_downward,
-                    color: isPayment ? Colors.green : Colors.orange,
-                    size: 18,
-                  ),
+                  child: Icon(typeIcon, color: typeColor, size: 18),
                 ),
               ),
               const SizedBox(width: 12),
@@ -554,9 +556,11 @@ class _SupplierAccountStatementPageState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isPayment
-                          ? 'دفعة مالية'
-                          : 'فاتورة مشتريات ${invoiceId != null ? '#$invoiceId' : ''}',
+                      type == 'return'
+                          ? '$typeText ${invoiceId != null ? '#$invoiceId' : ''}'
+                          : type == 'purchase'
+                          ? '$typeText ${invoiceId != null ? '#$invoiceId' : ''}'
+                          : typeText,
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
@@ -608,13 +612,22 @@ class _SupplierAccountStatementPageState
               SizedBox(
                 width: 100,
                 child: Text(
-                  Formatters.formatCurrency(amount),
+                  (type == 'payment'
+                          ? '+ '
+                          : type == 'return'
+                          ? '- '
+                          : '') +
+                      Formatters.formatCurrency(amount),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                     color:
-                        isPayment ? Colors.green.shade700 : Colors.red.shade700,
+                        type == 'payment'
+                            ? Colors.green.shade700
+                            : type == 'return'
+                            ? Colors.blue.shade700
+                            : Colors.red.shade700,
                   ),
                 ),
               ),
@@ -625,13 +638,38 @@ class _SupplierAccountStatementPageState
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      if (!isPayment &&
+                      // للإرجاع
+                      if (type == 'return')
+                        Tooltip(
+                          message: 'إرجاع للمورد',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'إرجاع',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.blue.shade800,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      // للفواتير المتبقي
+                      if (type == 'purchase' &&
                           remainingAmount != null &&
                           remainingAmount > 0)
                         Tooltip(
                           message:
                               'متبقي: ${Formatters.formatCurrency(remainingAmount.toDouble())}',
                           child: Container(
+                            margin: const EdgeInsets.only(right: 4),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 6,
                               vertical: 2,
@@ -650,7 +688,8 @@ class _SupplierAccountStatementPageState
                             ),
                           ),
                         ),
-                      if (paymentType != null && !isPayment)
+                      // للفواتير طريقة الدفع
+                      if (paymentType != null && type == 'purchase')
                         Tooltip(
                           message: _translatePaymentType(paymentType),
                           child: Container(
@@ -660,14 +699,14 @@ class _SupplierAccountStatementPageState
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade100,
+                              color: Colors.purple.shade100,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
                               _translatePaymentType(paymentType),
                               style: TextStyle(
                                 fontSize: 10,
-                                color: Colors.blue.shade800,
+                                color: Colors.purple.shade800,
                               ),
                             ),
                           ),
@@ -683,8 +722,13 @@ class _SupplierAccountStatementPageState
   }
 
   void _showTransactionDetails(Map<String, dynamic> transaction) {
-    final type = transaction['type'] as String;
-    final isPayment = type == 'payment';
+    final type =
+        transaction['type'] as String; // 'purchase', 'payment', 'return'
+    final typeColor = _getTransactionTypeColor(type);
+    final typeBgColor = _getTransactionTypeBackgroundColor(type);
+    final typeText = _getTransactionTypeText(type);
+    final typeIcon = _getTransactionTypeIcon(type);
+    final isReturn = type == 'return';
 
     showModalBottomSheet(
       context: context,
@@ -716,17 +760,10 @@ class _SupplierAccountStatementPageState
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color:
-                            isPayment
-                                ? Colors.green.shade50
-                                : Colors.orange.shade50,
+                        color: typeBgColor,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(
-                        isPayment ? Icons.payment : Icons.receipt,
-                        color: isPayment ? Colors.green : Colors.orange,
-                        size: 28,
-                      ),
+                      child: Icon(typeIcon, color: typeColor, size: 28),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -734,27 +771,33 @@ class _SupplierAccountStatementPageState
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isPayment ? 'دفعة مالية' : 'فاتورة مشتريات',
+                            typeText,
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          Text(
-                            'رقم: ${transaction['purchase_invoice_id'] ?? transaction['id']}',
-                            style: TextStyle(color: Colors.grey.shade600),
-                          ),
+                          if (transaction['purchase_invoice_id'] != null)
+                            Text(
+                              'رقم: ${transaction['purchase_invoice_id']}',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
                         ],
                       ),
                     ),
                     Text(
-                      Formatters.formatCurrency(
-                        (transaction['amount'] as num).toDouble(),
-                      ),
+                      (type == 'payment'
+                              ? '+ '
+                              : type == 'return'
+                              ? '- '
+                              : '') +
+                          Formatters.formatCurrency(
+                            (transaction['amount'] as num).toDouble(),
+                          ),
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: isPayment ? Colors.green : Colors.red,
+                        color: typeColor,
                       ),
                     ),
                   ],
@@ -772,12 +815,12 @@ class _SupplierAccountStatementPageState
                     transaction['date'] ?? transaction['created_at'] ?? '',
                   ),
                 ),
-                if (transaction['payment_type'] != null)
+                if (type == 'purchase' && transaction['payment_type'] != null)
                   _buildDetailRow(
                     'طريقة الدفع',
                     _translatePaymentType(transaction['payment_type']),
                   ),
-                if (!isPayment &&
+                if (type == 'purchase' &&
                     transaction['remaining_amount'] != null &&
                     (transaction['remaining_amount'] as num) > 0)
                   _buildDetailRow(
@@ -786,6 +829,8 @@ class _SupplierAccountStatementPageState
                       (transaction['remaining_amount'] as num).toDouble(),
                     ),
                   ),
+                if (type == 'return' && transaction['note'] != null)
+                  _buildDetailRow('سبب الإرجاع', transaction['note']),
                 if (transaction['note'] != null &&
                     (transaction['note'] as String).isNotEmpty)
                   _buildDetailRow('ملاحظات', transaction['note']),
@@ -794,6 +839,58 @@ class _SupplierAccountStatementPageState
             ),
           ),
     );
+  }
+
+  Color _getTransactionTypeColor(String type) {
+    switch (type) {
+      case 'purchase':
+        return Colors.red.shade700; // مشتريات - أحمر
+      case 'payment':
+        return Colors.green.shade700; // مدفوعات - أخضر
+      case 'return':
+        return Colors.blue.shade700; // إرجاع - أزرق (لون واضح)
+      default:
+        return Colors.grey.shade700;
+    }
+  }
+
+  Color _getTransactionTypeBackgroundColor(String type) {
+    switch (type) {
+      case 'purchase':
+        return Colors.red.shade50;
+      case 'payment':
+        return Colors.green.shade50;
+      case 'return':
+        return Colors.blue.shade50; // إرجاع - أزرق فاتح
+      default:
+        return Colors.grey.shade50;
+    }
+  }
+
+  String _getTransactionTypeText(String type) {
+    switch (type) {
+      case 'purchase':
+        return 'فاتورة شراء';
+      case 'payment':
+        return 'دفعة مالية';
+      case 'return':
+        return 'إرجاع للمورد'; // إرجاع
+      default:
+        return 'حركة';
+    }
+  }
+
+  IconData _getTransactionTypeIcon(String type) {
+    switch (type) {
+      case 'purchase':
+        return Icons.shopping_cart_outlined;
+      case 'payment':
+        return Icons.payments_outlined;
+      case 'return':
+        return Icons.assignment_return; // أيقونة الإرجاع
+      default:
+        return Icons.receipt_outlined;
+    }
   }
 
   Widget _buildDetailRow(String label, String value) {

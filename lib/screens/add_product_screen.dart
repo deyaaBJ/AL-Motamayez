@@ -1028,7 +1028,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _nameController.text = '';
     _priceController.text = '';
     _costPriceController.text = '';
-    _quantityController.text = '1';
+    _quantityController.text = '0';
     _selectedUnit = 'piece';
     _showUnitsSection = false;
     _unitControllers.clear();

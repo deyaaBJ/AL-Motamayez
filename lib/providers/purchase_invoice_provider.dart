@@ -689,4 +689,186 @@ class PurchaseInvoiceProvider with ChangeNotifier {
     _tempDiscountValue = 0.0;
     notifyListeners();
   }
+
+  // أضف هذه الدالة في PurchaseInvoiceProvider
+  Future<void> updateInvoiceForReturn({
+    required int invoiceId,
+    required double returnAmount,
+    required String note,
+  }) async {
+    try {
+      final db = await _dbHelper.db;
+
+      // جلب بيانات الفاتورة الحالية
+      final currentInvoice = await getInvoiceById(invoiceId);
+
+      double newTotalCost = currentInvoice['total_cost'] - returnAmount;
+      double newPaidAmount = currentInvoice['paid_amount'];
+      double newRemainingAmount = currentInvoice['remaining_amount'];
+
+      // تحديث المبلغ المتبقي
+      if (newRemainingAmount > 0) {
+        // إذا كان فيه دين، نقص من الدين
+        newRemainingAmount = newRemainingAmount - returnAmount;
+        if (newRemainingAmount < 0) newRemainingAmount = 0;
+      }
+
+      // تحديث الفاتورة
+      await db.update(
+        'purchase_invoices',
+        {
+          'total_cost': newTotalCost,
+          'remaining_amount': newRemainingAmount,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      // تسجيل حركة الإرجاع
+      await db.insert('supplier_transactions', {
+        'supplier_id': currentInvoice['supplier_id'],
+        'purchase_invoice_id': invoiceId,
+        'amount': returnAmount,
+        'type': 'return', // ✅ بعد ما تضيف return في CHECK constraint
+        'date': DateTime.now().toIso8601String(),
+        'note': note,
+      });
+
+      // تحديث رصيد المورد (نقص الرصيد)
+      await db.rawInsert(
+        '''
+      INSERT INTO supplier_balance (supplier_id, balance, last_updated)
+      VALUES (?, ?, ?)
+      ON CONFLICT(supplier_id)
+      DO UPDATE SET
+        balance = balance - ?,
+        last_updated = ?
+      ''',
+        [
+          currentInvoice['supplier_id'],
+          returnAmount,
+          DateTime.now().toIso8601String(),
+          returnAmount,
+          DateTime.now().toIso8601String(),
+        ],
+      );
+
+      log('✅ تم تحديث الفاتورة #$invoiceId للإرجاع بمبلغ: $returnAmount');
+
+      // تحديث القائمة
+      await refreshInvoices();
+    } catch (e) {
+      log('❌ خطأ في تحديث الفاتورة للإرجاع: $e');
+      rethrow;
+    }
+  }
+
+  // دالة لتسجيل الإرجاع بدون ربط بفاتورة (إرجاع مستقل)
+  Future<void> addReturnTransaction({
+    required int supplierId,
+    required double returnAmount,
+    required String note,
+    int? purchaseInvoiceId, // اختياري: إذا كان الإرجاع مرتبط بفاتورة
+  }) async {
+    try {
+      final db = await _dbHelper.db;
+
+      // تسجيل حركة الإرجاع
+      await db.insert('supplier_transactions', {
+        'supplier_id': supplierId,
+        'purchase_invoice_id': purchaseInvoiceId, // ممكن يكون null
+        'amount': returnAmount,
+        'type': 'return',
+        'date': DateTime.now().toIso8601String(),
+        'note': note,
+      });
+
+      // تحديث رصيد المورد (نقص الرصيد)
+      await db.rawInsert(
+        '''
+      INSERT INTO supplier_balance (supplier_id, balance, last_updated)
+      VALUES (?, ?, ?)
+      ON CONFLICT(supplier_id)
+      DO UPDATE SET
+        balance = balance - ?,
+        last_updated = ?
+      ''',
+        [
+          supplierId,
+          returnAmount,
+          DateTime.now().toIso8601String(),
+          returnAmount,
+          DateTime.now().toIso8601String(),
+        ],
+      );
+
+      // إذا كان الإرجاع مرتبط بفاتورة، نقوم بتحديث الفاتورة
+      if (purchaseInvoiceId != null) {
+        await updateInvoiceForReturn(
+          invoiceId: purchaseInvoiceId,
+          returnAmount: returnAmount,
+          note: note,
+        );
+      }
+
+      log('✅ تم تسجيل حركة إرجاع بقيمة: $returnAmount');
+
+      // تحديث القائمة
+      await refreshInvoices();
+    } catch (e) {
+      log('❌ خطأ في تسجيل حركة الإرجاع: $e');
+      rethrow;
+    }
+  }
+
+  // دالة للحصول على تفاصيل الفاتورة مع عناصرها
+  Future<Map<String, dynamic>> getInvoiceDetails(int invoiceId) async {
+    try {
+      final db = await _dbHelper.db;
+
+      // جلب الفاتورة
+      final invoice = await getInvoiceById(invoiceId);
+
+      // جلب عناصر الفاتورة
+      final items = await db.rawQuery(
+        '''
+      SELECT 
+        pi.*,
+        p.name as product_name,
+        p.barcode,
+        pu.unit_name
+      FROM purchase_items pi
+      LEFT JOIN products p ON p.id = pi.product_id
+      LEFT JOIN product_units pu ON pu.id = pi.unit_id
+      WHERE pi.purchase_id = ?
+    ''',
+        [invoiceId],
+      );
+
+      // جلب معاملات الإرجاع للفاتورة
+      final returns = await db.rawQuery(
+        '''
+      SELECT *
+      FROM supplier_transactions
+      WHERE purchase_invoice_id = ? AND type = 'return'
+      ORDER BY date DESC
+    ''',
+        [invoiceId],
+      );
+
+      return {
+        'invoice': invoice,
+        'items': items,
+        'returns': returns,
+        'total_returned': returns.fold<double>(
+          0.0,
+          (sum, item) => sum + _safeDouble(item['amount']),
+        ),
+      };
+    } catch (e) {
+      log('❌ خطأ في جلب تفاصيل الفاتورة: $e');
+      rethrow;
+    }
+  }
 }

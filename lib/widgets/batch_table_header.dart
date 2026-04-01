@@ -14,8 +14,9 @@ class BatchTableHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // اسم المنتج
           Expanded(
-            flex: 3,
+            flex: 1,
             child: Text(
               'المنتج',
               style: TextStyle(
@@ -25,6 +26,20 @@ class BatchTableHeader extends StatelessWidget {
               ),
             ),
           ),
+          // ✅ المورد (جديد)
+          Expanded(
+            flex: 1,
+            child: Text(
+              'المورد',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          // الكمية المتبقية
           Expanded(
             flex: 1,
             child: Text(
@@ -37,6 +52,7 @@ class BatchTableHeader extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ),
+          // سعر الشراء
           Expanded(
             flex: 1,
             child: Text(
@@ -49,30 +65,33 @@ class BatchTableHeader extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ),
+
+          // تاريخ الانتهاء
           Expanded(
             flex: 1,
-            child: Text(
-              'إنتاج',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontSize: 13,
-              ),
-              textAlign: TextAlign.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'انتهاء',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontSize: 13,
+                  ),
+                ),
+                Tooltip(
+                  message: 'المنتجات بدون صلاحية تظهر كـ "بدون صلاحية"',
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 12,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
             ),
           ),
-          Expanded(
-            flex: 1,
-            child: Text(
-              'انتهاء',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontSize: 13,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
+          // الأيام المتبقية
           Expanded(
             flex: 1,
             child: Text(
@@ -85,6 +104,7 @@ class BatchTableHeader extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ),
+          // الحالة
           Expanded(
             flex: 1,
             child: Text(
@@ -97,6 +117,7 @@ class BatchTableHeader extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ),
+          // الإجراءات
           Expanded(
             flex: 1,
             child: Row(
@@ -112,7 +133,7 @@ class BatchTableHeader extends StatelessWidget {
                 ),
                 SizedBox(width: 4),
                 Tooltip(
-                  message: 'تعديل • تفاصيل • تخلص • حذف',
+                  message: 'تعديل • تفاصيل • تخلص • إرجاع للمورد',
                   child: Icon(
                     Icons.info_outline,
                     size: 12,

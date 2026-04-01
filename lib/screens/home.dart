@@ -566,13 +566,13 @@ class _MainScreenState extends State<MainScreen> {
               icon: Icons.bar_chart,
               label: "التقارير",
               color: const Color(0xFF7C3AED),
-              onTap: () => Navigator.pushNamed(context, '/reports'),
+              onTap: () => Navigator.pushNamed(context, '/report'),
             ),
             _buildCompactActionItem(
               icon: Icons.people,
               label: "العملاء",
               color: const Color(0xFF3B82F6),
-              onTap: () => Navigator.pushNamed(context, '/customers'),
+              onTap: () => Navigator.pushNamed(context, '/customer'),
             ),
             _buildCompactActionItem(
               icon: Icons.settings,

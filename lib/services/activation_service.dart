@@ -71,11 +71,10 @@ class ActivationService {
     final db = await _dbHelper.db;
     await _ensureActivationTable(db);
     await db.delete('activation');
-    await db.insert(
-      'activation',
-      {'id': 1, 'signature': encrypted},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('activation', {
+      'id': 1,
+      'signature': encrypted,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('activation_signature', encrypted);
@@ -106,11 +105,10 @@ class ActivationService {
       final encrypted = prefs.getString('activation_signature');
       if (encrypted == null || encrypted.isEmpty) return null;
 
-      await db.insert(
-        'activation',
-        {'id': 1, 'signature': encrypted},
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await db.insert('activation', {
+        'id': 1,
+        'signature': encrypted,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       return EncryptionService.decrypt(encrypted);
     } catch (_) {
       return null;
@@ -208,31 +206,76 @@ class ActivationService {
     } catch (_) {}
   }
 
+  // activation_service.dart
+
   Future<Map<String, dynamic>> getActivationInfo() async {
     try {
-      final db = await _dbHelper.db;
-      await _ensureActivationTable(db);
-      final result = await db.query('activation', limit: 1);
-
-      final prefs = await SharedPreferences.getInstance();
-      final deviceId = prefs.getString('device_id') ?? 'Unavailable';
-      final activationCode = prefs.getString('activation_code');
-
+      // ✅ استخدم الدوال الموجودة
       final storedSignature = await _getStoredSignature();
-      final expectedSignature =
-          deviceId == 'Unavailable' ? null : _generateSignature(deviceId);
+      final storedCode = await getStoredActivationCode();
 
-      return {
-        'device_id': _maskValue(deviceId),
-        'activation_code': activationCode,
-        'stored_signature': _maskValue(storedSignature),
-        'expected_signature': _maskValue(expectedSignature),
-        'is_valid': storedSignature != null && storedSignature == expectedSignature,
-        'has_activation': result.isNotEmpty,
-      };
+      final hasActivation = storedSignature != null && storedCode != null;
+
+      if (!hasActivation) {
+        return {'has_activation': false, 'status': 'not_activated'};
+      }
+
+      // ✅ تحقق من صحة التوقيع
+      try {
+        final isValid = await isActivated();
+
+        if (isValid) {
+          return {
+            'has_activation': true,
+            'status': 'valid',
+            'activation_code': storedCode,
+            'signature': storedSignature,
+          };
+        } else {
+          return {
+            'has_activation': true,
+            'status': 'invalid',
+            'activation_code': storedCode,
+            'signature': storedSignature,
+          };
+        }
+      } on ActivationException catch (e) {
+        return {
+          'has_activation': true,
+          'status': 'invalid',
+          'activation_code': storedCode,
+          'signature': storedSignature,
+          'stored_signature': e.storedSignature,
+          'expected_signature': e.expectedSignature,
+        };
+      }
     } catch (e) {
-      return {'error': e.toString()};
+      return {
+        'has_activation': false,
+        'status': 'error',
+        'error': e.toString(),
+      };
     }
+  }
+
+  Future<bool> _hasActivationFiles() async {
+    try {
+      final storedSignature = await _getStoredSignature();
+      final storedCode = await getStoredActivationCode();
+      return storedSignature != null && storedCode != null;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ✅ دالة لقراءة كود التفعيل (موجودة بالفعل getStoredActivationCode)
+  Future<String?> _readActivationCode() async {
+    return await getStoredActivationCode();
+  }
+
+  // ✅ دالة لقراءة التوقيع (موجودة بالفعل _getStoredSignature)
+  Future<String?> _readSignature() async {
+    return await _getStoredSignature();
   }
 
   Future<void> checkDatabase() async {

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:motamayez/providers/DebtProvider.dart';
 import 'package:motamayez/providers/cashier_activity_provider.dart';
@@ -47,24 +48,57 @@ final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
 
 void main() async {
-  await ('ar', null);
+  // تهيئة التواريخ العربية
+  await initializeDateFormatting('ar', null);
 
+  // تهيئة Flutter
   WidgetsFlutterBinding.ensureInitialized();
 
+  // ========== تهيئة Windows ==========
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    // تهيئة قاعدة البيانات
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
 
+    // تهيئة النافذة
     await windowManager.ensureInitialized();
     await windowManager.setTitle('المتميز');
     await windowManager.setMinimumSize(const Size(1000, 700));
   }
 
+  if (Platform.isWindows) {
+    FlutterError.onError = (FlutterErrorDetails details) {
+      final errorMessage = details.exceptionAsString();
+
+      if (errorMessage.contains('viewId') ||
+          errorMessage.contains('Accessibility') ||
+          errorMessage.contains('accessibility_plugin') ||
+          errorMessage.contains('FlutterViewId')) {
+        return;
+      }
+
+      FlutterError.dumpErrorToConsole(details);
+    };
+
+    PlatformDispatcher.instance.onError = (error, stack) {
+      final errorStr = error.toString();
+      if (errorStr.contains('viewId') ||
+          errorStr.contains('Accessibility') ||
+          errorStr.contains('accessibility_plugin')) {
+        return true;
+      }
+      return false;
+    };
+  }
+
+  // ========== تهيئة قاعدة البيانات ==========
   final dbHelper = DBHelper();
   await dbHelper.db;
 
+  // ========== تهيئة Auth Provider ==========
   final authProvider = AuthProvider();
 
+  // ========== تشغيل التطبيق ==========
   runApp(
     MultiProvider(
       providers: [
@@ -100,12 +134,16 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
   @override
   void initState() {
     super.initState();
-    windowManager.addListener(this);
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      windowManager.addListener(this);
+    }
   }
 
   @override
   void dispose() {
-    windowManager.removeListener(this);
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      windowManager.removeListener(this);
+    }
     super.dispose();
   }
 
@@ -121,6 +159,7 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
     await windowManager.destroy();
   }
 
+  // main.dart
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -128,14 +167,20 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
       navigatorObservers: [routeObserver],
       debugShowCheckedModeBanner: false,
       title: 'المتميز',
-      theme: ThemeData(primarySwatch: Colors.purple, fontFamily: 'Poppins'),
+      theme: ThemeData(
+        primarySwatch: Colors.purple,
+        fontFamily: 'Poppins',
+        useMaterial3: true,
+      ),
       home: const AppEntry(),
       routes: {
         '/login': (_) => const LoginScreen(),
         '/home': (_) => const MainScreen(),
         '/product': (_) => const ProductsScreen(),
+        '/products': (_) => const ProductsScreen(), // ✅ أضف هذا
         '/pos': (_) => const PosScreen(),
         '/customer': (_) => const CustomersScreen(),
+        '/customers': (_) => const CustomersScreen(), // ✅ أضف هذا
         '/salesHistory': (_) => const SalesHistoryScreen(),
         '/report': (_) => const ReportsScreen(),
         '/settings': (_) => const SettingsScreen(),
@@ -171,31 +216,32 @@ class _AppEntryState extends State<AppEntry> {
     _activationCheck = _checkActivation();
   }
 
+  // main.dart - AppEntry
   Future<Map<String, dynamic>> _checkActivation() async {
     try {
       final activationService = ActivationService();
       final info = await activationService.getActivationInfo();
 
-      if (info['has_activation'] == true) {
-        try {
-          final isValid = await activationService.isActivated();
-          return {
-            ...info,
-            'status': isValid ? 'valid' : 'invalid',
-            'error': null,
-          };
-        } on ActivationException catch (e) {
-          return {
-            ...info,
-            'status': 'invalid',
-            'error': e,
-            'stored_signature': e.storedSignature,
-            'expected_signature': e.expectedSignature,
-          };
-        }
-      }
+      final status = info['status'];
 
-      return {...info, 'status': 'not_activated', 'error': null};
+      switch (status) {
+        case 'valid':
+          return {'status': 'valid'};
+
+        case 'invalid':
+          return {
+            'status': 'invalid',
+            'stored_signature': info['stored_signature'],
+            'expected_signature': info['expected_signature'],
+            'activation_code': info['activation_code'],
+          };
+
+        case 'not_activated':
+          return {'status': 'not_activated'};
+
+        default:
+          return {'status': 'error', 'error': info['error']};
+      }
     } catch (e) {
       return {'status': 'error', 'error': e.toString()};
     }
