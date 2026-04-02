@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
@@ -27,10 +28,17 @@ class ActivationException implements Exception {
 }
 
 class ActivationService {
+  ActivationService({http.Client? client}) : _client = client ?? http.Client();
+
   final DBHelper _dbHelper = DBHelper();
+  final http.Client _client;
 
   static const String _secretKey = AppConstants.secretKey;
-  static final String _serverUrl = AppConstants.serverUrl;
+  static const String _requestIdKey = 'activation_request_id';
+  static const String _requestStatusKey = 'activation_request_status';
+  static const String _requestCodeKey = 'activation_request_code';
+
+  static final String _activationBaseUrl = AppConstants.activationBaseUrl;
 
   String? _maskValue(String? value) {
     if (value == null || value.isEmpty) return value;
@@ -38,7 +46,7 @@ class ActivationService {
     return '${value.substring(0, 4)}...${value.substring(value.length - 4)}';
   }
 
-  Future<String> getDeviceId() async {
+  Future<String> _getOrCreateFallbackDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     String? deviceId = prefs.getString('device_id');
 
@@ -49,6 +57,76 @@ class ActivationService {
     deviceId = const Uuid().v4();
     await prefs.setString('device_id', deviceId);
     return deviceId;
+  }
+
+  String? _normalizeHardwareValue(String? value) {
+    if (value == null) return null;
+
+    final normalized =
+        value.replaceAll(RegExp(r'\s+'), ' ').trim().toUpperCase();
+
+    if (normalized.isEmpty) return null;
+    if (normalized == 'TO BE FILLED BY O.E.M.') return null;
+    if (normalized == 'DEFAULT STRING') return null;
+    if (normalized == 'SYSTEM SERIAL NUMBER') return null;
+
+    return normalized;
+  }
+
+  Future<String?> _runPowerShellValue(String command) async {
+    try {
+      final result = await Process.run('powershell', [
+        '-NoProfile',
+        '-Command',
+        command,
+      ]);
+
+      if (result.exitCode != 0) {
+        return null;
+      }
+
+      final output = result.stdout?.toString();
+      return _normalizeHardwareValue(output);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _getWindowsDeviceFingerprint() async {
+    final machineGuid = await _runPowerShellValue(
+      r"(Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography').MachineGuid",
+    );
+    final biosSerial = await _runPowerShellValue(
+      r"(Get-CimInstance Win32_BIOS).SerialNumber",
+    );
+    final boardSerial = await _runPowerShellValue(
+      r"(Get-CimInstance Win32_BaseBoard).SerialNumber",
+    );
+
+    final parts =
+        [
+          machineGuid,
+          biosSerial,
+          boardSerial,
+        ].whereType<String>().where((value) => value.isNotEmpty).toList();
+
+    if (parts.isEmpty) {
+      return null;
+    }
+
+    final rawFingerprint = parts.join('|');
+    return sha256.convert(utf8.encode(rawFingerprint)).toString();
+  }
+
+  Future<String> getDeviceId() async {
+    if (Platform.isWindows) {
+      final fingerprint = await _getWindowsDeviceFingerprint();
+      if (fingerprint != null && fingerprint.isNotEmpty) {
+        return fingerprint;
+      }
+    }
+
+    return _getOrCreateFallbackDeviceId();
   }
 
   String _generateSignature(String deviceId) {
@@ -131,35 +209,232 @@ class ActivationService {
     }
   }
 
-  Future<bool> activate(String activationCode) async {
+  Future<void> _savePendingRequest({
+    required String requestId,
+    required String status,
+    String? assignedCode,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_requestIdKey, requestId);
+    await prefs.setString(_requestStatusKey, status);
+
+    if (assignedCode != null && assignedCode.isNotEmpty) {
+      await prefs.setString(_requestCodeKey, assignedCode);
+    } else {
+      await prefs.remove(_requestCodeKey);
+    }
+  }
+
+  Future<void> clearPendingRequest() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_requestIdKey);
+    await prefs.remove(_requestStatusKey);
+    await prefs.remove(_requestCodeKey);
+  }
+
+  Future<Map<String, dynamic>?> getSavedPendingRequest() async {
+    final prefs = await SharedPreferences.getInstance();
+    final requestId = prefs.getString(_requestIdKey);
+
+    if (requestId == null || requestId.isEmpty) {
+      return null;
+    }
+
+    return {
+      'requestId': requestId,
+      'status': prefs.getString(_requestStatusKey) ?? 'pending',
+      'assignedCode': prefs.getString(_requestCodeKey),
+    };
+  }
+
+  Future<void> _completeLocalActivation(String activationCode) async {
+    final deviceId = await getDeviceId();
+    final signature = _generateSignature(deviceId);
+    await _saveSignature(signature);
+    await _saveActivationCode(activationCode);
+    await clearPendingRequest();
+  }
+
+  Future<Map<String, dynamic>> createActivationRequest() async {
     try {
       final deviceId = await getDeviceId();
-      final response = await http
+      final response = await _client
           .post(
-            Uri.parse(_serverUrl),
+            Uri.parse('$_activationBaseUrl/request'),
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'code': activationCode, 'deviceId': deviceId}),
+            body: jsonEncode({'deviceId': deviceId}),
           )
           .timeout(const Duration(seconds: 30));
 
-      if (response.statusCode != 200) {
-        return false;
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        return {
+          'success': false,
+          'message': data['message']?.toString() ?? 'فشل إرسال طلب التفعيل',
+        };
+      }
+      if (data['status'] == 'already_activated') {
+        final activation = data['activation'] as Map<String, dynamic>?;
+        final code = activation?['code']?.toString();
+
+        return {
+          'success': true,
+          'status': 'already_activated',
+          'message': data['message']?.toString() ?? '??? ?????? ???? ??????',
+          'assignedCode': code,
+          'alreadyActivated': true,
+        };
       }
 
-      final data = jsonDecode(response.body);
-      if (data['success'] != true) {
-        return false;
+      final request = data['request'] as Map<String, dynamic>?;
+      final requestId = request?['id']?.toString();
+      final status = request?['status']?.toString() ?? 'pending';
+      final assignedCode = request?['assignedCode']?.toString();
+
+      if (requestId == null || requestId.isEmpty) {
+        return {
+          'success': false,
+          'message': 'لم يتم إرجاع رقم الطلب من السيرفر',
+        };
       }
 
-      final signature = _generateSignature(deviceId);
-      await _saveSignature(signature);
-      await _saveActivationCode(activationCode);
-      return true;
+      await _savePendingRequest(
+        requestId: requestId,
+        status: status,
+        assignedCode: assignedCode,
+      );
+
+      return {
+        'success': true,
+        'status': status,
+        'requestId': requestId,
+        'assignedCode': assignedCode,
+        'message': data['message']?.toString() ?? 'تم إرسال طلب التفعيل',
+      };
     } on TimeoutException {
-      return false;
-    } catch (_) {
-      return false;
+      return {
+        'success': false,
+        'message': 'انتهت مهلة الاتصال أثناء إرسال طلب التفعيل',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'تعذر إرسال طلب التفعيل: $e'};
     }
+  }
+
+  Future<Map<String, dynamic>> getRequestStatus({String? requestId}) async {
+    try {
+      final savedRequest = await getSavedPendingRequest();
+      final effectiveRequestId =
+          requestId ?? savedRequest?['requestId']?.toString();
+
+      if (effectiveRequestId == null || effectiveRequestId.isEmpty) {
+        return {'success': false, 'message': 'لا يوجد طلب تفعيل محفوظ'};
+      }
+
+      final deviceId = await getDeviceId();
+      final uri = Uri.parse(
+        '$_activationBaseUrl/request/$effectiveRequestId',
+      ).replace(queryParameters: {'deviceId': deviceId});
+
+      final response = await _client
+          .get(uri, headers: {'Content-Type': 'application/json'})
+          .timeout(const Duration(seconds: 30));
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (response.statusCode != 200) {
+        return {
+          'success': false,
+          'message': data['message']?.toString() ?? 'فشل جلب حالة الطلب',
+        };
+      }
+
+      final request = data['request'] as Map<String, dynamic>?;
+      final status = request?['status']?.toString() ?? 'pending';
+      final assignedCode = request?['assignedCode']?.toString();
+
+      if (status == 'rejected') {
+        await clearPendingRequest();
+      } else {
+        await _savePendingRequest(
+          requestId: effectiveRequestId,
+          status: status,
+          assignedCode: assignedCode,
+        );
+      }
+
+      return {
+        'success': true,
+        'requestId': effectiveRequestId,
+        'status': status,
+        'assignedCode': assignedCode,
+        'rejectionReason': request?['rejectionReason']?.toString(),
+        'message': data['message']?.toString(),
+      };
+    } on TimeoutException {
+      return {
+        'success': false,
+        'message': 'انتهت مهلة الاتصال أثناء فحص حالة الطلب',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'تعذر فحص حالة الطلب: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> activateWithRequest({
+    required String activationCode,
+    String? requestId,
+  }) async {
+    try {
+      final savedRequest = await getSavedPendingRequest();
+      final effectiveRequestId =
+          requestId ?? savedRequest?['requestId']?.toString();
+
+      if (effectiveRequestId == null || effectiveRequestId.isEmpty) {
+        return {
+          'success': false,
+          'message': 'أرسل طلب التفعيل أولًا قبل إدخال الكود',
+        };
+      }
+
+      final deviceId = await getDeviceId();
+      final response = await _client
+          .post(
+            Uri.parse(_activationBaseUrl),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'requestId': effectiveRequestId,
+              'code': activationCode,
+              'deviceId': deviceId,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (response.statusCode != 200 || data['success'] != true) {
+        return {
+          'success': false,
+          'message': data['message']?.toString() ?? 'فشل التفعيل',
+        };
+      }
+
+      await _completeLocalActivation(activationCode);
+      return {
+        'success': true,
+        'message': data['message']?.toString() ?? 'تم التفعيل بنجاح',
+      };
+    } on TimeoutException {
+      return {'success': false, 'message': 'انتهت مهلة الاتصال أثناء التفعيل'};
+    } catch (e) {
+      return {'success': false, 'message': 'تعذر تنفيذ التفعيل: $e'};
+    }
+  }
+
+  Future<bool> activate(String activationCode) async {
+    final result = await activateWithRequest(activationCode: activationCode);
+    return result['success'] == true;
   }
 
   Future<bool> isActivated() async {
@@ -203,14 +478,12 @@ class ActivationService {
       await prefs.remove('activation_signature');
       await prefs.remove('activation_code');
       await prefs.remove('device_id');
+      await clearPendingRequest();
     } catch (_) {}
   }
 
-  // activation_service.dart
-
   Future<Map<String, dynamic>> getActivationInfo() async {
     try {
-      // ✅ استخدم الدوال الموجودة
       final storedSignature = await _getStoredSignature();
       final storedCode = await getStoredActivationCode();
 
@@ -220,7 +493,6 @@ class ActivationService {
         return {'has_activation': false, 'status': 'not_activated'};
       }
 
-      // ✅ تحقق من صحة التوقيع
       try {
         final isValid = await isActivated();
 
@@ -256,26 +528,6 @@ class ActivationService {
         'error': e.toString(),
       };
     }
-  }
-
-  Future<bool> _hasActivationFiles() async {
-    try {
-      final storedSignature = await _getStoredSignature();
-      final storedCode = await getStoredActivationCode();
-      return storedSignature != null && storedCode != null;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // ✅ دالة لقراءة كود التفعيل (موجودة بالفعل getStoredActivationCode)
-  Future<String?> _readActivationCode() async {
-    return await getStoredActivationCode();
-  }
-
-  // ✅ دالة لقراءة التوقيع (موجودة بالفعل _getStoredSignature)
-  Future<String?> _readSignature() async {
-    return await _getStoredSignature();
   }
 
   Future<void> checkDatabase() async {
