@@ -571,6 +571,8 @@ class ProductProvider with ChangeNotifier {
     required double totalAmount,
     String paymentType = 'cash',
     int? customerId,
+    double? paidAmount,
+    double? remainingAmount,
     required String userRole,
     required int userId, // ⬅️ جديد: معرف المستخدم
   }) async {
@@ -600,20 +602,30 @@ class ProductProvider with ChangeNotifier {
         }
       }
 
+      final double resolvedPaidAmount =
+          paidAmount ?? (paymentType == 'cash' ? totalAmount : 0.0);
+      final double resolvedRemainingAmount =
+          remainingAmount ?? (paymentType == 'credit' ? totalAmount : 0.0);
+
       final saleId = await txn.insert('sales', {
         'date': DateTime.now().toIso8601String(),
         'total_amount': totalAmount,
         'total_profit': 0.0,
         'customer_id': customerId,
         'payment_type': paymentType,
-        'paid_amount': paymentType == 'cash' ? totalAmount : 0.0,
-        'remaining_amount': paymentType == 'credit' ? totalAmount : 0.0,
+        'paid_amount': resolvedPaidAmount,
+        'remaining_amount': resolvedRemainingAmount,
         'show_for_tax': showForTax,
         'user_id': userId, // ⬅️ جديد: حفظ معرف المستخدم
       });
 
       double totalProfit = 0.0;
       List<Map<String, dynamic>> allBatchDeductions = [];
+      final double grossInvoiceSubtotal = cartItems.fold(
+        0.0,
+        (sum, item) => sum + item.totalPrice,
+      );
+      final List<Map<String, dynamic>> productProfitEntries = [];
 
       // 🔹 معالجة كل عنصر في السلة
       for (var item in cartItems) {
@@ -704,8 +716,7 @@ class ProductProvider with ChangeNotifier {
             final double batchCostAmount = toDeduct * batchCost;
             itemTotalCost += batchCostAmount;
 
-            final double unitPrice =
-                item.selectedUnit?.sellPrice ?? product.price;
+            final double unitPrice = item.unitPrice;
             double soldQtyInUnit;
 
             if (item.selectedUnit != null) {
@@ -715,8 +726,7 @@ class ProductProvider with ChangeNotifier {
             }
 
             final double batchRevenue = unitPrice * soldQtyInUnit;
-            final double batchProfit =
-                batchRevenue - (batchCost * soldQtyInUnit);
+            final double batchProfit = batchRevenue - batchCostAmount;
             itemProfit += batchProfit;
 
             remainingToDeduct -= toDeduct;
@@ -727,8 +737,7 @@ class ProductProvider with ChangeNotifier {
           // إذا ما في دفعات، نحسب التكلفة من السعر الأساسي للمنتج
           itemTotalCost = requiredQtyInBaseUnit * product.costPrice;
 
-          final double unitPrice =
-              item.selectedUnit?.sellPrice ?? product.price;
+          final double unitPrice = item.unitPrice;
           double soldQtyInUnit =
               item.selectedUnit != null
                   ? requiredQtyInBaseUnit / item.selectedUnit!.containQty
@@ -755,15 +764,14 @@ class ProductProvider with ChangeNotifier {
         );
 
         // 🔹 إضافة عنصر الفاتورة
-        final double actualPrice =
-            item.selectedUnit?.sellPrice ?? product.price;
+        final double actualPrice = item.unitPrice;
         final double subtotal = actualPrice * item.quantity;
         final double avgCost =
             requiredQtyInBaseUnit > 0
                 ? itemTotalCost / requiredQtyInBaseUnit
                 : 0;
 
-        await txn.insert('sale_items', {
+        final saleItemId = await txn.insert('sale_items', {
           'sale_id': saleId,
           'item_type': 'product',
           'product_id': product.id,
@@ -778,6 +786,11 @@ class ProductProvider with ChangeNotifier {
           'batch_details': jsonEncode(itemDeductions),
         });
 
+        productProfitEntries.add({
+          'sale_item_id': saleItemId,
+          'subtotal': subtotal,
+          'profit': itemProfit,
+        });
         totalProfit += itemProfit;
 
         // 🔹 تحديث كمية المنتج الإجمالية
@@ -792,6 +805,51 @@ class ProductProvider with ChangeNotifier {
       }
 
       // 🔹 تحديث الربح الإجمالي في الفاتورة
+      final double invoiceDiscount =
+          grossInvoiceSubtotal > totalAmount ? grossInvoiceSubtotal - totalAmount : 0.0;
+
+      if (invoiceDiscount > 0 && productProfitEntries.isNotEmpty) {
+        final double productRevenueSubtotal = productProfitEntries.fold(
+          0.0,
+          (sum, entry) => sum + (entry['subtotal'] as double),
+        );
+
+        if (productRevenueSubtotal > 0) {
+          final double productDiscountShare =
+              grossInvoiceSubtotal > 0
+                  ? invoiceDiscount * (productRevenueSubtotal / grossInvoiceSubtotal)
+                  : 0.0;
+
+          double allocatedSoFar = 0.0;
+          double adjustedTotalProfit = 0.0;
+
+          for (var i = 0; i < productProfitEntries.length; i++) {
+            final entry = productProfitEntries[i];
+            final double currentProfit = entry['profit'] as double;
+            final double subtotal = entry['subtotal'] as double;
+            final bool isLast = i == productProfitEntries.length - 1;
+
+            final double allocatedDiscount =
+                isLast
+                    ? productDiscountShare - allocatedSoFar
+                    : productDiscountShare * (subtotal / productRevenueSubtotal);
+
+            allocatedSoFar += allocatedDiscount;
+            final double adjustedProfit = currentProfit - allocatedDiscount;
+            adjustedTotalProfit += adjustedProfit;
+
+            await txn.update(
+              'sale_items',
+              {'profit': adjustedProfit},
+              where: 'id = ?',
+              whereArgs: [entry['sale_item_id']],
+            );
+          }
+
+          totalProfit = adjustedTotalProfit;
+        }
+      }
+
       await txn.update(
         'sales',
         {'total_profit': totalProfit},
@@ -829,7 +887,7 @@ class ProductProvider with ChangeNotifier {
       }
 
       // 🔹 تحديث رصيد الزبون إذا كانت فاتورة آجلة
-      if (paymentType == 'credit' && customerId != null) {
+      if (customerId != null && resolvedRemainingAmount > 0) {
         await txn.rawUpdate(
           '''
         INSERT OR REPLACE INTO customer_balance 
@@ -843,7 +901,7 @@ class ProductProvider with ChangeNotifier {
           [
             customerId,
             customerId,
-            totalAmount,
+            resolvedRemainingAmount,
             DateTime.now().toIso8601String(),
           ],
         );
@@ -1036,6 +1094,11 @@ class ProductProvider with ChangeNotifier {
       // 🔹 8️⃣ إضافة العناصر الجديدة مع خصم من الدفعات
       double totalProfit = 0.0;
       List<Map<String, dynamic>> allBatchDeductions = [];
+      final double grossInvoiceSubtotal = cartItems.fold(
+        0.0,
+        (sum, item) => sum + item.totalPrice,
+      );
+      final List<Map<String, dynamic>> productProfitEntries = [];
 
       for (var item in cartItems) {
         if (item.quantity == 0) continue;
@@ -1125,8 +1188,7 @@ class ProductProvider with ChangeNotifier {
           final double batchCostAmount = toDeduct * batchCost;
           itemTotalCost += batchCostAmount;
 
-          final double unitPrice =
-              item.selectedUnit?.sellPrice ?? product.price;
+          final double unitPrice = item.unitPrice;
           double soldQtyInUnit;
 
           if (item.selectedUnit != null) {
@@ -1136,7 +1198,7 @@ class ProductProvider with ChangeNotifier {
           }
 
           final double batchRevenue = unitPrice * soldQtyInUnit;
-          final double batchProfit = batchRevenue - (batchCost * soldQtyInUnit);
+          final double batchProfit = batchRevenue - batchCostAmount;
           itemProfit += batchProfit;
 
           remainingToDeduct -= toDeduct;
@@ -1157,15 +1219,14 @@ class ProductProvider with ChangeNotifier {
           ),
         );
 
-        final double actualPrice =
-            item.selectedUnit?.sellPrice ?? product.price;
+        final double actualPrice = item.unitPrice;
         final double subtotal = actualPrice * item.quantity;
         final double avgCost =
             requiredQtyInBaseUnit > 0
                 ? itemTotalCost / requiredQtyInBaseUnit
                 : 0;
 
-        await txn.insert('sale_items', {
+        final saleItemId = await txn.insert('sale_items', {
           'sale_id': originalSale.id,
           'item_type': 'product',
           'product_id': product.id,
@@ -1180,6 +1241,11 @@ class ProductProvider with ChangeNotifier {
           'batch_details': jsonEncode(itemDeductions),
         });
 
+        productProfitEntries.add({
+          'sale_item_id': saleItemId,
+          'subtotal': subtotal,
+          'profit': itemProfit,
+        });
         totalProfit += itemProfit;
 
         await txn.rawUpdate(
@@ -1189,6 +1255,51 @@ class ProductProvider with ChangeNotifier {
       }
 
       // 🔹 9️⃣ تحديث بيانات الفاتورة الرئيسية
+      final double invoiceDiscount =
+          grossInvoiceSubtotal > totalAmount ? grossInvoiceSubtotal - totalAmount : 0.0;
+
+      if (invoiceDiscount > 0 && productProfitEntries.isNotEmpty) {
+        final double productRevenueSubtotal = productProfitEntries.fold(
+          0.0,
+          (sum, entry) => sum + (entry['subtotal'] as double),
+        );
+
+        if (productRevenueSubtotal > 0) {
+          final double productDiscountShare =
+              grossInvoiceSubtotal > 0
+                  ? invoiceDiscount * (productRevenueSubtotal / grossInvoiceSubtotal)
+                  : 0.0;
+
+          double allocatedSoFar = 0.0;
+          double adjustedTotalProfit = 0.0;
+
+          for (var i = 0; i < productProfitEntries.length; i++) {
+            final entry = productProfitEntries[i];
+            final double currentProfit = entry['profit'] as double;
+            final double subtotal = entry['subtotal'] as double;
+            final bool isLast = i == productProfitEntries.length - 1;
+
+            final double allocatedDiscount =
+                isLast
+                    ? productDiscountShare - allocatedSoFar
+                    : productDiscountShare * (subtotal / productRevenueSubtotal);
+
+            allocatedSoFar += allocatedDiscount;
+            final double adjustedProfit = currentProfit - allocatedDiscount;
+            adjustedTotalProfit += adjustedProfit;
+
+            await txn.update(
+              'sale_items',
+              {'profit': adjustedProfit},
+              where: 'id = ?',
+              whereArgs: [entry['sale_item_id']],
+            );
+          }
+
+          totalProfit = adjustedTotalProfit;
+        }
+      }
+
       await txn.update(
         'sales',
         {

@@ -6,16 +6,7 @@ import 'package:motamayez/services/activation_service.dart';
 import 'package:window_manager/window_manager.dart';
 
 class InvalidSignatureScreen extends StatelessWidget {
-  final String? storedSignature;
-  final String? expectedSignature;
-  final String? activationCode;
-
-  const InvalidSignatureScreen({
-    super.key,
-    this.storedSignature,
-    this.expectedSignature,
-    this.activationCode,
-  });
+  const InvalidSignatureScreen({super.key});
 
   Future<void> _resetAndReactivate(BuildContext context) async {
     await ActivationService().clearActivation();
@@ -58,14 +49,13 @@ class InvalidSignatureScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 const Text(
-                  'التوقيع المخزن لا يطابق هذا الجهاز',
+                  'تعذر التحقق من بيانات التفعيل على هذا الجهاز',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'غالبًا تم نقل نسخة البرنامج أو البيانات من جهاز قديم إلى جهاز جديد. '
-                  'لا يمكن الدخول إلى النظام قبل إعادة التفعيل على هذا الجهاز.',
+                  'غالبًا تم نقل نسخة البرنامج أو البيانات من جهاز آخر، أو أصبحت بيانات التفعيل الحالية غير مطابقة لهذا الجهاز. لا يمكن متابعة الدخول قبل إعادة التفعيل.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 17,
@@ -85,7 +75,7 @@ class InvalidSignatureScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'ماذا يعني هذا؟',
+                        'سبب المشكلة',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -93,78 +83,12 @@ class InvalidSignatureScreen extends StatelessWidget {
                       ),
                       SizedBox(height: 10),
                       Text(
-                        'التفعيل القديم كان مربوطًا ببصمة جهاز مختلفة. '
-                        'لذلك يجب مسح التوقيع القديم ثم إعادة التفعيل، وبعدها سيتم إنشاء توقيع جديد لهذا الجهاز.',
+                        'بيانات التفعيل المحفوظة لا تطابق هذا الجهاز حاليًا، لذلك تم إيقاف الدخول لحماية الترخيص.',
                         style: TextStyle(fontSize: 15, height: 1.6),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
-                if (activationCode != null ||
-                    storedSignature != null ||
-                    expectedSignature != null)
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'معلومات التفعيل الحالية',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        if (activationCode != null) ...[
-                          const Text(
-                            'كود التفعيل المخزن',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          SelectableText(
-                            activationCode!,
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (storedSignature != null) ...[
-                          const Text(
-                            'التوقيع المخزن',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          SelectableText(
-                            storedSignature!,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.black54,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (expectedSignature != null) ...[
-                          const Text(
-                            'التوقيع المتوقع لهذا الجهاز',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          SelectableText(
-                            expectedSignature!,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
                 const SizedBox(height: 24),
                 Container(
                   padding: const EdgeInsets.all(18),
@@ -186,11 +110,11 @@ class InvalidSignatureScreen extends StatelessWidget {
                       ),
                       SizedBox(height: 10),
                       Text(
-                        '1. اضغط على "مسح التوقيع القديم وإعادة التفعيل".\n'
+                        '1. اضغط على "إعادة التفعيل".\n'
                         '2. سيتم نقلك إلى شاشة التفعيل.\n'
                         '3. أرسل طلب التفعيل وانتظر الموافقة.\n'
-                        '4. أدخل الكود الصحيح ثم اضغط "تفعيل".\n'
-                        '5. بعد النجاح سيتم إنشاء توقيع جديد لهذا الجهاز.',
+                        '4. أدخل كود التفعيل الصحيح ثم اضغط "تفعيل".\n'
+                        '5. بعد النجاح سيُربط التفعيل بهذا الجهاز من جديد.',
                         style: TextStyle(fontSize: 15, height: 1.7),
                       ),
                     ],
@@ -205,7 +129,7 @@ class InvalidSignatureScreen extends StatelessWidget {
                     ElevatedButton.icon(
                       onPressed: () => _resetAndReactivate(context),
                       icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('مسح التوقيع القديم وإعادة التفعيل'),
+                      label: const Text('إعادة التفعيل'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange.shade700,
                         foregroundColor: Colors.white,

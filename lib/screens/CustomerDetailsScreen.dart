@@ -423,6 +423,30 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     );
   }
 
+  void _showDepositDialog(Customer customer, double currentBalance) {
+    QuickPaymentDialog.showDeposit(
+      context: context,
+      customer: customer,
+      currentBalance: currentBalance,
+      onDeposit: (customer, amount, note) async {
+        final debtProvider = Provider.of<DebtProvider>(context, listen: false);
+        await debtProvider.addDeposit(
+          customerId: customer.id!,
+          amount: amount,
+          note: note,
+        );
+
+        if (!mounted) return;
+
+        context.read<SalesProvider>().invalidateAndRefresh();
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _refreshData();
+        });
+      },
+    );
+  }
+
   Widget _buildCompactHeader(Customer customer) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final currencyName = settings.currencyName;
@@ -575,6 +599,30 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                         ],
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton.icon(
+                      onPressed:
+                          () => _showDepositDialog(widget.customer, balance),
+                      icon: const Icon(
+                        Icons.account_balance_wallet,
+                        size: 18,
+                      ),
+                      label: const Text('إيداع رصيد'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Container(

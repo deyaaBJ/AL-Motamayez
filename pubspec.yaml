@@ -51,6 +51,7 @@ dependencies:
   shared_preferences: ^2.2.2
   archive: ^3.4.10
   uuid: ^4.0.1
+  url_launcher: ^6.3.1
   
  
   

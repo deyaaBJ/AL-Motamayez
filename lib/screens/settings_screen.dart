@@ -1596,7 +1596,10 @@ class StoreSettingsScreen extends StatelessWidget {
                                 () =>
                                     onSaveMarketName(marketNameController.text),
                             icon: const Icon(Icons.save),
-                            label: const Text('حفظ الاسم'),
+                            label: const Text(
+                              'حفظ الاسم',
+                              style: TextStyle(color: Colors.white),
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF9C27B0),
                               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1975,7 +1978,10 @@ class PrinterSettingsScreen extends StatelessWidget {
                               );
                             },
                             icon: const Icon(Icons.save),
-                            label: const Text('حفظ الإعدادات'),
+                            label: const Text(
+                              'حفظ الإعدادات',
+                              style: TextStyle(color: Colors.white),
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF009688),
                               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1997,7 +2003,3 @@ class PrinterSettingsScreen extends StatelessWidget {
     );
   }
 }
-
-
-
-

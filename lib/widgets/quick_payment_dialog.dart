@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:motamayez/models/customer.dart';
 import 'package:motamayez/providers/settings_provider.dart';
+import 'package:provider/provider.dart';
 
 enum PaymentMode {
-  payment, // تسديد دفعة (العميل يدفع للمتجر)
-  withdrawal, // صرف رصيد (المتجر يدفع للعميل)
+  payment,
+  deposit,
+  withdrawal,
 }
 
 class QuickPaymentDialog {
-  // دالة لفتح نافذة المبلغ المخصص لتسديد دفعة
   static void showPayment({
     required BuildContext context,
     required Customer customer,
@@ -30,7 +30,26 @@ class QuickPaymentDialog {
     );
   }
 
-  // دالة لفتح نافذة المبلغ المخصص لصرف رصيد
+  static void showDeposit({
+    required BuildContext context,
+    required Customer customer,
+    required double currentBalance,
+    required Future<void> Function(
+      Customer customer,
+      double amount,
+      String? note,
+    )
+    onDeposit,
+  }) {
+    _showAmountDialog(
+      context: context,
+      customer: customer,
+      currentBalance: currentBalance,
+      mode: PaymentMode.deposit,
+      onConfirm: onDeposit,
+    );
+  }
+
   static void showWithdrawal({
     required BuildContext context,
     required Customer customer,
@@ -51,7 +70,6 @@ class QuickPaymentDialog {
     );
   }
 
-  // الدالة الرئيسية لعرض نافذة إدخال المبلغ
   static void _showAmountDialog({
     required BuildContext context,
     required Customer customer,
@@ -64,8 +82,8 @@ class QuickPaymentDialog {
     )
     onConfirm,
   }) {
-    final TextEditingController amountController = TextEditingController();
-    final TextEditingController noteController = TextEditingController();
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final currencyName = settings.currencyName;
 
@@ -78,22 +96,25 @@ class QuickPaymentDialog {
 
         return StatefulBuilder(
           builder: (context, setState) {
+            void clearError() {
+              setState(() {
+                errorMessage = null;
+                showError = false;
+              });
+            }
+
             void validateAmount(String value) {
               if (value.isEmpty) {
-                setState(() {
-                  errorMessage = null;
-                  showError = false;
-                });
+                clearError();
                 return;
               }
 
-              // السماح بالنقطة أو الفاصلة
               final normalizedValue = value.replaceAll(',', '.');
               final amount = double.tryParse(normalizedValue);
 
               if (amount == null) {
                 setState(() {
-                  errorMessage = 'يرجى إدخال رقم صحيح (مثال: 10.5 أو 10,5)';
+                  errorMessage = 'يرجى إدخال رقم صحيح مثل 10.5';
                   showError = true;
                 });
                 return;
@@ -107,9 +128,7 @@ class QuickPaymentDialog {
                 return;
               }
 
-              // التحقق من الشروط بناءً على نوع العملية
               if (mode == PaymentMode.payment) {
-                // في حالة تسديد دفعة: يجب أن يكون هناك دين للعميل
                 if (currentBalance <= 0) {
                   setState(() {
                     errorMessage = 'لا يوجد دين على العميل لتسديده';
@@ -118,63 +137,46 @@ class QuickPaymentDialog {
                   return;
                 }
 
-                // يجب ألا يتجاوز المبلغ الدين الحالي
                 if (amount > currentBalance) {
                   setState(() {
                     errorMessage =
-                        '⚠️ المبلغ (${amount.toStringAsFixed(2)}) أكبر من الدين الحالي!\n'
-                        'الدين الحالي: ${currentBalance.toStringAsFixed(2)} $currencyName\n'
-                        'الفرق: ${(amount - currentBalance).toStringAsFixed(2)} $currencyName';
-                    showError = true;
-                  });
-                  return;
-                }
-              } else if (mode == PaymentMode.withdrawal) {
-                // في حالة صرف رصيد: يجب أن يكون هناك رصيد للعميل (الرصيد سالب)
-                if (currentBalance >= 0) {
-                  setState(() {
-                    errorMessage = 'لا يوجد رصيد للعميل لصرفه';
-                    showError = true;
-                  });
-                  return;
-                }
-
-                // يجب ألا يتجاوز المبلغ الرصيد المتاح
-                final availableBalance = currentBalance.abs();
-                if (amount > availableBalance) {
-                  setState(() {
-                    errorMessage =
-                        '⚠️ المبلغ (${amount.toStringAsFixed(2)}) أكبر من الرصيد المتاح!\n'
-                        'الرصيد المتاح: ${availableBalance.toStringAsFixed(2)} $currencyName\n'
-                        'الفرق: ${(amount - availableBalance).toStringAsFixed(2)} $currencyName';
+                        'المبلغ أكبر من الدين الحالي.\n'
+                        'الدين الحالي: ${currentBalance.toStringAsFixed(2)} $currencyName';
                     showError = true;
                   });
                   return;
                 }
               }
 
-              setState(() {
-                errorMessage = null;
-                showError = false;
-              });
+              if (mode == PaymentMode.withdrawal) {
+                if (currentBalance >= 0) {
+                  setState(() {
+                    errorMessage = 'لا يوجد رصيد متاح للعميل ليتم صرفه';
+                    showError = true;
+                  });
+                  return;
+                }
+
+                final availableBalance = currentBalance.abs();
+                if (amount > availableBalance) {
+                  setState(() {
+                    errorMessage =
+                        'المبلغ أكبر من الرصيد المتاح.\n'
+                        'الرصيد المتاح: ${availableBalance.toStringAsFixed(2)} $currencyName';
+                    showError = true;
+                  });
+                  return;
+                }
+              }
+
+              clearError();
             }
 
-            // تحديد النصوص بناءً على نوع العملية
-            final titleText =
-                mode == PaymentMode.payment ? 'تسديد دفعة' : 'صرف رصيد';
-            final buttonText = mode == PaymentMode.payment ? 'تسديد' : 'صرف';
-            final iconColor =
-                mode == PaymentMode.payment ? Colors.green : Colors.blue;
-            final buttonColor =
-                mode == PaymentMode.payment ? Colors.green : Colors.blue;
-            final hintText =
-                mode == PaymentMode.payment
-                    ? 'أدخل مبلغ التسديد'
-                    : 'أدخل مبلغ الصرف';
-            final labelText =
-                mode == PaymentMode.payment
-                    ? 'مبلغ التسديد ($currencyName)'
-                    : 'مبلغ الصرف ($currencyName)';
+            final config = _DialogModeConfig.from(
+              mode: mode,
+              currentBalance: currentBalance,
+              currencyName: currencyName,
+            );
 
             return AlertDialog(
               shape: RoundedRectangleBorder(
@@ -186,14 +188,10 @@ class QuickPaymentDialog {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: iconColor.withOpacity(0.1),
+                      color: config.color.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Icon(
-                      mode == PaymentMode.payment ? Icons.payment : Icons.money,
-                      color: iconColor,
-                      size: 20,
-                    ),
+                    child: Icon(config.icon, color: config.color, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -201,7 +199,7 @@ class QuickPaymentDialog {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          titleText,
+                          config.title,
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -225,25 +223,21 @@ class QuickPaymentDialog {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // حقل إدخال المبلغ
                     TextField(
                       controller: amountController,
-                      keyboardType: TextInputType.numberWithOptions(
+                      keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
                       autofocus: true,
                       decoration: InputDecoration(
-                        hintText: hintText,
-                        labelText: labelText,
-                        prefixIcon: Icon(Icons.money, color: iconColor),
+                        hintText: config.amountHint,
+                        labelText: config.amountLabel,
+                        prefixIcon: Icon(Icons.money, color: config.color),
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.clear, size: 18),
                           onPressed: () {
                             amountController.clear();
-                            setState(() {
-                              errorMessage = null;
-                              showError = false;
-                            });
+                            clearError();
                           },
                         ),
                         border: OutlineInputBorder(
@@ -251,38 +245,27 @@ class QuickPaymentDialog {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(color: iconColor, width: 2),
+                          borderSide: BorderSide(
+                            color: config.color,
+                            width: 2,
+                          ),
                         ),
                       ),
-                      onChanged: (value) {
-                        validateAmount(value);
-                      },
+                      onChanged: validateAmount,
                     ),
-
                     const SizedBox(height: 16),
-
-                    // حقل الملاحظة
                     TextField(
                       controller: noteController,
                       maxLines: 3,
                       decoration: InputDecoration(
-                        hintText: 'ملاحظة (اختياري)',
+                        hintText: 'ملاحظة اختيارية',
                         labelText: 'ملاحظة',
                         prefixIcon: const Icon(Icons.note, color: Colors.grey),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Colors.grey,
-                            width: 2,
-                          ),
-                        ),
                       ),
                     ),
-
-                    // عرض الرصيد الحالي
                     Container(
                       margin: const EdgeInsets.only(top: 16),
                       padding: const EdgeInsets.all(12),
@@ -295,32 +278,23 @@ class QuickPaymentDialog {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            mode == PaymentMode.payment
-                                ? 'الدين الحالي:'
-                                : 'الرصيد المتاح:',
+                            config.balanceLabel,
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[700],
                             ),
                           ),
                           Text(
-                            mode == PaymentMode.payment
-                                ? '${currentBalance.toStringAsFixed(2)} $currencyName'
-                                : '${currentBalance.abs().toStringAsFixed(2)} $currencyName',
+                            config.balanceValue,
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color:
-                                  mode == PaymentMode.payment
-                                      ? Colors.red
-                                      : Colors.blue,
+                              color: config.balanceColor,
                             ),
                           ),
                         ],
                       ),
                     ),
-
-                    // رسالة التحذير إذا كان هناك خطأ
                     if (showError && errorMessage != null)
                       Container(
                         margin: const EdgeInsets.only(top: 12),
@@ -344,7 +318,8 @@ class QuickPaymentDialog {
                                 errorMessage!,
                                 style: const TextStyle(
                                   color: Colors.red,
-                                  fontSize: 12,
+                                  fontSize: 13,
+                                  height: 1.4,
                                 ),
                               ),
                             ),
@@ -356,36 +331,23 @@ class QuickPaymentDialog {
               ),
               actions: [
                 TextButton(
-                  onPressed: isProcessing ? null : () => Navigator.pop(context),
+                  onPressed:
+                      isProcessing ? null : () => Navigator.pop(dialogContext),
                   child: const Text('إلغاء'),
                 ),
                 ElevatedButton(
                   onPressed:
-                      (errorMessage != null ||
-                              amountController.text.isEmpty ||
-                              isProcessing)
+                      isProcessing
                           ? null
                           : () async {
+                            validateAmount(amountController.text.trim());
+                            if (showError) return;
+
                             final normalizedValue = amountController.text
+                                .trim()
                                 .replaceAll(',', '.');
                             final amount = double.tryParse(normalizedValue);
-
-                            if (amount == null || amount <= 0) {
-                              return;
-                            }
-
-                            // التحقق الإضافي للتأكد
-                            if (mode == PaymentMode.payment &&
-                                (currentBalance <= 0 ||
-                                    amount > currentBalance)) {
-                              return;
-                            }
-
-                            if (mode == PaymentMode.withdrawal &&
-                                (currentBalance >= 0 ||
-                                    amount > currentBalance.abs())) {
-                              return;
-                            }
+                            if (amount == null || amount <= 0) return;
 
                             setState(() => isProcessing = true);
 
@@ -398,49 +360,30 @@ class QuickPaymentDialog {
                                     : noteController.text.trim(),
                               );
 
-                              // إغلاق الديلوج
-                              Navigator.pop(context);
-
-                              // عرض رسالة النجاح
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    mode == PaymentMode.payment
-                                        ? 'تم تسديد ${amount.toStringAsFixed(2)} $currencyName بنجاح'
-                                        : 'تم صرف ${amount.toStringAsFixed(2)} $currencyName بنجاح',
-                                  ),
-                                  backgroundColor: buttonColor,
-                                  duration: const Duration(seconds: 2),
-                                ),
-                              );
-                            } catch (e) {
-                              // في حالة خطأ، لا نغلق الديلوج ونعرض رسالة الخطأ
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('خطأ: ${e.toString()}'),
-                                  backgroundColor: Colors.red,
-                                  duration: const Duration(seconds: 3),
-                                ),
-                              );
+                              if (dialogContext.mounted) {
+                                Navigator.pop(dialogContext);
+                              }
                             } finally {
-                              setState(() => isProcessing = false);
+                              if (dialogContext.mounted) {
+                                setState(() => isProcessing = false);
+                              }
                             }
                           },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: buttonColor,
-                    disabledBackgroundColor: Colors.grey[400],
+                    backgroundColor: config.color,
+                    foregroundColor: Colors.white,
                   ),
                   child:
                       isProcessing
                           ? const SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: 18,
+                            height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               color: Colors.white,
                             ),
                           )
-                          : Text(buttonText),
+                          : Text(config.buttonText),
                 ),
               ],
             );
@@ -448,5 +391,77 @@ class QuickPaymentDialog {
         );
       },
     );
+  }
+}
+
+class _DialogModeConfig {
+  final String title;
+  final String buttonText;
+  final String amountHint;
+  final String amountLabel;
+  final String balanceLabel;
+  final String balanceValue;
+  final IconData icon;
+  final Color color;
+  final Color balanceColor;
+
+  const _DialogModeConfig({
+    required this.title,
+    required this.buttonText,
+    required this.amountHint,
+    required this.amountLabel,
+    required this.balanceLabel,
+    required this.balanceValue,
+    required this.icon,
+    required this.color,
+    required this.balanceColor,
+  });
+
+  factory _DialogModeConfig.from({
+    required PaymentMode mode,
+    required double currentBalance,
+    required String currencyName,
+  }) {
+    switch (mode) {
+      case PaymentMode.payment:
+        return _DialogModeConfig(
+          title: 'تسديد دفعة',
+          buttonText: 'تسديد',
+          amountHint: 'أدخل مبلغ التسديد',
+          amountLabel: 'مبلغ التسديد ($currencyName)',
+          balanceLabel: 'الدين الحالي:',
+          balanceValue: '${currentBalance.toStringAsFixed(2)} $currencyName',
+          icon: Icons.payment,
+          color: Colors.green,
+          balanceColor: Colors.red,
+        );
+      case PaymentMode.deposit:
+        final hasCredit = currentBalance < 0;
+        return _DialogModeConfig(
+          title: 'إيداع رصيد',
+          buttonText: 'إيداع',
+          amountHint: 'أدخل مبلغ الإيداع',
+          amountLabel: 'مبلغ الإيداع ($currencyName)',
+          balanceLabel: hasCredit ? 'الرصيد الحالي:' : 'الحساب الحالي:',
+          balanceValue:
+              '${currentBalance.abs().toStringAsFixed(2)} $currencyName',
+          icon: Icons.account_balance_wallet,
+          color: Colors.teal,
+          balanceColor: hasCredit ? Colors.teal : Colors.orange,
+        );
+      case PaymentMode.withdrawal:
+        return _DialogModeConfig(
+          title: 'صرف رصيد',
+          buttonText: 'صرف',
+          amountHint: 'أدخل مبلغ الصرف',
+          amountLabel: 'مبلغ الصرف ($currencyName)',
+          balanceLabel: 'الرصيد المتاح:',
+          balanceValue:
+              '${currentBalance.abs().toStringAsFixed(2)} $currencyName',
+          icon: Icons.money,
+          color: Colors.blue,
+          balanceColor: Colors.blue,
+        );
+    }
   }
 }

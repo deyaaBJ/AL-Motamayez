@@ -416,6 +416,10 @@ class ReportsProvider extends ChangeNotifier {
   ) async {
     try {
       final db = await _dbHelper.db;
+      final transactionsWhereClause = whereClause
+          .replaceAll('date(date)', 'date(t.date)')
+          .replaceAll("strftime('%Y-%m', date)", "strftime('%Y-%m', t.date)")
+          .replaceAll("strftime('%Y', date)", "strftime('%Y', t.date)");
 
       final currentDebtResult = await db.rawQuery('''
         SELECT COALESCE(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END), 0)
@@ -447,9 +451,11 @@ class ReportsProvider extends ChangeNotifier {
           0;
 
       final collectedResult = await db.rawQuery('''
-        SELECT COALESCE(SUM(amount), 0) as total_collected
-        FROM transactions
-        WHERE $whereClause AND type = 'payment'
+        SELECT COALESCE(SUM(spa.amount), 0) as total_collected
+        FROM transactions t
+        INNER JOIN sale_payment_allocations spa
+          ON spa.transaction_id = t.id
+        WHERE $transactionsWhereClause AND t.type = 'payment'
         ''', whereArgs);
 
       _periodDebtCollected =
@@ -813,9 +819,11 @@ class ReportsProvider extends ChangeNotifier {
 
       final collectedResult = await db.rawQuery(
         '''
-        SELECT COALESCE(SUM(amount), 0) as total_collected
-        FROM transactions
-        WHERE date(date) BETWEEN ? AND ? AND type = 'payment'
+        SELECT COALESCE(SUM(spa.amount), 0) as total_collected
+        FROM transactions t
+        INNER JOIN sale_payment_allocations spa
+          ON spa.transaction_id = t.id
+        WHERE date(t.date) BETWEEN ? AND ? AND t.type = 'payment'
         ''',
         [fromDate, toDate],
       );

@@ -46,6 +46,10 @@ class ActivationService {
     return '${value.substring(0, 4)}...${value.substring(value.length - 4)}';
   }
 
+  String _networkErrorMessage(String action) {
+    return 'تعذر $action بسبب مشكلة في الاتصال. يرجى التحقق من الإنترنت والمحاولة مرة أخرى.';
+  }
+
   Future<String> _getOrCreateFallbackDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     String? deviceId = prefs.getString('device_id');
@@ -274,6 +278,7 @@ class ActivationService {
           'message': data['message']?.toString() ?? 'فشل إرسال طلب التفعيل',
         };
       }
+
       if (data['status'] == 'already_activated') {
         final activation = data['activation'] as Map<String, dynamic>?;
         final code = activation?['code']?.toString();
@@ -281,7 +286,7 @@ class ActivationService {
         return {
           'success': true,
           'status': 'already_activated',
-          'message': data['message']?.toString() ?? '??? ?????? ???? ??????',
+          'message': data['message']?.toString() ?? 'هذا الجهاز مفعّل مسبقًا',
           'assignedCode': code,
           'alreadyActivated': true,
         };
@@ -295,7 +300,7 @@ class ActivationService {
       if (requestId == null || requestId.isEmpty) {
         return {
           'success': false,
-          'message': 'لم يتم إرجاع رقم الطلب من السيرفر',
+          'message': 'لم يتم استلام رقم الطلب من الخادم',
         };
       }
 
@@ -315,10 +320,24 @@ class ActivationService {
     } on TimeoutException {
       return {
         'success': false,
-        'message': 'انتهت مهلة الاتصال أثناء إرسال طلب التفعيل',
+        'message':
+            'تعذر إرسال طلب التفعيل بسبب انتهاء مهلة الاتصال. يرجى التحقق من الإنترنت والمحاولة مرة أخرى.',
       };
-    } catch (e) {
-      return {'success': false, 'message': 'تعذر إرسال طلب التفعيل: $e'};
+    } on SocketException {
+      return {
+        'success': false,
+        'message': _networkErrorMessage('إرسال طلب التفعيل'),
+      };
+    } on http.ClientException {
+      return {
+        'success': false,
+        'message': _networkErrorMessage('إرسال طلب التفعيل'),
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'تعذر إرسال طلب التفعيل حاليًا. يرجى المحاولة مرة أخرى.',
+      };
     }
   }
 
@@ -346,7 +365,7 @@ class ActivationService {
       if (response.statusCode != 200) {
         return {
           'success': false,
-          'message': data['message']?.toString() ?? 'فشل جلب حالة الطلب',
+          'message': data['message']?.toString() ?? 'فشل التحقق من حالة الطلب',
         };
       }
 
@@ -375,10 +394,24 @@ class ActivationService {
     } on TimeoutException {
       return {
         'success': false,
-        'message': 'انتهت مهلة الاتصال أثناء فحص حالة الطلب',
+        'message':
+            'تعذر التحقق من حالة الطلب بسبب انتهاء مهلة الاتصال. يرجى التحقق من الإنترنت والمحاولة مرة أخرى.',
       };
-    } catch (e) {
-      return {'success': false, 'message': 'تعذر فحص حالة الطلب: $e'};
+    } on SocketException {
+      return {
+        'success': false,
+        'message': _networkErrorMessage('التحقق من حالة الطلب'),
+      };
+    } on http.ClientException {
+      return {
+        'success': false,
+        'message': _networkErrorMessage('التحقق من حالة الطلب'),
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'تعذر التحقق من حالة الطلب حاليًا. يرجى المحاولة مرة أخرى.',
+      };
     }
   }
 
@@ -426,9 +459,26 @@ class ActivationService {
         'message': data['message']?.toString() ?? 'تم التفعيل بنجاح',
       };
     } on TimeoutException {
-      return {'success': false, 'message': 'انتهت مهلة الاتصال أثناء التفعيل'};
-    } catch (e) {
-      return {'success': false, 'message': 'تعذر تنفيذ التفعيل: $e'};
+      return {
+        'success': false,
+        'message':
+            'تعذر تنفيذ التفعيل بسبب انتهاء مهلة الاتصال. يرجى التحقق من الإنترنت والمحاولة مرة أخرى.',
+      };
+    } on SocketException {
+      return {
+        'success': false,
+        'message': _networkErrorMessage('تنفيذ التفعيل'),
+      };
+    } on http.ClientException {
+      return {
+        'success': false,
+        'message': _networkErrorMessage('تنفيذ التفعيل'),
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'تعذر تنفيذ التفعيل حاليًا. يرجى المحاولة مرة أخرى.',
+      };
     }
   }
 

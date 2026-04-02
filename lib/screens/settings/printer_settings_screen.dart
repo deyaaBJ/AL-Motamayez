@@ -127,7 +127,10 @@ class PrinterSettingsScreen extends StatelessWidget {
       child: ElevatedButton.icon(
         onPressed: () => _saveSettings(context, settings),
         icon: const Icon(Icons.save),
-        label: const Text('حفظ الإعدادات'),
+        label: const Text(
+          'حفظ الإعدادات',
+          style: TextStyle(color: Colors.white),
+        ),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF009688),
           padding: const EdgeInsets.symmetric(vertical: 16),

@@ -132,7 +132,7 @@ class _TaxDetailScreenState extends State<TaxDetailScreen> {
                 setState(() => _isEditing = false);
               },
               icon: const Icon(Icons.check),
-              label: const Text('حفظ'),
+              label: const Text('حفظ', style: TextStyle(color: Colors.white)),
               style: _buttonStyle(Colors.green),
             ),
           ),
@@ -141,7 +141,7 @@ class _TaxDetailScreenState extends State<TaxDetailScreen> {
             child: ElevatedButton.icon(
               onPressed: () => setState(() => _isEditing = false),
               icon: const Icon(Icons.close),
-              label: const Text('إلغاء'),
+              label: const Text('إلغاء', style: TextStyle(color: Colors.white)),
               style: _buttonStyle(Colors.red),
             ),
           ),
@@ -182,4 +182,3 @@ class _TaxDetailScreenState extends State<TaxDetailScreen> {
     );
   }
 }
-

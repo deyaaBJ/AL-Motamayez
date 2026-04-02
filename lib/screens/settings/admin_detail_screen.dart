@@ -150,7 +150,7 @@ class _AdminDetailScreenState extends State<AdminDetailScreen> {
                 setState(() => _isEditing = false);
               },
               icon: const Icon(Icons.check),
-              label: const Text('حفظ'),
+              label: const Text('حفظ', style: TextStyle(color: Colors.white)),
               style: _buttonStyle(Colors.green),
             ),
           ),
@@ -159,7 +159,7 @@ class _AdminDetailScreenState extends State<AdminDetailScreen> {
             child: ElevatedButton.icon(
               onPressed: () => setState(() => _isEditing = false),
               icon: const Icon(Icons.close),
-              label: const Text('إلغاء'),
+              label: const Text('إلغاء', style: TextStyle(color: Colors.white)),
               style: _buttonStyle(Colors.red),
             ),
           ),
@@ -200,4 +200,3 @@ class _AdminDetailScreenState extends State<AdminDetailScreen> {
     );
   }
 }
-

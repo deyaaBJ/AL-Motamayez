@@ -189,16 +189,6 @@ class BatchItem extends StatelessWidget {
                 itemBuilder:
                     (BuildContext context) => [
                       PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, color: Colors.blue, size: 14),
-                            SizedBox(width: 6),
-                            Text('تعديل', style: TextStyle(fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
                         value: 'product_details',
                         child: Row(
                           children: [
@@ -261,12 +251,6 @@ class BatchItem extends StatelessWidget {
     return Colors.green;
   }
 
-  String _getStatusText() {
-    if (batch.daysRemaining < 0) return 'منتهي';
-    if (batch.daysRemaining <= 30) return 'قريب';
-    return 'جيد';
-  }
-
   Color _getStatusBackgroundColor() {
     if (batch.daysRemaining < 0) return Colors.red.withOpacity(0.1);
     if (batch.daysRemaining <= 30) return Colors.orange.withOpacity(0.1);
@@ -282,9 +266,6 @@ class BatchItem extends StatelessWidget {
 
   void _onBatchAction(BuildContext context, String action) async {
     switch (action) {
-      case 'edit':
-        await _editBatch(context);
-        break;
       case 'product_details':
         _viewProductDetails(context);
         break;
@@ -297,16 +278,6 @@ class BatchItem extends StatelessWidget {
     }
   }
 
-  Future<void> _editBatch(BuildContext context) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('ميزة التعديل قيد التطوير'),
-        backgroundColor: Colors.blue,
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
   void _viewProductDetails(BuildContext context) {
     Navigator.push(
       context,
@@ -317,7 +288,6 @@ class BatchItem extends StatelessWidget {
   }
 
   Future<void> _disposeBatch(BuildContext context) async {
-    // تحقق إذا كانت الدفعة فارغة أصلاً
     if (batch.remainingQuantity == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -328,7 +298,6 @@ class BatchItem extends StatelessWidget {
       return;
     }
 
-    // طلب الكمية للتخلص منها
     final disposedQuantity = await _showDisposeDialog(context);
     if (disposedQuantity == null || disposedQuantity <= 0) return;
 
@@ -378,7 +347,6 @@ class BatchItem extends StatelessWidget {
 
     if (confirmed == true) {
       try {
-        // استخدم دالة provider الجديدة بدلاً من _updateRemainingQuantity
         await provider.disposeBatch(batch.id!, disposedQuantity);
         onUpdate();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -441,53 +409,6 @@ class BatchItem extends StatelessWidget {
             ],
           ),
     );
-  }
-
-  // حذف دالة _updateRemainingQuantity القديمة كلياً
-  // لأنها موجودة الآن في provider
-
-  Future<void> _deleteBatch(BuildContext context) async {
-    final confirmed = await showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('حذف نهائي للدفعة'),
-            content: const Text(
-              '⚠️ هل أنت متأكد من الحذف النهائي للدفعة؟ هذا الإجراء لا يمكن التراجع عنه.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('إلغاء'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('حذف نهائي'),
-              ),
-            ],
-          ),
-    );
-
-    if (confirmed == true) {
-      try {
-        await provider.deleteBatch(batch.id!);
-        onUpdate();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم الحذف النهائي للدفعة'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ في الحذف: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
   }
 
   Future<void> _returnToSupplier(BuildContext context) async {
@@ -557,7 +478,7 @@ class BatchItem extends StatelessWidget {
     if (confirmed == true) {
       try {
         await provider.returnBatchToSupplier(batch.id!, returnQuantity);
-        onUpdate(); // ✅ هذا بينادي رفرش الواجهة
+        onUpdate();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

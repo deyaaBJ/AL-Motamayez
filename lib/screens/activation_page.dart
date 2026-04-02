@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:motamayez/screens/auth/login.dart';
 import 'package:motamayez/services/activation_service.dart';
+import 'package:motamayez/widgets/whatsapp_support_button.dart';
 
 class ActivationPage extends StatefulWidget {
   const ActivationPage({super.key});
@@ -298,9 +299,13 @@ class _ActivationPageState extends State<ActivationPage> {
         _requestStatus != 'approved';
 
     return Scaffold(
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButton: const WhatsAppSupportButton(
+        heroTag: 'activation_whatsapp_support',
+      ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 104),
           child: SizedBox(
             width: 480,
             child: Card(

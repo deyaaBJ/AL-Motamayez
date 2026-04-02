@@ -13,6 +13,7 @@ import 'package:motamayez/models/sale.dart';
 import 'package:motamayez/models/sale_item.dart';
 import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/providers/customer_provider.dart';
+import 'package:motamayez/providers/DebtProvider.dart';
 import 'package:motamayez/providers/auth_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/services/thermal_receipt_printer.dart';
@@ -54,6 +55,7 @@ class _PosScreenState extends State<PosScreen>
   Sale? _originalSale;
   bool _isSaleLoaded = false;
   bool _isLoading = false;
+
 
   @override
   void initState() {
@@ -1800,6 +1802,8 @@ class _PosScreenState extends State<PosScreen>
     final auth = context.read<AuthProvider>();
     final user = auth.currentUser;
     final productProvider = context.read<ProductProvider>();
+    final debtProvider = context.read<DebtProvider>();
+    final settings = context.read<SettingsProvider>();
     try {
       // تحقق من أن جميع المنتجات لديها كمية كافية (باستثناء الخدمات)
       for (final item in _cartItems) {
@@ -1820,14 +1824,36 @@ class _PosScreenState extends State<PosScreen>
         }
       }
 
+      final double customerBalance = await debtProvider.getTotalDebtByCustomerId(
+        customer.id!,
+      );
+      final double availableCredit =
+          customerBalance < 0 ? customerBalance.abs() : 0.0;
+      final double appliedFromBalance =
+          availableCredit > _finalAmount ? _finalAmount : availableCredit;
+      final double remainingDebt = _finalAmount - appliedFromBalance;
+
       await productProvider.addSale(
         cartItems: _cartItems,
         totalAmount: _finalAmount,
-        paymentType: 'credit',
+        paymentType: remainingDebt > 0 ? 'credit' : 'cash',
         customerId: customer.id,
+        paidAmount: appliedFromBalance > 0 ? appliedFromBalance : 0.0,
+        remainingAmount: remainingDebt,
         userRole: auth.role ?? 'user',
         userId: user?["id"],
       );
+
+      if (appliedFromBalance > 0) {
+        await debtProvider.addWithdrawal(
+          customerId: customer.id!,
+          amount: appliedFromBalance,
+          note:
+              remainingDebt > 0
+                  ? 'استخدام رصيد للفاتورة، والمتبقي دين بقيمة ${remainingDebt.toStringAsFixed(2)} ${settings.currencyName}'
+                  : 'استخدام رصيد لتسديد كامل الفاتورة',
+        );
+      }
 
       if (mounted) {
         context.read<SalesProvider>().invalidateAndRefresh();
@@ -1960,7 +1986,10 @@ class _PosScreenState extends State<PosScreen>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2196F3),
                 ),
-                child: const Text('إضافة'),
+                child: const Text(
+                  'إضافة',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ],
           ),

@@ -82,7 +82,10 @@ class StoreSettingsScreen extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: () => onSaveMarketName(marketNameController.text),
               icon: const Icon(Icons.save),
-              label: const Text('حفظ الاسم'),
+              label: const Text(
+                'حفظ الاسم',
+                style: TextStyle(color: Colors.white),
+              ),
               style: _buttonStyle(),
             ),
           ),
@@ -193,7 +196,10 @@ class StoreSettingsScreen extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: onSelectBackupFolder,
               icon: const Icon(Icons.folder_open),
-              label: const Text('اختيار المجلد'),
+              label: const Text(
+                'اختيار المجلد',
+                style: TextStyle(color: Colors.white),
+              ),
               style: _buttonStyle(),
             ),
           ),

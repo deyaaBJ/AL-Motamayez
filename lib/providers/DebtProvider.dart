@@ -660,6 +660,19 @@ class DebtProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> addDeposit({
+    required int customerId,
+    required double amount,
+    String? note,
+  }) async {
+    return addTransaction(
+      customerId: customerId,
+      amount: amount,
+      note: note ?? 'إيداع رصيد في حساب العميل',
+      type: TransactionType.payment,
+    );
+  }
+
   Future<void> _applyBalanceDelta({
     required int customerId,
     required double delta,

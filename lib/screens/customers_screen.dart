@@ -1242,6 +1242,41 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
+  void _showDepositDialog(Customer customer, double currentBalance) {
+    QuickPaymentDialog.showDeposit(
+      context: context,
+      customer: customer,
+      currentBalance: currentBalance,
+      onDeposit: (customer, amount, note) async {
+        final debtProvider = context.read<DebtProvider>();
+
+        try {
+          await debtProvider.addDeposit(
+            customerId: customer.id!,
+            amount: amount,
+            note: note,
+          );
+
+          final updatedDebt = await debtProvider.getTotalDebtByCustomerId(
+            customer.id!,
+          );
+          _customerDebts[customer.id!] = updatedDebt;
+
+          if (mounted) {
+            context.read<SalesProvider>().invalidateAndRefresh();
+            setState(() {});
+            await _loadDashboardStats();
+            showAppToast(context, 'تم إيداع الرصيد بنجاح', ToastType.success);
+          }
+        } catch (e) {
+          if (mounted) {
+            showAppToast(context, 'خطأ في إيداع الرصيد: $e', ToastType.error);
+          }
+        }
+      },
+    );
+  }
+
   Future<_CustomerPaymentMode?> _showPaymentModeDialog(int openInvoicesCount) {
     return showDialog<_CustomerPaymentMode>(
       context: context,

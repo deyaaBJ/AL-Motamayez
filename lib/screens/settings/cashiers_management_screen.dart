@@ -409,9 +409,7 @@ class _CashierDetailScreenState extends State<CashierDetailScreen> {
     _emailController = TextEditingController(
       text: widget.cashier['email']?.toString() ?? '',
     );
-    _passwordController = TextEditingController(
-      text: '********',
-    );
+    _passwordController = TextEditingController(text: '********');
   }
 
   @override
@@ -640,7 +638,10 @@ class _CashierDetailScreenState extends State<CashierDetailScreen> {
                                   ),
                                 )
                                 : const Icon(Icons.check),
-                        label: Text(_isSaving ? 'جاري الحفظ...' : 'حفظ'),
+                        label: Text(
+                          _isSaving ? 'جاري الحفظ...' : 'حفظ',
+                          style: TextStyle(color: Colors.white),
+                        ),
                         style: _buttonStyle(Colors.green),
                       ),
                     ),
@@ -652,7 +653,10 @@ class _CashierDetailScreenState extends State<CashierDetailScreen> {
                                 ? null
                                 : () => setState(() => _isEditing = false),
                         icon: const Icon(Icons.close),
-                        label: const Text('إلغاء'),
+                        label: const Text(
+                          'إلغاء',
+                          style: TextStyle(color: Colors.white),
+                        ),
                         style: _buttonStyle(Colors.red),
                       ),
                     ),
@@ -686,5 +690,3 @@ class _CashierDetailScreenState extends State<CashierDetailScreen> {
     );
   }
 }
-
-

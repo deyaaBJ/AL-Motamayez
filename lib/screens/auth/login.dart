@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:motamayez/components/LoginCard.dart';
-import 'package:provider/provider.dart';
 import 'dart:math';
 
+import 'package:flutter/material.dart';
+import 'package:motamayez/components/LoginCard.dart';
 import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/providers/auth_provider.dart';
+import 'package:motamayez/widgets/whatsapp_support_button.dart';
+import 'package:provider/provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -45,11 +46,9 @@ class _LoginScreenState extends State<LoginScreen>
       ),
     );
 
-    // ✅ جلب آخر مستخدم محفوظ
     _loadSavedCredentials();
   }
 
-  /// ✅ جلب آخر مستخدم دخل واختر "تذكرني"
   Future<void> _loadSavedCredentials() async {
     final savedCreds = await authProvider.getSavedCredentialsForLogin();
 
@@ -78,29 +77,116 @@ class _LoginScreenState extends State<LoginScreen>
       _isLoading = true;
     });
 
-    bool success = await authProvider.login(
+    final success = await authProvider.login(
       _emailController.text.trim(),
       _passwordController.text,
-      rememberMe: _rememberMe, // ✅ يحفظ هذا المستخدم كـ "آخر مستخدم"
+      rememberMe: _rememberMe,
     );
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
+    if (!mounted) return;
 
-      if (success) {
-        showAppToast(context, 'تم تسجيل الدخول بنجاح!', ToastType.success);
-        Navigator.pushReplacementNamed(context, '/home');
-      } else {
-        showAppToast(context, 'البريد أو كلمة السر خاطئة', ToastType.error);
-      }
+    setState(() {
+      _isLoading = false;
+    });
+
+    if (success) {
+      showAppToast(context, 'تم تسجيل الدخول بنجاح!', ToastType.success);
+      Navigator.pushReplacementNamed(context, '/home');
+    } else {
+      showAppToast(context, 'البريد أو كلمة السر خاطئة', ToastType.error);
     }
+  }
+
+  Widget _buildLoginContent() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        FadeTransition(
+          opacity: _fadeAnimation,
+          child: Column(
+            children: [
+              Container(
+                width: 120,
+                height: 120,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/images/shop_logo.png',
+                    fit: BoxFit.fill,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'المتميز',
+                style: TextStyle(
+                  fontFamily: 'Amiri',
+                  fontWeight: FontWeight.bold,
+                  fontStyle: FontStyle.italic,
+                  letterSpacing: 1.0,
+                  fontSize: 50,
+                  color: Colors.white,
+                  shadows: [
+                    Shadow(
+                      offset: Offset(3, 3),
+                      blurRadius: 6,
+                      color: Colors.black45,
+                    ),
+                    Shadow(
+                      offset: Offset(-2, -2),
+                      blurRadius: 4,
+                      color: Colors.black26,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        _isLoadingCredentials
+            ? const Column(
+              children: [
+                CircularProgressIndicator(color: Colors.white),
+                SizedBox(height: 10),
+                Text(
+                  'جاري تحميل البيانات...',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ],
+            )
+            : LoginCard(
+              emailController: _emailController,
+              passwordController: _passwordController,
+              isLoading: _isLoading,
+              onLogin: _login,
+              rememberMe: _rememberMe,
+              onRememberMeChanged: (value) {
+                setState(() {
+                  _rememberMe = value;
+                });
+              },
+            ),
+        const SizedBox(height: 30),
+        const Text(
+          '© Motamayez POS. جميع الحقوق محفوظة',
+          style: TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButton: const WhatsAppSupportButton(
+        heroTag: 'login_whatsapp_support',
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -111,7 +197,6 @@ class _LoginScreenState extends State<LoginScreen>
         ),
         child: Stack(
           children: [
-            // الخلفية المتحركة
             AnimatedBuilder(
               animation: _animation,
               builder: (context, child) {
@@ -121,96 +206,15 @@ class _LoginScreenState extends State<LoginScreen>
                 );
               },
             ),
-
-            // محتوى صفحة تسجيل الدخول
             Center(
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: Column(
-                        children: [
-                          // الشعار
-                          Container(
-                            width: 120,
-                            height: 120,
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                            ),
-                            child: ClipOval(
-                              child: Image.asset(
-                                'assets/images/shop_logo.png',
-                                fit: BoxFit.fill,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'المتميز',
-                            style: TextStyle(
-                              fontFamily: 'Amiri',
-                              fontWeight: FontWeight.bold,
-                              fontStyle: FontStyle.italic,
-                              letterSpacing: 1.0,
-                              fontSize: 50,
-                              color: Colors.white,
-                              shadows: const [
-                                Shadow(
-                                  offset: Offset(3, 3),
-                                  blurRadius: 6,
-                                  color: Colors.black45,
-                                ),
-                                Shadow(
-                                  offset: Offset(-2, -2),
-                                  blurRadius: 4,
-                                  color: Colors.black26,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // ✅ إظهار loading أو الـ LoginCard مع البيانات المعبأة
-                    _isLoadingCredentials
-                        ? const Column(
-                          children: [
-                            CircularProgressIndicator(color: Colors.white),
-                            SizedBox(height: 10),
-                            Text(
-                              'جاري تحميل البيانات...',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ],
-                        )
-                        : LoginCard(
-                          emailController: _emailController, // ✅ معبأ تلقائياً
-                          passwordController:
-                              _passwordController, // ✅ معبأ تلقائياً
-                          isLoading: _isLoading,
-                          onLogin: _login,
-                          rememberMe: _rememberMe,
-                          onRememberMeChanged: (value) {
-                            setState(() {
-                              _rememberMe = value;
-                            });
-                          },
-                        ),
-
-                    const SizedBox(height: 30),
-
-                    // حقوق النشر
-                    const Text(
-                      '© Motamayez POS. جميع الحقوق محفوظة',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
-                  ],
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 104),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 500),
+                    child: _buildLoginContent(),
+                  ),
                 ),
               ),
             ),
@@ -221,7 +225,6 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
-// رسم الخلفية المتحركة
 class BackgroundPainter extends CustomPainter {
   final double animationValue;
 
@@ -259,5 +262,3 @@ class BackgroundPainter extends CustomPainter {
     return true;
   }
 }
-
-

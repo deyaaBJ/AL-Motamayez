@@ -138,8 +138,8 @@ class _BaseLayoutState extends State<BaseLayout> {
       'label': 'فاتورة شراء',
       'page': 'فاتورة شراء',
     },
-    {'icon': Icons.analytics_rounded, 'label': 'التقارير', 'page': 'التقارير'},
     {'icon': Icons.receipt_rounded, 'label': 'الفواتير', 'page': 'الفواتير'},
+    {'icon': Icons.analytics_rounded, 'label': 'التقارير', 'page': 'التقارير'},
   ];
 
   // ✅ بناء الشريط الجانبي الأيمن - items أصغر
@@ -599,7 +599,6 @@ class _BaseLayoutState extends State<BaseLayout> {
       return !blockedPages.contains(page);
     }
 
-    // Tax (محاسب ضريبة) - يُمنع من: التقارير، الكاشير، الإعدادات، فواتير الشراء، الفواتير، الموردين
     if (role == 'tax') {
       final blockedPages = [
         'التقارير', // التقارير

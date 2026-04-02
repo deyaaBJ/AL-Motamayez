@@ -63,7 +63,7 @@ void main() async {
     // تهيئة النافذة
     await windowManager.ensureInitialized();
     await windowManager.setTitle('المتميز');
-    await windowManager.setMinimumSize(const Size(1000, 700));
+    await windowManager.setMinimumSize(const Size(1000, 600));
   }
 
   if (Platform.isWindows) {
@@ -268,11 +268,7 @@ class _AppEntryState extends State<AppEntry> {
             return const LoginScreen();
 
           case 'invalid':
-            return InvalidSignatureScreen(
-              storedSignature: data['stored_signature']?.toString(),
-              expectedSignature: data['expected_signature']?.toString(),
-              activationCode: data['activation_code']?.toString(),
-            );
+            return const InvalidSignatureScreen();
 
           case 'not_activated':
             return const ActivationPage();
