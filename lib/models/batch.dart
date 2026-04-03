@@ -1,5 +1,4 @@
 // lib/models/batch.dart
-import 'dart:math';
 
 class Batch {
   int? id;
@@ -66,8 +65,7 @@ class Batch {
       productionDate: map['production_date'] as String?,
       expiryDate: map['expiry_date'] as String,
       active: (map['active'] as int?) == 1,
-      createdAt:
-          map['created_at'] as String ?? DateTime.now().toIso8601String(),
+      createdAt: map['created_at'] as String,
       productName: productName,
       productBarcode: productBarcode,
       supplierName: supplierName,

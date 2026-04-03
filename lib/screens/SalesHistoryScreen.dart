@@ -1,15 +1,14 @@
 // screens/sales_history_screen.dart
 import 'dart:async';
-import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:motamayez/providers/DebtProvider.dart';
 import 'package:provider/provider.dart';
+import '../utils/app_logger.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/providers/auth_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
-import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/screens/pos_screen.dart';
 import '../providers/sales_provider.dart';
 import '../widgets/SaleDetailsDialog.dart';
@@ -109,12 +108,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       _lastResumeRefreshAt = now;
       provider.fetchSales(forceRefresh: true);
     }
-  }
-
-  void _clearFiltersExceptDate(SalesProvider provider) {
-    provider.setCustomerFilter('الكل');
-    provider.setPaymentTypeFilter('الكل');
-    provider.setTaxFilter('الكل');
   }
 
   bool _isValueInList(List<String> list, String? value) {
@@ -294,6 +287,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
         borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.blueGrey.withOpacity(0.1),
             blurRadius: isMobile ? 10 : 20,
             offset: const Offset(0, 4),
@@ -479,6 +473,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: isMobile ? 6 : 8,
             offset: const Offset(0, 2),
@@ -583,15 +578,19 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     bool isMobile,
   ) {
     String displayText = type;
-    if (type == 'cash')
+    if (type == 'cash') {
       displayText = 'نقدي 💵';
-    else if (type == 'credit')
+    } else if (type == 'credit')
+      // ignore: curly_braces_in_flow_control_structures
       displayText = 'آجل 📅';
     else if (type == 'debt')
+      // ignore: curly_braces_in_flow_control_structures
       displayText = 'دين ⏳';
     else if (type == 'settled')
+      // ignore: curly_braces_in_flow_control_structures
       displayText = 'مسدد ✅';
     else
+      // ignore: curly_braces_in_flow_control_structures
       displayText = 'الكل 🔄';
 
     return DropdownMenuItem(
@@ -628,6 +627,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: isMobile ? 6 : 8,
             offset: const Offset(0, 2),
@@ -749,6 +749,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: isMobile ? 6 : 8,
             offset: const Offset(0, 2),
@@ -1174,6 +1175,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: isMobile ? 6 : 8,
             offset: const Offset(0, 2),
@@ -1294,6 +1296,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: isMobile ? 6 : 8,
             offset: const Offset(0, 2),
@@ -1489,6 +1492,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                     decoration: BoxDecoration(
                       color: _getPaymentTypeColor(
                         sale.paymentType,
+                        // ignore: deprecated_member_use
                       ).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(6),
                     ),
@@ -1743,6 +1747,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
               border: Border.all(color: Colors.grey[200]!),
               boxShadow: [
                 BoxShadow(
+                  // ignore: deprecated_member_use
                   color: Colors.black.withOpacity(0.05),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
@@ -1994,11 +1999,13 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: _getPaymentTypeColor(sale.paymentType).withOpacity(
                   isSelected ? 0.15 : (isCurrentArchiveMode ? 0.05 : 0.1),
                 ),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
+                  // ignore: deprecated_member_use
                   color: _getPaymentTypeColor(sale.paymentType).withOpacity(
                     isSelected ? 0.3 : (isCurrentArchiveMode ? 0.2 : 0.3),
                   ),
@@ -2008,6 +2015,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
               child: Text(
                 sale.paymentType == 'cash' ? 'نقدي' : 'آجل',
                 style: TextStyle(
+                  // ignore: deprecated_member_use
                   color: _getPaymentTypeColor(sale.paymentType).withOpacity(
                     isSelected ? 1.0 : (isCurrentArchiveMode ? 0.6 : 1.0),
                   ),
@@ -2541,8 +2549,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       return const SizedBox.shrink();
     }
 
-    print(
+    appLog(
       '🔘 بناء زر عرض المزيد: hasMore=${salesProvider.hasMore}, isLoading=${salesProvider.isLoading}',
+      name: 'SalesHistoryScreen',
     );
 
     return Container(
@@ -2554,7 +2563,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
             'تحميل المزيد (${salesProvider.sales.length} / ${salesProvider.loadedSalesCount})',
           ),
           onPressed: () {
-            print('🖱️ تم النقر على زر تحميل المزيد');
+            appLog(
+              '🖱️ تم النقر على زر تحميل المزيد',
+              name: 'SalesHistoryScreen',
+            );
             salesProvider.loadMoreSales();
           },
           style: ElevatedButton.styleFrom(
@@ -2767,16 +2779,19 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
 
     if (confirmed == true) {
       try {
+        // ignore: use_build_context_synchronously
         final debtProvider = Provider.of<DebtProvider>(context, listen: false);
         final amount = await salesProvider.settleSelectedSales(
           debtProvider: debtProvider,
         );
         showAppToast(
+          // ignore: use_build_context_synchronously
           context,
           'تم تسديد $count فاتورة بقيمة ${amount.toStringAsFixed(2)}',
           ToastType.success,
         );
       } catch (e) {
+        // ignore: use_build_context_synchronously
         showAppToast(context, 'حدث خطأ أثناء التسديد: $e', ToastType.error);
       }
     }
@@ -2921,11 +2936,13 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       }
       await provider.deleteSale(sale.id);
       showAppToast(
+        // ignore: use_build_context_synchronously
         context,
         'تم حذف الفاتورة رقم ${sale.id} بنجاح',
         ToastType.success,
       );
     } catch (e) {
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'خطأ في حذف الفواتير: $e', ToastType.error);
     }
   }
@@ -2944,8 +2961,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
+        // ignore: deprecated_member_use
         color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(999),
+        // ignore: deprecated_member_use
         border: Border.all(color: color.withOpacity(0.25)),
       ),
       child: Text(

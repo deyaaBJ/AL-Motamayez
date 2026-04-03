@@ -45,13 +45,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       TextEditingController();
 
   //معلومات الطابعة
-  final TextEditingController _printerIpController = TextEditingController();
-  final TextEditingController _printerPortController = TextEditingController();
-
-  // متغيرات لإخفاء كلمات المرور
-  bool _obscureAdminPassword = true;
-  bool _obscureCashierPassword = true;
-  bool _obscureTaxPassword = true;
+  final TextEditingController _logerIpController = TextEditingController();
+  final TextEditingController _logerPortController = TextEditingController();
 
   // مسار النسخ الاحتياطي
   String? _backupFolderPath;
@@ -75,9 +70,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _marketNameController.text = settingsProvider.marketName ?? '';
 
       //بيانات الطابعة
-      _printerIpController.text = settingsProvider.printerIp ?? '';
-      _printerPortController.text =
-          (settingsProvider.printerPort ?? 9100).toString();
+      _logerIpController.text = settingsProvider.logerIp ?? '';
+      _logerPortController.text =
+          (settingsProvider.logerPort ?? 9100).toString();
 
       // جلب بيانات المدير
       final admins = await authProvider.getUsersByRole('admin');
@@ -149,6 +144,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _backupFolderPath = selectedDir;
       });
 
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'تم حفظ مكان النسخ الاحتياطي', ToastType.success);
     }
   }
@@ -256,9 +252,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           gradient: const [Color(0xFF009688), Color(0xFF26A69A)],
           onTap:
               () => _navigateToDetail(
-                PrinterSettingsScreen(
-                  ipController: _printerIpController,
-                  portController: _printerPortController,
+                logerSettingsScreen(
+                  ipController: _logerIpController,
+                  portController: _logerPortController,
                 ),
               ),
         ),
@@ -296,6 +292,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
+                // ignore: deprecated_member_use
                 color: color.withOpacity(0.3),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
@@ -784,8 +781,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _currentPasswordTaxController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
-    _printerIpController.dispose();
-    _printerPortController.dispose();
+    _logerIpController.dispose();
+    _logerPortController.dispose();
     super.dispose();
   }
 }
@@ -1731,7 +1728,7 @@ class StoreSettingsScreen extends StatelessWidget {
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<int>(
-                              value: settings.numberOfCopies ?? 1,
+                              value: settings.numberOfCopies ?? 5,
                               isExpanded: true,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
@@ -1813,11 +1810,11 @@ class StoreSettingsScreen extends StatelessWidget {
 }
 
 // ==================== شاشة إعدادات الطابعة ====================
-class PrinterSettingsScreen extends StatelessWidget {
+class logerSettingsScreen extends StatelessWidget {
   final TextEditingController ipController;
   final TextEditingController portController;
 
-  const PrinterSettingsScreen({
+  const logerSettingsScreen({
     super.key,
     required this.ipController,
     required this.portController,
@@ -1965,7 +1962,7 @@ class PrinterSettingsScreen extends StatelessWidget {
                                 return;
                               }
 
-                              settings.updatePrinterSettings(
+                              settings.updatelogerSettings(
                                 ip: ip,
                                 port: port,
                                 size: settings.paperSize ?? '58mm',

@@ -274,10 +274,32 @@ class ReportsProvider extends ChangeNotifier {
       // محاولة استعلام مع sales_archive
       return await db.rawQuery(
         '''
-        SELECT * FROM sales
+        SELECT
+          id,
+          date,
+          total_amount,
+          total_profit,
+          customer_id,
+          payment_type,
+          paid_amount,
+          remaining_amount,
+          show_for_tax,
+          user_id
+        FROM sales
         WHERE $whereClause
         UNION ALL
-        SELECT * FROM sales_archive
+        SELECT
+          id,
+          date,
+          total_amount,
+          total_profit,
+          customer_id,
+          payment_type,
+          paid_amount,
+          remaining_amount,
+          show_for_tax,
+          user_id
+        FROM sales_archive
         WHERE $whereClause
         ORDER BY date DESC
       ''',
@@ -433,12 +455,12 @@ class ReportsProvider extends ChangeNotifier {
 
       final creditAddedResult = await db.rawQuery(
         '''
-        SELECT COALESCE(SUM(total_amount), 0) as total_credit_added
+        SELECT COALESCE(SUM(remaining_amount), 0) as total_credit_added
         FROM (
-          SELECT total_amount, payment_type, date FROM sales
+          SELECT remaining_amount, payment_type, date FROM sales
           WHERE $whereClause
           UNION ALL
-          SELECT total_amount, payment_type, date FROM sales_archive
+          SELECT remaining_amount, payment_type, date FROM sales_archive
           WHERE $whereClause
         )
         WHERE payment_type = 'credit'
@@ -450,13 +472,16 @@ class ReportsProvider extends ChangeNotifier {
           (creditAddedResult.first['total_credit_added'] as num?)?.toDouble() ??
           0;
 
-      final collectedResult = await db.rawQuery('''
+      final collectedResult = await db.rawQuery(
+        '''
         SELECT COALESCE(SUM(spa.amount), 0) as total_collected
         FROM transactions t
         INNER JOIN sale_payment_allocations spa
           ON spa.transaction_id = t.id
         WHERE $transactionsWhereClause AND t.type = 'payment'
-        ''', whereArgs);
+        ''',
+        [...whereArgs],
+      );
 
       _periodDebtCollected =
           (collectedResult.first['total_collected'] as num?)?.toDouble() ?? 0;
@@ -700,10 +725,32 @@ class ReportsProvider extends ChangeNotifier {
         // محاولة الاستعلام مع sales_archive
         sales = await db.rawQuery(
           '''
-          SELECT * FROM sales
+          SELECT
+            id,
+            date,
+            total_amount,
+            total_profit,
+            customer_id,
+            payment_type,
+            paid_amount,
+            remaining_amount,
+            show_for_tax,
+            user_id
+          FROM sales
           WHERE date(date) BETWEEN ? AND ?
           UNION ALL
-          SELECT * FROM sales_archive
+          SELECT
+            id,
+            date,
+            total_amount,
+            total_profit,
+            customer_id,
+            payment_type,
+            paid_amount,
+            remaining_amount,
+            show_for_tax,
+            user_id
+          FROM sales_archive
           WHERE date(date) BETWEEN ? AND ?
           ORDER BY date DESC
         ''',
@@ -800,12 +847,12 @@ class ReportsProvider extends ChangeNotifier {
 
       final creditAddedResult = await db.rawQuery(
         '''
-        SELECT COALESCE(SUM(total_amount), 0) as total_credit_added
+        SELECT COALESCE(SUM(remaining_amount), 0) as total_credit_added
         FROM (
-          SELECT total_amount, payment_type, date FROM sales
+          SELECT remaining_amount, payment_type, date FROM sales
           WHERE date(date) BETWEEN ? AND ?
           UNION ALL
-          SELECT total_amount, payment_type, date FROM sales_archive
+          SELECT remaining_amount, payment_type, date FROM sales_archive
           WHERE date(date) BETWEEN ? AND ?
         )
         WHERE payment_type = 'credit'

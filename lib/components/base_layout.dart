@@ -240,13 +240,15 @@ class _BaseLayoutState extends State<BaseLayout> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildSidebarItem(
-                  icon: Icons.settings_rounded,
-                  label: 'الإعدادات',
-                  isSelected: widget.currentPage == 'settings',
-                  onTap: () => _handlePageChange('settings'),
-                ),
-                const SizedBox(height: 10),
+                if (_hasPermission('settings')) ...[
+                  _buildSidebarItem(
+                    icon: Icons.settings_rounded,
+                    label: 'الإعدادات',
+                    isSelected: widget.currentPage == 'settings',
+                    onTap: () => _handlePageChange('settings'),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 _buildSidebarItem(
                   icon: Icons.logout_rounded,
                   label: 'خروج',

@@ -4,7 +4,6 @@ import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:motamayez/models/batch_filter.dart';
-import 'package:sqflite/sqflite.dart' as sqflite;
 import '../db/db_helper.dart';
 import '../models/batch.dart';
 
@@ -123,16 +122,12 @@ class BatchProvider with ChangeNotifier {
               }
 
               // ✅ معالجة الأيام المتبقية
-              int daysRemaining;
               final expiryDate = map['expiry_date'] as String?;
               if (expiryDate == '2099-12-31' ||
                   expiryDate == null ||
                   expiryDate.isEmpty) {
-                daysRemaining = 9999; // عدد كبير يعني بدون صلاحية
-              } else {
-                daysRemaining =
-                    (map['days_remaining'] as num?)?.toInt() ?? 9999;
-              }
+                // عدد كبير يعني بدون صلاحية
+              } else {}
 
               return Batch.fromMap(
                 map,
@@ -563,7 +558,7 @@ class BatchProvider with ChangeNotifier {
 
       return batches;
     } catch (e) {
-      print('خطأ في جلب الدفعات: $e');
+      log('خطأ في جلب الدفعات: $e');
       return [];
     }
   }

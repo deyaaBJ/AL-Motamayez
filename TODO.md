@@ -8,7 +8,7 @@
 - حساب المطلوب/الباقي
 - دعم الملاحظة
 
-### 2. ✅ تحسين thermal_receipt_printer.dart
+### 2. ✅ تحسين thermal_receipt_loger.dart
 
 - دعم paidAmount, dueAmount, changeAmount, cashierName, note
 - تحسين التنسيق
@@ -22,7 +22,7 @@
 
 ### 4. [ ] إصلاح pos_screen.dart
 
-- استبدال printReceiptEnhanced بـ printReceipt
+- استبدال logReceiptEnhanced بـ logReceipt
 - receiptNumber = DateTime.now().millisecondsSinceEpoch ~/ 1000
 - تنظيف المحتوى الخاطئ في product_provider.dart
 

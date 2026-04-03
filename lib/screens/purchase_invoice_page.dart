@@ -7,7 +7,6 @@ import 'package:motamayez/providers/batch_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/product.dart';
-import 'package:motamayez/models/product_unit.dart';
 import 'package:motamayez/screens/add_product_screen.dart';
 import 'package:motamayez/screens/add_supplier_page.dart';
 import '../providers/supplier_provider.dart';
@@ -41,11 +40,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   List<Product> _searchResults = [];
 
   // ⬅️ متغيرات جديدة للوحدات
-  String? _selectedUnitBarcode;
   double _selectedUnitContainQty = 1.0;
   int? _selectedUnitId;
   String? _selectedUnitName;
-  bool _isUnitSearch = false;
 
   @override
   void initState() {
@@ -66,6 +63,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         listen: false,
       ).loadSuppliers();
       await Provider.of<ProductProvider>(
+        // ignore: use_build_context_synchronously
         context,
         listen: false,
       ).loadProducts(reset: true);
@@ -103,11 +101,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         final units = await productProvider.searchProductUnitsByBarcode(query);
 
         if (units.isNotEmpty) {
-          _isUnitSearch = true;
           final unit = units.first;
           _selectedUnitContainQty = unit.containQty.toDouble();
           _selectedUnitId = unit.id;
-          _selectedUnitBarcode = unit.barcode;
           _selectedUnitName = unit.unitName;
 
           // البحث عن المنتج الأصلي
@@ -165,12 +161,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
           } catch (e) {
             log('المنتج الأصلي غير موجود: $e');
           }
-        } else {
-          _isUnitSearch = false;
-        }
-      } else {
-        _isUnitSearch = false;
-      }
+        } else {}
+      } else {}
 
       // ⬅️ 2. البحث في جميع المنتجات باستخدام البروفايدر
       final allProducts = await productProvider.searchProducts(query);
@@ -195,11 +187,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   void _resetUnitData() {
-    _selectedUnitBarcode = null;
     _selectedUnitContainQty = 1.0;
     _selectedUnitId = null;
     _selectedUnitName = null;
-    _isUnitSearch = false;
   }
 
   @override
@@ -368,6 +358,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                       ),
                     ).then((_) {
                       Provider.of<SupplierProvider>(
+                        // ignore: use_build_context_synchronously
                         context,
                         listen: false,
                       ).loadSuppliers();
@@ -403,6 +394,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                           ),
                         ).then((_) {
                           Provider.of<SupplierProvider>(
+                            // ignore: use_build_context_synchronously
                             context,
                             listen: false,
                           ).loadSuppliers();
@@ -424,7 +416,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                       ),
                       prefixIcon: const Icon(Icons.person),
                     ),
-                    value: invoiceProvider.tempSelectedSupplierId,
+                    initialValue: invoiceProvider.tempSelectedSupplierId,
                     items:
                         suppliers.map((supplier) {
                           return DropdownMenuItem<int>(
@@ -447,7 +439,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                       ),
                       prefixIcon: const Icon(Icons.payment),
                     ),
-                    value: invoiceProvider.tempPaymentType,
+                    initialValue: invoiceProvider.tempPaymentType,
                     items: const [
                       DropdownMenuItem(value: 'cash', child: Text('نقدي')),
                       DropdownMenuItem(value: 'credit', child: Text('آجل')),
@@ -683,7 +675,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                         surface: Colors.white,
                         onSurface: Colors.black,
                       ),
-                      dialogBackgroundColor: Colors.white,
+                      dialogTheme: DialogThemeData(
+                        backgroundColor: Colors.white,
+                      ),
                     ),
                     child: child!,
                   );
@@ -1517,16 +1511,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
   }
 
   // دالة لعرض تحذير
-  void _showWarning(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.orange,
-        duration: const Duration(seconds: 4),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
 
   Future<void> _removeItem(int index) async {
     final invoiceProvider = context.read<PurchaseInvoiceProvider>();

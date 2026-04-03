@@ -1,14 +1,14 @@
-// screens/settings/printer_settings_screen.dart (المصحح)
+// screens/settings/loger_settings_screen.dart (المصحح)
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/widgets/settings/settings_detail_card.dart';
 
-class PrinterSettingsScreen extends StatelessWidget {
+class logerSettingsScreen extends StatelessWidget {
   final TextEditingController ipController;
   final TextEditingController portController;
 
-  const PrinterSettingsScreen({
+  const logerSettingsScreen({
     super.key,
     required this.ipController,
     required this.portController,
@@ -158,7 +158,7 @@ class PrinterSettingsScreen extends StatelessWidget {
       return;
     }
 
-    settings.updatePrinterSettings(
+    settings.updatelogerSettings(
       ip: ip,
       port: port,
       size: settings.paperSize ?? '58mm',

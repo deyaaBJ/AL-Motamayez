@@ -665,11 +665,10 @@ class DebtProvider extends ChangeNotifier {
     required double amount,
     String? note,
   }) async {
-    return addTransaction(
+    await recordCustomerPayment(
       customerId: customerId,
       amount: amount,
       note: note ?? 'إيداع رصيد في حساب العميل',
-      type: TransactionType.payment,
     );
   }
 

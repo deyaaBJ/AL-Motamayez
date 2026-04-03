@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import '../db/db_helper.dart';
 import '../models/sale.dart';
+import '../utils/app_logger.dart';
 import 'DebtProvider.dart';
 import 'dart:developer';
 
@@ -31,7 +32,6 @@ class SalesProvider extends ChangeNotifier {
   final Map<String, List<Sale>> _salesCache = {};
   String? _currentCacheKey;
   Timer? _cacheCleanupTimer;
-  DateTime? _lastCurrentYearCacheUpdate;
 
   // █████████████████████████████████████████████████████████████████████████
   // ████████████████████████████████ الفلاتر الحقيقية (المطبقة) ███████████████████████████████████████
@@ -452,7 +452,7 @@ class SalesProvider extends ChangeNotifier {
     _dateFilterType = 'year';
     _tempDateFilterType = 'year';
 
-    print('🎯 تطبيق فلتر السنة: $year');
+    appLog('🎯 تطبيق فلتر السنة: $year', name: 'SalesProvider');
     clearSalesData(); // ✅ مسح البيانات القديمة أولاً
     _fetchSalesWithFilters(forceRefresh: true);
   }
@@ -552,7 +552,6 @@ class SalesProvider extends ChangeNotifier {
     _tempSelectedYear = null;
 
     _currentCacheKey = null;
-    _lastCurrentYearCacheUpdate = null;
     notifyListeners();
   }
 
@@ -632,16 +631,19 @@ class SalesProvider extends ChangeNotifier {
     bool loadMore = false,
     bool forceRefresh = false,
   }) async {
-    print('🚀 بدء التحميل: loadMore=$loadMore, page=$_page, hasMore=$_hasMore');
+    appLog(
+      '🚀 بدء التحميل: loadMore=$loadMore, page=$_page, hasMore=$_hasMore',
+      name: 'SalesProvider',
+    );
     final int requestId = loadMore ? _requestSerial : ++_requestSerial;
 
     if (_isLoading) {
-      print('❌ التحميل جاري، تم إيقاف الطلب');
+      appLog('❌ التحميل جاري، تم إيقاف الطلب', name: 'SalesProvider');
       return;
     }
 
     if (loadMore && !_hasMore) {
-      print('❌ لا يوجد المزيد، تم إيقاف الطلب');
+      appLog('❌ لا يوجد المزيد، تم إيقاف الطلب', name: 'SalesProvider');
       return;
     }
 
@@ -650,7 +652,7 @@ class SalesProvider extends ChangeNotifier {
 
     // ✅ استخدم الكاش فقط إذا ما كان loadMore
     if (!forceRefresh && !loadMore && _salesCache.containsKey(cacheKey)) {
-      print('✅ استخدام الكاش للبيانات');
+      appLog('✅ استخدام الكاش للبيانات', name: 'SalesProvider');
       _allSales = _salesCache[cacheKey]!;
       _displayedSales = _allSales;
       // ✅ احسب hasMore من الكاش مقارنةً بالعدد الكلي
@@ -718,8 +720,8 @@ class SalesProvider extends ChangeNotifier {
 
       String whereClause = conditions.join(' AND ');
 
-      print('🔍 الاستعلام: WHERE $whereClause');
-      print('🔍 الـ Args: $args');
+      appLog('🔍 الاستعلام: WHERE $whereClause', name: 'SalesProvider');
+      appLog('🔍 الـ Args: $args', name: 'SalesProvider');
 
       // ✅ جلب العدد الكلي للنتائج الحالية لتحديد hasMore بدقة
       final countResult = await db.rawQuery('''
@@ -738,8 +740,9 @@ class SalesProvider extends ChangeNotifier {
 
       // ✅ جلب البيانات مع حدود الصفحة
       final offset = _page * _limit;
-      print(
+      appLog(
         '🔢 Pagination: loadMore=$loadMore, _page=$_page, offset=$offset, limit=$_limit',
+        name: 'SalesProvider',
       );
       final result = await db.rawQuery('''
       SELECT s.*, c.name as customer_name
@@ -751,7 +754,7 @@ class SalesProvider extends ChangeNotifier {
       ''', args);
 
       if (requestId != _requestSerial) {
-        print('⚠️ تم تجاهل نتيجة قديمة لطلب سابق');
+        appLog('⚠️ تم تجاهل نتيجة قديمة لطلب سابق', name: 'SalesProvider');
         return;
       }
 
@@ -778,8 +781,9 @@ class SalesProvider extends ChangeNotifier {
         _displayedSales = _allSales;
         // ✅ تحديد hasMore هل في المزيد في الـ database
         _hasMore = _allSales.length < totalCount;
-        print(
+        appLog(
           '📊 بعد الاستعلام: _page=$_page, _allSales.length=${_allSales.length}, totalCount=$totalCount, _hasMore=$_hasMore',
+          name: 'SalesProvider',
         );
       } else {
         if (!loadMore) {
@@ -806,7 +810,7 @@ class SalesProvider extends ChangeNotifier {
     _allSales.clear();
     _displayedSales.clear();
     _hasMore = true;
-    print('🧹 تم مسح بيانات الفواتير السابقة');
+    appLog('🧹 تم مسح بيانات الفواتير السابقة', name: 'SalesProvider');
     notifyListeners();
   }
 
@@ -815,7 +819,10 @@ class SalesProvider extends ChangeNotifier {
     bool forceRefresh = false,
   }) async {
     if (_isLoading) {
-      print('⏳ تم تجاهل fetchSales لأن التحميل ما زال جاريًا');
+      appLog(
+        '⏳ تم تجاهل fetchSales لأن التحميل ما زال جاريًا',
+        name: 'SalesProvider',
+      );
       return;
     }
 
@@ -830,18 +837,21 @@ class SalesProvider extends ChangeNotifier {
   }
 
   Future<void> loadMoreSales() async {
-    print('🔄 زر عرض المزيد - بدء');
-    print('   - hasMore: $_hasMore');
-    print('   - isLoading: $_isLoading');
-    print('   - الصفحة الحالية: $_page');
-    print('   - الفواتير الحالية: ${_allSales.length}');
+    appLog('🔄 زر عرض المزيد - بدء', name: 'SalesProvider');
+    appLog('   - hasMore: $_hasMore', name: 'SalesProvider');
+    appLog('   - isLoading: $_isLoading', name: 'SalesProvider');
+    appLog('   - الصفحة الحالية: $_page', name: 'SalesProvider');
+    appLog('   - الفواتير الحالية: ${_allSales.length}', name: 'SalesProvider');
 
     if (!_hasMore || _isLoading) return;
 
-    print('✅ بدء تحميل المزيد من الفواتير');
+    appLog('✅ بدء تحميل المزيد من الفواتير', name: 'SalesProvider');
     // ✅ forceRefresh: true عشان يتجاوز الكاش
     await _fetchSalesWithFilters(loadMore: true, forceRefresh: true);
-    print('✅ تم تحميل المزيد. الفواتير الآن: ${_allSales.length}');
+    appLog(
+      '✅ تم تحميل المزيد. الفواتير الآن: ${_allSales.length}',
+      name: 'SalesProvider',
+    );
   }
 
   // █████████████████████████████████████████████████████████████████████████
@@ -1499,7 +1509,6 @@ class SalesProvider extends ChangeNotifier {
 
       final sales = result.map((e) => Sale.fromMap(e)).toList();
       _salesCache[cacheKey] = sales;
-      _lastCurrentYearCacheUpdate = DateTime.now();
     } catch (e) {
       log('❌ خطأ في تحميل البيانات المسبق: $e');
     }

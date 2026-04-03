@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import 'package:motamayez/components/base_layout.dart';
-import 'package:motamayez/providers/sales_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart'; // ⬅️ أضف هاد
 import 'package:motamayez/widgets/SaleDetailsDialog.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +8,7 @@ import '../../providers/cashier_activity_provider.dart';
 import '../../models/cashier_activity_model.dart';
 
 class CashierActivityScreen extends StatefulWidget {
-  const CashierActivityScreen({Key? key}) : super(key: key);
+  const CashierActivityScreen({super.key});
 
   @override
   State<CashierActivityScreen> createState() => _CashierActivityScreenState();
@@ -109,6 +108,7 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
@@ -170,6 +170,7 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: Colors.indigo.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -254,6 +255,7 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
           constraints: const BoxConstraints(minWidth: 100),
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           decoration: BoxDecoration(
+            // ignore: deprecated_member_use
             color: Colors.green.withOpacity(0.1),
             borderRadius: BorderRadius.circular(10),
           ),
@@ -357,6 +359,7 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
               style: const TextStyle(fontSize: 15),
             ),
             style: ElevatedButton.styleFrom(
+              // ignore: deprecated_member_use
               backgroundColor: Colors.indigo.withOpacity(0.1),
               foregroundColor: Colors.indigo,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -416,6 +419,7 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: Colors.indigo.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -453,6 +457,7 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: paymentColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(6),
               ),

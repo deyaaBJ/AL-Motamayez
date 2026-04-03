@@ -1,3 +1,4 @@
+// ignore: file_names
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -232,6 +233,7 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.grey.withOpacity(0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
@@ -346,28 +348,6 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
         ],
       ),
     );
-  }
-
-  // دالة لفحص البيانات
-  Future<void> _debugData() async {
-    // تأجيل التنفيذ حتى تكتمل عملية البناء
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final provider = Provider.of<PurchaseInvoiceProvider>(
-        context,
-        listen: false,
-      );
-
-      log('\n1. البحث برقم "1":');
-      await provider.testSearch('1');
-      await Future.delayed(const Duration(seconds: 1));
-
-      log('\n2. البحث باسم "مورد":');
-      await provider.testSearch('مورد');
-      await Future.delayed(const Duration(seconds: 1));
-
-      log('\n3. إعادة تحميل الكل:');
-      await provider.refreshInvoices();
-    });
   }
 
   Widget _buildHeaderCell(String text) {

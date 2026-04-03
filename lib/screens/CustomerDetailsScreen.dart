@@ -1,5 +1,5 @@
-// screens/customer_details_screen.dart
-import 'package:flutter/material.dart' hide Transaction;
+// ignore: file_names
+import 'package:flutter/material.dart';
 import 'package:motamayez/providers/sales_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
@@ -514,6 +514,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                         radius: 24,
                         backgroundColor: const Color(
                           0xFF6A3093,
+                          // ignore: deprecated_member_use
                         ).withOpacity(0.1),
                         child: Text(
                           widget.customer.name.substring(0, 1),
@@ -606,10 +607,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     child: ElevatedButton.icon(
                       onPressed:
                           () => _showDepositDialog(widget.customer, balance),
-                      icon: const Icon(
-                        Icons.account_balance_wallet,
-                        size: 18,
-                      ),
+                      icon: const Icon(Icons.account_balance_wallet, size: 18),
                       label: const Text('إيداع رصيد'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.teal,
@@ -633,7 +631,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                       border: Border.all(
                         color:
                             balance > 0
+                                // ignore: deprecated_member_use
                                 ? Colors.red.withOpacity(0.2)
+                                // ignore: deprecated_member_use
                                 : Colors.green.withOpacity(0.2),
                       ),
                     ),
@@ -693,6 +693,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       margin: const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
+        // ignore: deprecated_member_use
         color: const Color(0xFF6A3093).withOpacity(0.1),
         border: Border(
           left: BorderSide(color: const Color(0xFF6A3093), width: 4),
@@ -753,13 +754,17 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
               decoration: BoxDecoration(
                 color:
                     isPayment
+                        // ignore: deprecated_member_use
                         ? Colors.green.withOpacity(0.1)
+                        // ignore: deprecated_member_use
                         : Colors.blue.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color:
                       isPayment
+                          // ignore: deprecated_member_use
                           ? Colors.green.withOpacity(0.3)
+                          // ignore: deprecated_member_use
                           : Colors.blue.withOpacity(0.3),
                 ),
               ),

@@ -83,7 +83,7 @@ class ExpenseProvider with ChangeNotifier {
       if (_currentSearchQuery != null && _currentSearchQuery!.isNotEmpty) {
         if (where.isNotEmpty) where += ' AND ';
         where += '(type LIKE ? OR note LIKE ?)';
-        String searchPattern = '%${_currentSearchQuery}%';
+        String searchPattern = '%$_currentSearchQuery%';
         whereArgs.add(searchPattern);
         whereArgs.add(searchPattern);
       }

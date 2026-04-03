@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:motamayez/utils/app_config.dart';
 import 'package:path/path.dart' as p;
@@ -11,6 +12,8 @@ import 'dart:developer';
 
 class AuthProvider with ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
+  Timer? _autoBackupTimer;
+  bool _isAutoBackupRunning = false;
 
   Map<String, dynamic>? _currentUser;
   Map<String, dynamic>? get currentUser => _currentUser;
@@ -70,6 +73,7 @@ class AuthProvider with ChangeNotifier {
       }
 
       notifyListeners();
+      _startAutoBackupTimer();
       return true;
     } catch (e) {
       log('Login error: $e');
@@ -89,6 +93,7 @@ class AuthProvider with ChangeNotifier {
   // ================================
   Future<void> logout() async {
     try {
+      _stopAutoBackupTimer();
       await _createBackupWithCleanup();
       _currentUser = null;
       notifyListeners();
@@ -102,6 +107,7 @@ class AuthProvider with ChangeNotifier {
   // ================================
   Future<void> backupAndCleanOnClose() async {
     try {
+      _stopAutoBackupTimer();
       if (_currentUser == null) {
         log('⚠️ لا يمكن النسخ: المستخدم غير مسجل دخول');
         return;
@@ -122,6 +128,12 @@ class AuthProvider with ChangeNotifier {
     final Stopwatch stopwatch = Stopwatch()..start();
 
     try {
+      if (_isAutoBackupRunning) {
+        log('ℹ️ تم تخطي النسخ الاحتياطي: توجد عملية نسخ قيد التنفيذ');
+        return;
+      }
+      _isAutoBackupRunning = true;
+
       if (_currentUser == null) {
         log('⚠️ لا يمكن إنشاء نسخة: لم يتم تسجيل الدخول');
         return;
@@ -218,7 +230,43 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       log('❌ خطأ في النسخ الاحتياطي: $e');
       rethrow;
+    } finally {
+      _isAutoBackupRunning = false;
     }
+  }
+
+  void _startAutoBackupTimer() {
+    _autoBackupTimer?.cancel();
+
+    if (_currentUser == null) {
+      return;
+    }
+
+    _autoBackupTimer = Timer.periodic(const Duration(minutes: 30), (_) async {
+      if (_currentUser == null || _isAutoBackupRunning) {
+        return;
+      }
+
+      log('🔄 بدء النسخ الاحتياطي التلقائي كل 30 دقيقة');
+      try {
+        await _createBackupWithCleanup();
+      } catch (e) {
+        log('❌ فشل النسخ الاحتياطي التلقائي: $e');
+      }
+    });
+
+    log('⏰ تم تفعيل النسخ الاحتياطي التلقائي كل 30 دقيقة');
+  }
+
+  void _stopAutoBackupTimer() {
+    _autoBackupTimer?.cancel();
+    _autoBackupTimer = null;
+  }
+
+  @override
+  void dispose() {
+    _stopAutoBackupTimer();
+    super.dispose();
   }
 
   // ================================
@@ -242,16 +290,16 @@ class AuthProvider with ChangeNotifier {
         if (numberOfCopies is int) {
           return numberOfCopies;
         } else if (numberOfCopies is String) {
-          return int.tryParse(numberOfCopies) ?? 1;
+          return int.tryParse(numberOfCopies) ?? 5;
         } else if (numberOfCopies != null) {
           return numberOfCopies as int;
         }
       }
 
-      return 1; // قيمة افتراضية فقط إذا ما لقينا شي في الـ DB
+      return 5; // قيمة افتراضية فقط إذا ما لقينا شي في الـ DB
     } catch (e) {
       log('❌ خطأ في قراءة numberOfCopies: $e');
-      return 1;
+      return 5;
     }
   }
 

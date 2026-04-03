@@ -96,7 +96,7 @@ class ActivationService {
     }
   }
 
-  Future<String?> _getWindowsDeviceFingerprint() async {
+  Future<String?> _getWindowsDeviceFingerlog() async {
     final machineGuid = await _runPowerShellValue(
       r"(Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography').MachineGuid",
     );
@@ -118,15 +118,15 @@ class ActivationService {
       return null;
     }
 
-    final rawFingerprint = parts.join('|');
-    return sha256.convert(utf8.encode(rawFingerprint)).toString();
+    final rawFingerlog = parts.join('|');
+    return sha256.convert(utf8.encode(rawFingerlog)).toString();
   }
 
   Future<String> getDeviceId() async {
     if (Platform.isWindows) {
-      final fingerprint = await _getWindowsDeviceFingerprint();
-      if (fingerprint != null && fingerprint.isNotEmpty) {
-        return fingerprint;
+      final fingerlog = await _getWindowsDeviceFingerlog();
+      if (fingerlog != null && fingerlog.isNotEmpty) {
+        return fingerlog;
       }
     }
 

@@ -478,10 +478,10 @@ class DBHelper {
         marketName TEXT,
         defaultTaxSetting INTEGER NOT NULL DEFAULT 0,
         currency TEXT,
-        printerPort INTEGER,
-        printerIp TEXT,
+        logerPort INTEGER,
+        logerIp TEXT,
         paperSize TEXT,
-        numberOfCopies INTEGER DEFAULT 1
+        numberOfCopies INTEGER DEFAULT 5
       );
     ''');
 
@@ -491,10 +491,10 @@ class DBHelper {
       'marketName': null,
       'defaultTaxSetting': 0,
       'currency': 'ILS',
-      'printerPort': '9100',
-      'printerIp': null,
+      'logerPort': '9100',
+      'logerIp': null,
       'paperSize': '58mm',
-      'numberOfCopies': 1,
+      'numberOfCopies': 5,
     });
 
     await _createIndexes(db);

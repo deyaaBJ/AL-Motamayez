@@ -135,10 +135,10 @@ class _CashiersManagementScreenState extends State<CashiersManagementScreen> {
                               listen: false,
                             );
 
-                            print('');
-                            print('═' * 60);
-                            print('🚀 بدء إضافة كاشير جديد');
-                            print('═' * 60);
+                            log('');
+                            log('═' * 60);
+                            log('🚀 بدء إضافة كاشير جديد');
+                            log('═' * 60);
 
                             final success = await auth.createUser(
                               role: 'cashier',
@@ -147,11 +147,11 @@ class _CashiersManagementScreenState extends State<CashiersManagementScreen> {
                               password: passwordController.text,
                             );
 
-                            print('═' * 60);
-                            print(
+                            log('═' * 60);
+                            log(
                               '🏁 النتيجة النهائية: ${success ? "نجاح" : "فشل"}',
                             );
-                            print('═' * 60);
+                            log('═' * 60);
 
                             if (!dialogContext.mounted) return;
 

@@ -7,7 +7,7 @@ import 'package:motamayez/models/cart_item.dart';
 import 'package:path_provider/path_provider.dart'
     show getApplicationDocumentsDirectory;
 
-class ThermalReceiptPrinter {
+class ThermalReceiptloger {
   // -------- تحويل النص العربي لـ CP1256 --------
   static Uint8List _encodeArabic(String text) {
     // CP1256 Arabic Windows encoding map
@@ -156,7 +156,7 @@ class ThermalReceiptPrinter {
     return [...List.filled(width, char.codeUnitAt(0)), 0x0A];
   }
 
-  static Future<void> printReceipt({
+  static Future<void> logReceipt({
     required List<CartItem> cartItems,
     required String marketName,
     String? adminPhone,
@@ -172,8 +172,8 @@ class ThermalReceiptPrinter {
     int? receiptNumber,
     required String currency,
     String paperSize = '58mm',
-    required String printerIp,
-    int printerPort = 9100,
+    required String logerIp,
+    int logerPort = 9100,
   }) async {
     final int lineWidth = paperSize == '80mm' ? 42 : 32;
     final int maxNameLength = paperSize == '80mm' ? 18 : 10;
@@ -329,10 +329,10 @@ class ThermalReceiptPrinter {
     bytes.addAll([0x0A, 0x0A, 0x0A]);
     bytes.addAll([0x1D, 0x56, 0x41, 0x03]); // cut
 
-    await _sendToNetworkPrinter(
-      printerIp,
+    await _sendToNetworkloger(
+      logerIp,
       Uint8List.fromList(bytes),
-      port: printerPort,
+      port: logerPort,
     );
   }
 
@@ -349,7 +349,7 @@ class ThermalReceiptPrinter {
   //   throw Exception('فشل الاتصال بالطابعة: $e');
   // }
 
-  static Future<void> _sendToNetworkPrinter(
+  static Future<void> _sendToNetworkloger(
     String ip,
     Uint8List bytes, {
     int port = 9100,

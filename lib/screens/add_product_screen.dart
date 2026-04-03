@@ -411,7 +411,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   onChanged: (value) {
                     setState(() {
                       _isProductActive = value;
-                      print(
+                      log(
                         'تم تغيير حالة المنتج إلى: ${value ? "نشط" : "غير نشط"}',
                       );
                     });
@@ -461,7 +461,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   onChanged: (value) {
                     setState(() {
                       _hasExpiryDate = value;
-                      print(
+                      log(
                         'تم تغيير حالة الصلاحية إلى: ${value ? "له صلاحية" : "بدون صلاحية"}',
                       );
                     });
@@ -502,12 +502,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
     setState(() => _isLoading = true);
 
     // ⬅️ طباعة القيم للتصحيح
-    print('=== بيانات المنتج قبل الحفظ ===');
-    print('اسم المنتج: ${_nameController.text}');
-    print('الحالة النشطة: $_isProductActive');
-    print('له صلاحية: $_hasExpiryDate');
-    print('الكمية: $finalQuantity');
-    print('السعر: ${_priceController.text}');
+    log('=== بيانات المنتج قبل الحفظ ===');
+    log('اسم المنتج: ${_nameController.text}');
+    log('الحالة النشطة: $_isProductActive');
+    log('له صلاحية: $_hasExpiryDate');
+    log('الكمية: $finalQuantity');
+    log('السعر: ${_priceController.text}');
 
     try {
       if (_isNewProduct) {
@@ -523,9 +523,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
           hasExpiryDate: _hasExpiryDate, // ⬅️ هذا هو المهم!
         );
 
-        print('كائن المنتج المرسل:');
-        print('active: ${product.active}');
-        print('hasExpiryDate: ${product.hasExpiryDate}');
+        log('كائن المنتج المرسل:');
+        log('active: ${product.active}');
+        log('hasExpiryDate: ${product.hasExpiryDate}');
 
         await _provider.addProduct(product);
 
@@ -567,9 +567,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
           hasExpiryDate: _hasExpiryDate, // ⬅️ هذا هو المهم!
         );
 
-        print('كائن المنتج المرسل للتحديث:');
-        print('active: ${product.active}');
-        print('hasExpiryDate: ${product.hasExpiryDate}');
+        log('كائن المنتج المرسل للتحديث:');
+        log('active: ${product.active}');
+        log('hasExpiryDate: ${product.hasExpiryDate}');
 
         await _provider.updateProduct(product);
 
@@ -592,7 +592,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       showAppToast(context, 'حدث خطأ: $e', ToastType.error);
-      print('Error saving product: $e');
+      log('Error saving product: $e');
     }
   }
   // باقي الدوال تبقى كما هي مع تعديلات طفيفة في _saveProduct
@@ -1040,17 +1040,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }
 
   Future<void> _saveProductUnits(int productId) async {
-    print('===== بدء حفظ الوحدات =====');
-    print('رقم المنتج: $productId');
-    print('عدد الوحدات: ${_unitControllers.length}');
+    log('===== بدء حفظ الوحدات =====');
+    log('رقم المنتج: $productId');
+    log('عدد الوحدات: ${_unitControllers.length}');
 
     try {
       List<ProductUnit> existingUnits = [];
       try {
         existingUnits = await _provider.getProductUnits(productId);
-        print('الوحدات الموجودة: ${existingUnits.length}');
+        log('الوحدات الموجودة: ${existingUnits.length}');
       } catch (e) {
-        print('خطأ في جلب الوحدات الحالية: $e');
+        log('خطأ في جلب الوحدات الحالية: $e');
       }
 
       for (int i = 0; i < _unitControllers.length; i++) {
@@ -1063,7 +1063,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         final sellPriceText = controller.sellPriceController.text.trim();
 
         if (unitName.isEmpty) {
-          print('⚠️ تخطي وحدة بدون اسم');
+          log('⚠️ تخطي وحدة بدون اسم');
           continue;
         }
 
@@ -1071,16 +1071,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
         final sellPrice = double.tryParse(sellPriceText) ?? 0.0;
 
         if (containQty <= 0) {
-          print('⚠️ تخطي وحدة $unitName - الكمية غير صحيحة: $containQty');
+          log('⚠️ تخطي وحدة $unitName - الكمية غير صحيحة: $containQty');
           continue;
         }
 
         if (sellPrice <= 0) {
-          print('⚠️ تخطي وحدة $unitName - السعر غير صحيح: $sellPrice');
+          log('⚠️ تخطي وحدة $unitName - السعر غير صحيح: $sellPrice');
           continue;
         }
 
-        print('▶️ معالجة الوحدة: $unitName');
+        log('▶️ معالجة الوحدة: $unitName');
 
         final unit = ProductUnit(
           id: unitId != -1 ? unitId : null,
@@ -1093,23 +1093,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
         try {
           if (unitId == -1) {
-            print('➕ إضافة وحدة جديدة: $unitName');
+            log('➕ إضافة وحدة جديدة: $unitName');
             await _provider.addProductUnit(unit);
           } else {
-            print('🔄 تحديث وحدة موجودة: $unitName (ID: $unitId)');
+            log('🔄 تحديث وحدة موجودة: $unitName (ID: $unitId)');
             await _provider.updateProductUnit(unit);
-            print('✅ تم تحديث الوحدة $unitName');
+            log('✅ تم تحديث الوحدة $unitName');
           }
         } catch (e) {
-          print('❌ خطأ في حفظ الوحدة $unitName: $e');
+          log('❌ خطأ في حفظ الوحدة $unitName: $e');
         }
       }
 
       await _deleteRemovedUnits(productId, existingUnits);
 
-      print('===== انتهاء حفظ الوحدات بنجاح =====');
+      log('===== انتهاء حفظ الوحدات بنجاح =====');
     } catch (e) {
-      print('❌ خطأ كبير في حفظ الوحدات: $e');
+      log('❌ خطأ كبير في حفظ الوحدات: $e');
       rethrow;
     }
   }
@@ -1118,7 +1118,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     int productId,
     List<ProductUnit> existingUnits,
   ) async {
-    print('🔍 البحث عن وحدات محذوفة...');
+    log('🔍 البحث عن وحدات محذوفة...');
 
     final currentUnitIds = <int>[];
     for (int i = 0; i < _unitIds.length; i++) {
@@ -1127,8 +1127,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
       }
     }
 
-    print('IDs الوحدات في الواجهة: $currentUnitIds');
-    print(
+    log('IDs الوحدات في الواجهة: $currentUnitIds');
+    log(
       'IDs الوحدات الموجودة في DB: ${existingUnits.map((u) => u.id).toList()}',
     );
 
@@ -1136,19 +1136,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
     for (final existingUnit in existingUnits) {
       if (existingUnit.id != null &&
           !currentUnitIds.contains(existingUnit.id!)) {
-        print(
+        log(
           '🗑️ حذف الوحدة: ${existingUnit.unitName} (ID: ${existingUnit.id})',
         );
         try {
           await _provider.deleteProductUnit(existingUnit.id!);
           deletedCount++;
         } catch (e) {
-          print('❌ خطأ في حذف الوحدة ${existingUnit.id}: $e');
+          log('❌ خطأ في حذف الوحدة ${existingUnit.id}: $e');
         }
       }
     }
 
-    print('✅ تم حذف $deletedCount وحدة');
+    log('✅ تم حذف $deletedCount وحدة');
   }
 
   @override

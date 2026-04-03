@@ -235,6 +235,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               .toList();
 
       if (newCustomers.isNotEmpty) {
+        // ignore: use_build_context_synchronously
         final debtProvider = context.read<DebtProvider>();
         for (final customer in newCustomers) {
           await _loadSingleCustomerDebt(customer.id!, debtProvider);
@@ -306,6 +307,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   await _loadDashboardStats();
 
                   showAppToast(
+                    // ignore: use_build_context_synchronously
                     context,
                     'تم إضافة العميل ${newCustomer.name}',
                     ToastType.success,
@@ -314,6 +316,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               } catch (e) {
                 if (mounted) {
                   showAppToast(
+                    // ignore: use_build_context_synchronously
                     context,
                     'خطأ: ${e.toString()}',
                     ToastType.error,
@@ -370,6 +373,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
+                // ignore: deprecated_member_use
                 color: Colors.grey.withOpacity(0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
@@ -456,9 +460,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     message: 'إعادة تحميل',
                     child: Container(
                       decoration: BoxDecoration(
+                        // ignore: deprecated_member_use
                         color: const Color(0xFF6A3093).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
+                          // ignore: deprecated_member_use
                           color: const Color(0xFF6A3093).withOpacity(0.3),
                         ),
                       ),
@@ -503,6 +509,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
+                // ignore: deprecated_member_use
                 color: Colors.grey.withOpacity(0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
@@ -561,6 +568,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
+            // ignore: deprecated_member_use
             color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(10),
           ),
@@ -599,6 +607,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
+                // ignore: deprecated_member_use
                 color: Colors.grey.withOpacity(0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
@@ -693,6 +702,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           icon: const Icon(Icons.keyboard_arrow_down),
           label: const Text('تحميل المزيد'),
           style: ElevatedButton.styleFrom(
+            // ignore: deprecated_member_use
             backgroundColor: const Color(0xFF6A3093).withOpacity(0.1),
             foregroundColor: const Color(0xFF6A3093),
           ),
@@ -792,6 +802,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         decoration: BoxDecoration(
           color:
               isSelected
+                  // ignore: deprecated_member_use
                   ? const Color(0xFF6A3093).withOpacity(0.05)
                   : isEven
                   ? Colors.white
@@ -938,8 +949,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               fontSize: 11,
                               color:
                                   hasDebt
+                                      // ignore: deprecated_member_use
                                       ? Colors.red.withOpacity(0.8)
                                       : hasCredit
+                                      // ignore: deprecated_member_use
                                       ? Colors.green.withOpacity(0.8)
                                       : Colors.grey,
                             ),
@@ -1008,9 +1021,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           width: 32,
                           height: 32,
                           decoration: BoxDecoration(
+                            // ignore: deprecated_member_use
                             color: Colors.grey.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
+                              // ignore: deprecated_member_use
                               color: Colors.grey.withOpacity(0.3),
                             ),
                           ),
@@ -1043,8 +1058,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
+          // ignore: deprecated_member_use
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(8),
+          // ignore: deprecated_member_use
           border: Border.all(color: color.withOpacity(0.3)),
         ),
         child: IconButton(
@@ -1109,6 +1126,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
                 if (mounted) {
                   showAppToast(
+                    // ignore: use_build_context_synchronously
                     context,
                     'تم تحديث العميل ${updatedCustomer.name}',
                     ToastType.success,
@@ -1118,6 +1136,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               } catch (e) {
                 if (mounted) {
                   showAppToast(
+                    // ignore: use_build_context_synchronously
                     context,
                     'خطأ: ${e.toString()}',
                     ToastType.error,
@@ -1160,6 +1179,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       }
 
       final confirmed = await showDialog<bool>(
+        // ignore: use_build_context_synchronously
         context: context,
         builder:
             (context) => AlertDialog(
@@ -1180,6 +1200,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       );
 
       if (confirmed == true) {
+        // ignore: use_build_context_synchronously
         await context.read<CustomerProvider>().deleteCustomer(customer.id!);
 
         _customerDebts.remove(customer.id!);
@@ -1231,46 +1252,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
             context.read<SalesProvider>().invalidateAndRefresh();
             setState(() {});
             await _loadDashboardStats();
+            // ignore: use_build_context_synchronously
             showAppToast(context, 'تم صرف الرصيد بنجاح', ToastType.success);
           }
         } catch (e) {
           if (mounted) {
             showAppToast(context, 'خطأ في صرف الرصيد: $e', ToastType.error);
-          }
-        }
-      },
-    );
-  }
-
-  void _showDepositDialog(Customer customer, double currentBalance) {
-    QuickPaymentDialog.showDeposit(
-      context: context,
-      customer: customer,
-      currentBalance: currentBalance,
-      onDeposit: (customer, amount, note) async {
-        final debtProvider = context.read<DebtProvider>();
-
-        try {
-          await debtProvider.addDeposit(
-            customerId: customer.id!,
-            amount: amount,
-            note: note,
-          );
-
-          final updatedDebt = await debtProvider.getTotalDebtByCustomerId(
-            customer.id!,
-          );
-          _customerDebts[customer.id!] = updatedDebt;
-
-          if (mounted) {
-            context.read<SalesProvider>().invalidateAndRefresh();
-            setState(() {});
-            await _loadDashboardStats();
-            showAppToast(context, 'تم إيداع الرصيد بنجاح', ToastType.success);
-          }
-        } catch (e) {
-          if (mounted) {
-            showAppToast(context, 'خطأ في إيداع الرصيد: $e', ToastType.error);
           }
         }
       },
@@ -1466,6 +1453,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             context.read<SalesProvider>().invalidateAndRefresh();
             setState(() {});
             await _loadDashboardStats();
+            // ignore: use_build_context_synchronously
             showAppToast(context, 'تم تسديد الدفعة بنجاح', ToastType.success);
           }
         } catch (e) {

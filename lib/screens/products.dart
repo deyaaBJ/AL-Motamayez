@@ -73,6 +73,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     } catch (e) {
       log('Error loading products by filter: $e');
       ScaffoldMessenger.of(
+        // ignore: use_build_context_synchronously
         context,
       ).showSnackBar(SnackBar(content: Text('حدث خطأ في تحميل المنتجات: $e')));
     } finally {
@@ -107,6 +108,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: _getFilterColor().withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: _getFilterColor(), width: 1),
@@ -179,34 +181,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
-  // ✅ مؤشر العدد الإجمالي (محسّن)
-  Widget _buildTotalProductsIndicator() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: _getFilterColor().withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _getFilterColor(), width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(_getFilterIcon(), size: 16, color: _getFilterColor()),
-          SizedBox(width: 6),
-          Text(
-            '${_provider.totalProducts} ${_getFilterLabel()}',
-            style: TextStyle(
-              color: _getFilterColor(),
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ⬅️ دوال مساعدة لتحديد الألوان والرموز حسب الفلتر
   Color _getFilterColor() {
     switch (_currentFilter) {
@@ -220,36 +194,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
         return Colors.amber;
       default:
         return Color(0xFF6A3093);
-    }
-  }
-
-  IconData _getFilterIcon() {
-    switch (_currentFilter) {
-      case ProductFilter.inactive:
-        return Icons.block;
-      case ProductFilter.available:
-        return Icons.check_circle;
-      case ProductFilter.unavailable:
-        return Icons.cancel;
-      case ProductFilter.lowStock:
-        return Icons.warning;
-      default:
-        return Icons.inventory_2;
-    }
-  }
-
-  String _getFilterLabel() {
-    switch (_currentFilter) {
-      case ProductFilter.inactive:
-        return 'غير نشط';
-      case ProductFilter.available:
-        return 'متوفر';
-      case ProductFilter.unavailable:
-        return 'غير متوفر';
-      case ProductFilter.lowStock:
-        return 'منخفض';
-      default:
-        return 'منتج';
     }
   }
 

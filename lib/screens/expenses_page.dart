@@ -333,6 +333,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                 isSelected
                     ? [
                       BoxShadow(
+                        // ignore: deprecated_member_use
                         color: Colors.orange.withOpacity(0.2),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
@@ -437,6 +438,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
+            // ignore: deprecated_member_use
             color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
@@ -807,7 +809,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                     children: [
                       // نوع المصروف
                       DropdownButtonFormField<String>(
-                        value: selectedExpenseType,
+                        initialValue: selectedExpenseType,
                         decoration: const InputDecoration(
                           labelText: 'نوع المصروف',
                           border: OutlineInputBorder(),
@@ -862,7 +864,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
 
                       // طريقة الدفع
                       DropdownButtonFormField<String>(
-                        value: selectedPaymentType,
+                        initialValue: selectedPaymentType,
                         decoration: const InputDecoration(
                           labelText: 'طريقة الدفع',
                           border: OutlineInputBorder(),
@@ -963,8 +965,10 @@ class _ExpensesPageState extends State<ExpensesPage> {
                       );
                       await context.read<ExpenseProvider>().addExpense(expense);
                       await _loadOverallStatistics();
+                      // ignore: use_build_context_synchronously
                       Navigator.pop(context);
 
+                      // ignore: use_build_context_synchronously
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: const Text('تم إضافة المصروف بنجاح'),
@@ -1024,7 +1028,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       DropdownButtonFormField<String>(
-                        value: selectedExpenseType,
+                        initialValue: selectedExpenseType,
                         decoration: const InputDecoration(
                           labelText: 'نوع المصروف',
                           border: OutlineInputBorder(),
@@ -1075,7 +1079,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                       const SizedBox(height: 16),
 
                       DropdownButtonFormField<String>(
-                        value: selectedPaymentType,
+                        initialValue: selectedPaymentType,
                         decoration: const InputDecoration(
                           labelText: 'طريقة الدفع',
                           border: OutlineInputBorder(),
@@ -1169,8 +1173,10 @@ class _ExpensesPageState extends State<ExpensesPage> {
                         updatedExpense,
                       );
                       await _loadOverallStatistics();
+                      // ignore: use_build_context_synchronously
                       Navigator.pop(context);
 
+                      // ignore: use_build_context_synchronously
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: const Text('تم تعديل المصروف بنجاح'),
@@ -1216,8 +1222,10 @@ class _ExpensesPageState extends State<ExpensesPage> {
               onPressed: () async {
                 await provider.deleteExpense(expense.id!);
                 await _loadOverallStatistics();
+                // ignore: use_build_context_synchronously
                 Navigator.pop(context);
 
+                // ignore: use_build_context_synchronously
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: const Text('تم حذف المصروف بنجاح'),
@@ -1230,99 +1238,6 @@ class _ExpensesPageState extends State<ExpensesPage> {
               child: const Text('حذف'),
             ),
           ],
-        );
-      },
-    );
-  }
-
-  void _showFilterDialog(BuildContext context) {
-    final provider = context.read<ExpenseProvider>();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('فلترة المصاريف'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // فلترة حسب النوع
-                    DropdownButtonFormField<String>(
-                      value: null,
-                      decoration: const InputDecoration(
-                        labelText: 'نوع المصروف',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: null,
-                          child: Text('كل الأنواع'),
-                        ),
-                        ..._expenseTypes.map(
-                          (type) =>
-                              DropdownMenuItem(value: type, child: Text(type)),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          provider.filterByType(value);
-                          _resetAllFilters(provider);
-                          Navigator.pop(context);
-                        }
-                      },
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // فلترة حسب طريقة الدفع
-                    DropdownButtonFormField<String>(
-                      value: null,
-                      decoration: const InputDecoration(
-                        labelText: 'طريقة الدفع',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: null,
-                          child: Text('كل الطرق'),
-                        ),
-                        ..._paymentTypes.map(
-                          (type) =>
-                              DropdownMenuItem(value: type, child: Text(type)),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          _selectedPaymentType = value;
-                          _activeTimeFilter = null;
-                          _isAllSelected = false;
-                          provider.filterByPaymentType(value);
-                          Navigator.pop(context);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    _resetAllFilters(provider);
-                    Navigator.pop(context);
-                  },
-                  child: const Text('إعادة تعيين'),
-                ),
-
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('إلغاء'),
-                ),
-              ],
-            );
-          },
         );
       },
     );

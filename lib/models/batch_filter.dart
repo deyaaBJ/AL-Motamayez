@@ -31,8 +31,6 @@ class BatchFilter {
     conditions.add('pb.active = 1');
 
     if (status != null && status!.isNotEmpty) {
-      final today = DateTime.now();
-
       if (status == 'منتهي') {
         conditions.add('pb.days_remaining < 0');
       } else if (status == 'قريب') {

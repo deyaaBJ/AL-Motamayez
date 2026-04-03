@@ -6,6 +6,7 @@ import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/providers/sales_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/providers/batch_provider.dart';
+import 'package:motamayez/utils/app_logger.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -47,7 +48,7 @@ class _MainScreenState extends State<MainScreen> {
       await _loadUserName();
       await _loadBatchAlerts();
     } catch (e) {
-      print('⚠️ خطأ في تحميل البيانات: $e');
+      appLog('⚠️ خطأ في تحميل البيانات: $e', name: 'MainScreen');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -66,7 +67,7 @@ class _MainScreenState extends State<MainScreen> {
         });
       }
     } catch (e) {
-      print('⚠️ خطأ في تحميل اسم المستخدم: $e');
+      appLog('⚠️ خطأ في تحميل اسم المستخدم: $e', name: 'MainScreen');
     }
   }
 
@@ -82,7 +83,7 @@ class _MainScreenState extends State<MainScreen> {
         });
       }
     } catch (e) {
-      print('⚠️ خطأ في تحميل إشعارات الدفعات: $e');
+      appLog('⚠️ خطأ في تحميل إشعارات الدفعات: $e', name: 'MainScreen');
     }
   }
 

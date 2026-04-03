@@ -56,7 +56,6 @@ class _PosScreenState extends State<PosScreen>
   bool _isSaleLoaded = false;
   bool _isLoading = false;
 
-
   @override
   void initState() {
     super.initState();
@@ -225,6 +224,7 @@ class _PosScreenState extends State<PosScreen>
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      // ignore: deprecated_member_use
       color: Colors.blueAccent.withOpacity(0.2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -252,6 +252,7 @@ class _PosScreenState extends State<PosScreen>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.grey.withOpacity(0.2),
             blurRadius: 8,
             offset: const Offset(0, 4),
@@ -662,6 +663,7 @@ class _PosScreenState extends State<PosScreen>
     }
 
     showAppToast(
+      // ignore: use_build_context_synchronously
       context,
       'تم إضافة ${product.name} (${unit.unitName}) إلى السلة',
       ToastType.success,
@@ -699,7 +701,7 @@ class _PosScreenState extends State<PosScreen>
 
         if (existingSaleItem != null && existingSaleItem.unitId != null) {
           for (final unit in allUnits) {
-            if (unit.id == existingSaleItem!.unitId) {
+            if (unit.id == existingSaleItem.unitId) {
               selectedUnitForEdit = unit;
               break;
             }
@@ -827,6 +829,7 @@ class _PosScreenState extends State<PosScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.grey.withOpacity(0.2),
             blurRadius: 10,
             offset: const Offset(0, -2),
@@ -1218,8 +1221,8 @@ class _PosScreenState extends State<PosScreen>
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final auth = Provider.of<AuthProvider>(context, listen: false);
 
-    final printerIp = settings.printerIp;
-    if (printerIp == null || printerIp.isEmpty) {
+    final logerIp = settings.logerIp;
+    if (logerIp == null || logerIp.isEmpty) {
       showAppToast(
         context,
         'يرجى إعداد طابعة الفواتير في الإعدادات',
@@ -1252,7 +1255,7 @@ class _PosScreenState extends State<PosScreen>
         receiptNumber = _originalSale!.id;
       }
 
-      await ThermalReceiptPrinter.printReceipt(
+      await ThermalReceiptloger.logReceipt(
         cartItems: _cartItems,
         marketName: marketName,
         adminPhone: phone,
@@ -1267,14 +1270,16 @@ class _PosScreenState extends State<PosScreen>
         receiptNumber: receiptNumber,
         currency: settings.currencyName,
         paperSize: settings.paperSize ?? '58mm',
-        printerIp: printerIp,
-        printerPort: settings.printerPort ?? 9100,
+        logerIp: logerIp,
+        logerPort: settings.logerPort ?? 9100,
       );
 
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'تم إرسال الفاتورة إلى الطابعة', ToastType.success);
     } catch (e) {
       log('خطأ في الطباعة: $e');
       showAppToast(
+        // ignore: use_build_context_synchronously
         context,
         'فشلت الطباعة - سيتم إتمام البيع',
         ToastType.warning,
@@ -1584,7 +1589,7 @@ class _PosScreenState extends State<PosScreen>
         final hasMore = customerProvider.hasMore;
 
         // متغير لمنع التحميل المتكرر
-        bool _isLoadingMore = false;
+        bool isLoadingMore = false;
 
         return Dialog(
           shape: RoundedRectangleBorder(
@@ -1630,8 +1635,8 @@ class _PosScreenState extends State<PosScreen>
                                 notification.metrics.maxScrollExtent * 0.9 &&
                             hasMore &&
                             !isLoading &&
-                            !_isLoadingMore) {
-                          _isLoadingMore = true;
+                            !isLoadingMore) {
+                          isLoadingMore = true;
 
                           // تحميل المزيد
                           customerProvider.loadMoreCustomers().then((_) {
@@ -1639,7 +1644,7 @@ class _PosScreenState extends State<PosScreen>
                             Future.delayed(
                               const Duration(milliseconds: 300),
                               () {
-                                _isLoadingMore = false;
+                                isLoadingMore = false;
                               },
                             );
                           });
@@ -1669,7 +1674,7 @@ class _PosScreenState extends State<PosScreen>
                                       // إذا وصلنا لنهاية القائمة
                                       if (index == customers.length) {
                                         // نعرض loader فقط إذا كان في hasMore ولم يكن في تحميل
-                                        if (hasMore && !_isLoadingMore) {
+                                        if (hasMore && !isLoadingMore) {
                                           return const Padding(
                                             padding: EdgeInsets.all(16),
                                             child: Center(
@@ -1677,7 +1682,7 @@ class _PosScreenState extends State<PosScreen>
                                                   CircularProgressIndicator(),
                                             ),
                                           );
-                                        } else if (_isLoadingMore) {
+                                        } else if (isLoadingMore) {
                                           // إذا كان في تحميل، نعرض loader مختلف أو نختفي
                                           return const SizedBox.shrink();
                                         } else {
@@ -1787,6 +1792,7 @@ class _PosScreenState extends State<PosScreen>
               } catch (e) {
                 if (mounted) {
                   showAppToast(
+                    // ignore: use_build_context_synchronously
                     context,
                     'خطأ في إضافة العميل: $e',
                     ToastType.error,
@@ -1824,9 +1830,8 @@ class _PosScreenState extends State<PosScreen>
         }
       }
 
-      final double customerBalance = await debtProvider.getTotalDebtByCustomerId(
-        customer.id!,
-      );
+      final double customerBalance = await debtProvider
+          .getTotalDebtByCustomerId(customer.id!);
       final double availableCredit =
           customerBalance < 0 ? customerBalance.abs() : 0.0;
       final double appliedFromBalance =

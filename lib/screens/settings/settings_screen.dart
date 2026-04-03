@@ -37,8 +37,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _currentPasswordAdminController = TextEditingController();
   final _currentPasswordCashierController = TextEditingController();
   final _currentPasswordTaxController = TextEditingController();
-  final _printerIpController = TextEditingController();
-  final _printerPortController = TextEditingController();
+  final _logerIpController = TextEditingController();
+  final _logerPortController = TextEditingController();
 
   String? _backupFolderPath;
 
@@ -55,8 +55,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       await settings.loadSettings();
       _marketNameController.text = settings.marketName ?? '';
-      _printerIpController.text = settings.printerIp ?? '';
-      _printerPortController.text = (settings.printerPort ?? 9100).toString();
+      _logerIpController.text = settings.logerIp ?? '';
+      _logerPortController.text = (settings.logerPort ?? 9100).toString();
 
       await _loadUserData(
         auth,
@@ -235,9 +235,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Icons.print,
           const [Color(0xFF009688), Color(0xFF26A69A)],
           () => _navigate(
-            PrinterSettingsScreen(
-              ipController: _printerIpController,
-              portController: _printerPortController,
+            logerSettingsScreen(
+              ipController: _logerIpController,
+              portController: _logerPortController,
             ),
           ),
         ),
@@ -452,12 +452,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _currentPasswordAdminController.dispose();
     _currentPasswordCashierController.dispose();
     _currentPasswordTaxController.dispose();
-    _printerIpController.dispose();
-    _printerPortController.dispose();
+    _logerIpController.dispose();
+    _logerPortController.dispose();
     super.dispose();
   }
 }
-
-
-
-

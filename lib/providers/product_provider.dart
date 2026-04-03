@@ -7,7 +7,6 @@ import 'package:motamayez/models/productFilter.dart';
 import 'package:motamayez/models/product_unit.dart';
 import 'package:motamayez/models/sale.dart';
 import 'package:motamayez/models/sale_item.dart';
-import 'package:motamayez/utils/unit_translator.dart';
 import 'package:sqflite/sqflite.dart';
 import '../db/db_helper.dart';
 import 'dart:developer';
@@ -37,9 +36,6 @@ class ProductProvider with ChangeNotifier {
 
   List<Sale> _displayedSales = [];
   List<Sale> get displayedSales => _displayedSales;
-
-  DateTime? _currentStartDate;
-  DateTime? _currentEndDate;
 
   int lowStockCount = 0;
   int outOfStockCount = 0;
@@ -273,7 +269,6 @@ class ProductProvider with ChangeNotifier {
 
       if (result.isNotEmpty) {
         final currentActive = (result.first['active'] as int?) == 1;
-        final productName = result.first['name'] as String;
         final newActive = !currentActive;
 
         await db.update(
@@ -806,7 +801,9 @@ class ProductProvider with ChangeNotifier {
 
       // 🔹 تحديث الربح الإجمالي في الفاتورة
       final double invoiceDiscount =
-          grossInvoiceSubtotal > totalAmount ? grossInvoiceSubtotal - totalAmount : 0.0;
+          grossInvoiceSubtotal > totalAmount
+              ? grossInvoiceSubtotal - totalAmount
+              : 0.0;
 
       if (invoiceDiscount > 0 && productProfitEntries.isNotEmpty) {
         final double productRevenueSubtotal = productProfitEntries.fold(
@@ -817,7 +814,8 @@ class ProductProvider with ChangeNotifier {
         if (productRevenueSubtotal > 0) {
           final double productDiscountShare =
               grossInvoiceSubtotal > 0
-                  ? invoiceDiscount * (productRevenueSubtotal / grossInvoiceSubtotal)
+                  ? invoiceDiscount *
+                      (productRevenueSubtotal / grossInvoiceSubtotal)
                   : 0.0;
 
           double allocatedSoFar = 0.0;
@@ -832,7 +830,8 @@ class ProductProvider with ChangeNotifier {
             final double allocatedDiscount =
                 isLast
                     ? productDiscountShare - allocatedSoFar
-                    : productDiscountShare * (subtotal / productRevenueSubtotal);
+                    : productDiscountShare *
+                        (subtotal / productRevenueSubtotal);
 
             allocatedSoFar += allocatedDiscount;
             final double adjustedProfit = currentProfit - allocatedDiscount;
@@ -1256,7 +1255,9 @@ class ProductProvider with ChangeNotifier {
 
       // 🔹 9️⃣ تحديث بيانات الفاتورة الرئيسية
       final double invoiceDiscount =
-          grossInvoiceSubtotal > totalAmount ? grossInvoiceSubtotal - totalAmount : 0.0;
+          grossInvoiceSubtotal > totalAmount
+              ? grossInvoiceSubtotal - totalAmount
+              : 0.0;
 
       if (invoiceDiscount > 0 && productProfitEntries.isNotEmpty) {
         final double productRevenueSubtotal = productProfitEntries.fold(
@@ -1267,7 +1268,8 @@ class ProductProvider with ChangeNotifier {
         if (productRevenueSubtotal > 0) {
           final double productDiscountShare =
               grossInvoiceSubtotal > 0
-                  ? invoiceDiscount * (productRevenueSubtotal / grossInvoiceSubtotal)
+                  ? invoiceDiscount *
+                      (productRevenueSubtotal / grossInvoiceSubtotal)
                   : 0.0;
 
           double allocatedSoFar = 0.0;
@@ -1282,7 +1284,8 @@ class ProductProvider with ChangeNotifier {
             final double allocatedDiscount =
                 isLast
                     ? productDiscountShare - allocatedSoFar
-                    : productDiscountShare * (subtotal / productRevenueSubtotal);
+                    : productDiscountShare *
+                        (subtotal / productRevenueSubtotal);
 
             allocatedSoFar += allocatedDiscount;
             final double adjustedProfit = currentProfit - allocatedDiscount;
@@ -1549,62 +1552,6 @@ class ProductProvider with ChangeNotifier {
 
   // ========== دوال مساعدة ==========
 
-  Future<int> _determineShowForTax(String userRole, Database db) async {
-    if (userRole == 'tax') {
-      return 1;
-    } else {
-      final settings = await db.query('settings', limit: 1);
-      if (settings.isNotEmpty) {
-        dynamic taxSetting = settings.first['defaultTaxSetting'];
-        if (taxSetting is int) {
-          return taxSetting;
-        } else if (taxSetting is String) {
-          return int.tryParse(taxSetting) ?? 0;
-        }
-      }
-      return 0;
-    }
-  }
-
-  Future<void> _validateStockQuantities(
-    List<CartItem> cartItems,
-    DatabaseExecutor db,
-  ) async {
-    for (var item in cartItems) {
-      final product = item.product;
-      final List<Map<String, dynamic>> result = await db.query(
-        'products',
-        columns: ['quantity', 'name'],
-        where: 'id = ?',
-        whereArgs: [product?.id],
-      );
-
-      if (result.isNotEmpty) {
-        final dynamic quantityValue = result.first['quantity'];
-        final double currentQuantity =
-            (quantityValue is int)
-                ? quantityValue.toDouble()
-                : quantityValue as double;
-
-        final String productName = result.first['name'] as String;
-
-        double requiredQuantity = item.quantity;
-        if (item.selectedUnit != null) {
-          requiredQuantity = item.quantity * item.selectedUnit!.containQty;
-        }
-
-        if (requiredQuantity > 0 && currentQuantity < requiredQuantity) {
-          throw Exception(
-            'المنتج "$productName" لا يوجد به كمية كافية. '
-            'الكمية المتاحة: ${currentQuantity.toStringAsFixed(2)} ${translateUnit(product!.baseUnit)}',
-          );
-        }
-      } else {
-        throw Exception('المنتج غير موجود في قاعدة البيانات');
-      }
-    }
-  }
-
   void _refreshSalesInLists(int saleId, double newTotalAmount) {
     final allIndex = _allSales.indexWhere((s) => s.id == saleId);
     if (allIndex != -1) {
@@ -1666,8 +1613,6 @@ class ProductProvider with ChangeNotifier {
       );
 
       _displayedSales = results.map((map) => Sale.fromMap(map)).toList();
-      _currentStartDate = startDate;
-      _currentEndDate = endDate;
       notifyListeners();
 
       log('📊 تم تحميل ${_displayedSales.length} فاتورة للفترة المحددة');
@@ -1704,7 +1649,7 @@ class ProductProvider with ChangeNotifier {
   }
 
   // 🔍 دالة تشخيصية: اطبع جميع البيانات من قاعدة البيانات
-  Future<void> debugPrintAllSalesFromDB() async {
+  Future<void> debuglogAllSalesFromDB() async {
     try {
       final db = await _dbHelper.db;
 
@@ -1738,7 +1683,7 @@ class ProductProvider with ChangeNotifier {
       ''');
       log('🔍 DEBUG: First 5 sales with user_id:');
       for (var sale in salesWithUser) {
-        log('  ${sale}');
+        log('  $sale');
       }
     } catch (e) {
       log('❌ DEBUG error: $e');

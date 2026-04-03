@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
-import 'dart:convert';
 import 'dart:developer';
 
 class PurchaseInvoiceProvider with ChangeNotifier {
@@ -703,7 +702,6 @@ class PurchaseInvoiceProvider with ChangeNotifier {
       final currentInvoice = await getInvoiceById(invoiceId);
 
       double newTotalCost = currentInvoice['total_cost'] - returnAmount;
-      double newPaidAmount = currentInvoice['paid_amount'];
       double newRemainingAmount = currentInvoice['remaining_amount'];
 
       // تحديث المبلغ المتبقي

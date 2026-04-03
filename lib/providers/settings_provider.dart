@@ -21,13 +21,13 @@ class SettingsProvider with ChangeNotifier {
   String? _currency;
   String? get currency => _currency;
 
-  //printerPort
-  int? _printerPort;
-  int? get printerPort => _printerPort;
+  //logerPort
+  int? _logerPort;
+  int? get logerPort => _logerPort;
 
-  //printerIp
-  String? _printerIp;
-  String? get printerIp => _printerIp;
+  //logerIp
+  String? _logerIp;
+  String? get logerIp => _logerIp;
 
   //size
   String? _paperSize;
@@ -57,15 +57,15 @@ class SettingsProvider with ChangeNotifier {
 
         // 🔹 تحميل العملة
         _currency = result.first['currency'] as String? ?? 'USD';
-        // تحميل printerPort
-        dynamic port = result.first['printerPort'];
-        _printerPort = port;
-        // تحميل printerIp
-        _printerIp = result.first['printerIp'] as String?;
+        // تحميل logerPort
+        dynamic port = result.first['logerPort'];
+        _logerPort = port;
+        // تحميل logerIp
+        _logerIp = result.first['logerIp'] as String?;
         // تحميل paperSize
         _paperSize = result.first['paperSize'] as String? ?? '58mm';
         // تحميل numberOfCopies
-        _numberOfCopies = _parseInt(result.first['numberOfCopies']) ?? 1;
+        _numberOfCopies = _parseInt(result.first['numberOfCopies']) ?? 5;
       }
 
       notifyListeners();
@@ -160,8 +160,8 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  //updatePrinterSettings تحديث
-  Future<void> updatePrinterSettings({
+  //updatelogerSettings تحديث
+  Future<void> updatelogerSettings({
     required String ip,
     required int port,
     required String size,
@@ -170,16 +170,16 @@ class SettingsProvider with ChangeNotifier {
       final db = await _dbHelper.db;
       await db.update(
         'settings',
-        {'printerIp': ip, 'printerPort': port, 'paperSize': size},
+        {'logerIp': ip, 'logerPort': port, 'paperSize': size},
         where: 'id = ?',
         whereArgs: [1],
       );
-      _printerIp = ip;
-      _printerPort = port;
+      _logerIp = ip;
+      _logerPort = port;
       _paperSize = size;
       notifyListeners();
     } catch (e) {
-      log('Error updating printer settings: $e');
+      log('Error updating loger settings: $e');
     }
   }
 

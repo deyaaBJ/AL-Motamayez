@@ -205,7 +205,7 @@ class StoreSettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _buildDropdown<int>(
-            value: settings.numberOfCopies ?? 1,
+            value: settings.numberOfCopies ?? 5,
             items: List.generate(
               7,
               (i) =>
