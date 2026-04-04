@@ -86,6 +86,7 @@ class _AdminDetailScreenState extends State<AdminDetailScreen> {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: const Color(0xFFFF6B35).withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),

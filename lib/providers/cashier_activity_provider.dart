@@ -75,23 +75,28 @@ class CashierActivityProvider with ChangeNotifier {
       final db = await _dbHelper.db;
       final dateRange = _getDateRange();
 
-      // ⬅️ تعديل: LEFT JOIN مع users عشان البيانات القديمة ما تضيع
+      // Show all cashier accounts, even if they have no sales in the period.
+      // The date filter stays inside the JOIN so zero-sale cashiers are preserved.
       final results = await db.rawQuery(
         '''
         SELECT 
-          s.user_id,
+          u.id as user_id,
           u.name as user_name,
           u.email as user_email,
+          u.role as user_role,
           COUNT(s.id) as total_invoices,
           COALESCE(SUM(s.total_amount), 0) as total_sales,
           GROUP_CONCAT(s.id) as sale_ids
-        FROM sales s
-        LEFT JOIN users u ON s.user_id = u.id
-        WHERE s.date >= ? AND s.date < ?
-        GROUP BY s.user_id, u.name, u.email
+        FROM users u
+        LEFT JOIN sales s
+          ON s.user_id = u.id
+         AND s.date >= ?
+         AND s.date < ?
+        WHERE u.role IN (?, ?, ?)
+        GROUP BY u.id, u.name, u.email, u.role
         ORDER BY total_sales DESC
       ''',
-        [dateRange['start'], dateRange['end']],
+        [dateRange['start'], dateRange['end'], 'cashier', 'admin', 'tax'],
       );
 
       List<CashierActivityModel> activities = [];
@@ -100,15 +105,23 @@ class CashierActivityProvider with ChangeNotifier {
         final userId = row['user_id'] as int?;
         final userName = row['user_name'] as String? ?? 'غير معروف';
         final userEmail = row['user_email'] as String? ?? '';
+        final userRole = row['user_role'] as String? ?? 'cashier';
 
         // ⬅️ تخطي الفواتير اللي ما فيها user_id (البيانات القديمة)
         if (userId == null) continue;
 
-        final saleIdsStr = row['sale_ids'] as String;
-        final saleIds = saleIdsStr.split(',').map(int.parse).toList();
+        final saleIdsStr = row['sale_ids'] as String?;
+        final saleIds =
+            saleIdsStr == null || saleIdsStr.trim().isEmpty
+                ? <int>[]
+                : saleIdsStr.split(',').map(int.parse).toList();
 
         // جلب تفاصيل الفواتير
-        final invoicesData = await db.rawQuery('''
+        final invoicesData =
+            saleIds.isEmpty
+                ? <Map<String, Object?>>[]
+                : await db.rawQuery(
+                  '''
           SELECT 
             s.id,
             s.date,
@@ -120,7 +133,9 @@ class CashierActivityProvider with ChangeNotifier {
           LEFT JOIN customers c ON s.customer_id = c.id
           WHERE s.id IN (${saleIds.map((_) => '?').join(',')})
           ORDER BY s.date DESC
-        ''', saleIds);
+        ''',
+                  saleIds,
+                );
 
         final invoices =
             invoicesData.map((e) => InvoiceSummary.fromMap(e)).toList();
@@ -130,6 +145,7 @@ class CashierActivityProvider with ChangeNotifier {
             'user_id': userId,
             'user_name': userName,
             'user_email': userEmail,
+            'user_role': userRole,
             'total_invoices': row['total_invoices'],
             'total_sales': row['total_sales'],
           }, invoices),

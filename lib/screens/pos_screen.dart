@@ -13,7 +13,7 @@ import 'package:motamayez/models/sale.dart';
 import 'package:motamayez/models/sale_item.dart';
 import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/providers/customer_provider.dart';
-import 'package:motamayez/providers/DebtProvider.dart';
+import 'package:motamayez/providers/debt_provider.dart';
 import 'package:motamayez/providers/auth_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/services/thermal_receipt_printer.dart';
@@ -131,12 +131,16 @@ class _PosScreenState extends State<PosScreen>
               }
             }
 
+            final defaultUnitPrice = selectedUnit?.sellPrice ?? product.price;
+            final hasCustomPrice =
+                (saleItem.price - defaultUnitPrice).abs() > 0.0001;
+
             final cartItem = CartItem.product(
               product: product,
               quantity: saleItem.quantity,
               availableUnits: units,
               selectedUnit: selectedUnit,
-              customPrice: saleItem.price,
+              customPrice: hasCustomPrice ? saleItem.price : null,
             );
 
             _cartItems.add(cartItem);
@@ -1177,6 +1181,9 @@ class _PosScreenState extends State<PosScreen>
     if (!mounted) return;
     setState(() {
       item.selectedUnit = unit;
+      // When the unit changes, fall back to that unit's default price.
+      // This prevents the previous unit's price from sticking in edit mode.
+      item.setCustomPrice(null);
       _calculateTotal();
     });
   }

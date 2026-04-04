@@ -97,7 +97,7 @@ class _CustomerSelectionDialogState extends State<CustomerSelectionDialog> {
     }
 
     return DropdownButtonFormField<Customer>(
-      value: _selectedCustomer,
+      initialValue: _selectedCustomer,
       decoration: InputDecoration(
         labelText: 'الزبون',
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -145,10 +145,10 @@ class _CustomerSelectionDialogState extends State<CustomerSelectionDialog> {
                   listen: false,
                 );
                 await provider.addCustomer(customer);
-                Navigator.pop(context); // إغلاق dialog إضافة الزبون
-                await _fetchCustomers(); // إعادة تحميل العملاء
+                // ignore: use_build_context_synchronously
+                Navigator.pop(context);
+                await _fetchCustomers();
 
-                // اختيار الزبون المضاف تلقائياً
                 setState(() {
                   _selectedCustomer = customer;
                 });

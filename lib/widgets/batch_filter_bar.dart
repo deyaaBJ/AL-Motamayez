@@ -47,10 +47,10 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
   }
 
   Widget _buildStatusFilter() {
-    return Container(
+    return SizedBox(
       width: 120,
       child: DropdownButtonFormField<String?>(
-        value: _currentFilter.status,
+        initialValue: _currentFilter.status,
         decoration: InputDecoration(
           labelText: 'الحالة',
           border: OutlineInputBorder(),
@@ -75,10 +75,10 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
   }
 
   Widget _buildExpiryFilter() {
-    return Container(
+    return SizedBox(
       width: 160,
       child: DropdownButtonFormField<String?>(
-        value: _currentFilter.expiryFilter,
+        initialValue: _currentFilter.expiryFilter,
         decoration: InputDecoration(
           labelText: 'تاريخ الانتهاء',
           border: OutlineInputBorder(),
@@ -197,6 +197,7 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
                 child: Container(
                   padding: EdgeInsets.all(6),
                   decoration: BoxDecoration(
+                    // ignore: deprecated_member_use
                     color: Color(0xFF6A3093).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),

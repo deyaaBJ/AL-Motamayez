@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:motamayez/models/productFilter.dart';
+import 'package:motamayez/models/product_filter.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import '../models/product.dart';
 

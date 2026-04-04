@@ -1,11 +1,10 @@
-// ignore: file_names
 import 'package:flutter/material.dart';
 import 'package:motamayez/providers/sales_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/customer.dart';
 import 'package:motamayez/models/transaction.dart' as debt_models;
-import 'package:motamayez/providers/DebtProvider.dart';
+import 'package:motamayez/providers/debt_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/utils/date_formatter.dart';
 import 'package:motamayez/widgets/quick_payment_dialog.dart';

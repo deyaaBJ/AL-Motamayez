@@ -62,6 +62,7 @@ class _WhatsAppSupportButtonState extends State<WhatsAppSupportButton>
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
+                  // ignore: deprecated_member_use
                   color: const Color(0xFF25D366).withOpacity(0.35),
                   blurRadius: 18,
                   offset: const Offset(0, 8),

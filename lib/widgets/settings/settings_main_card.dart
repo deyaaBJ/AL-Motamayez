@@ -40,6 +40,7 @@ class SettingsMainCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(isSmall ? 16 : 24),
             boxShadow: [
               BoxShadow(
+                // ignore: deprecated_member_use
                 color: gradient[0].withOpacity(0.3),
                 blurRadius: isSmall ? 12 : 20,
                 offset: Offset(0, isSmall ? 6 : 10),
@@ -71,6 +72,7 @@ class SettingsMainCard extends StatelessWidget {
             height: isSmall ? 60 : 100,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
+              // ignore: deprecated_member_use
               color: Colors.white.withOpacity(0.1),
             ),
           ),
@@ -83,6 +85,7 @@ class SettingsMainCard extends StatelessWidget {
             height: isSmall ? 50 : 80,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
+              // ignore: deprecated_member_use
               color: Colors.white.withOpacity(0.1),
             ),
           ),
@@ -128,6 +131,7 @@ class SettingsMainCard extends StatelessWidget {
                     subtitle,
                     style: TextStyle(
                       fontSize: isSmall ? 12 : 14,
+                      // ignore: deprecated_member_use
                       color: Colors.white.withOpacity(0.9),
                     ),
                     maxLines: 2,
@@ -148,6 +152,7 @@ class SettingsMainCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(isSmall ? 8 : 12),
       decoration: BoxDecoration(
+        // ignore: deprecated_member_use
         color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(isSmall ? 12 : 16),
       ),
@@ -164,6 +169,7 @@ class SettingsMainCard extends StatelessWidget {
           vertical: isSmall ? 6 : 8,
         ),
         decoration: BoxDecoration(
+          // ignore: deprecated_member_use
           color: Colors.white.withOpacity(0.2),
           borderRadius: BorderRadius.circular(20),
         ),

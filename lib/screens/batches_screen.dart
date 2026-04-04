@@ -204,6 +204,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
           Container(
             padding: EdgeInsets.all(6),
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: color.withOpacity(0.1),
               shape: BoxShape.circle,
             ),

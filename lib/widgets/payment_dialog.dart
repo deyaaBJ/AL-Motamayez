@@ -17,6 +17,7 @@ class PaymentDialog extends StatefulWidget {
   });
 
   @override
+  // ignore: library_private_types_in_public_api
   _PaymentDialogState createState() => _PaymentDialogState();
 }
 
@@ -101,6 +102,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
+                        // ignore: deprecated_member_use
                         color: const Color(0xFF6A3093).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
@@ -342,6 +344,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
                 }
                 : null,
         backgroundColor: Colors.grey[100],
+        // ignore: deprecated_member_use
         selectedColor: Colors.green.withOpacity(0.1),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),

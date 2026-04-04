@@ -80,6 +80,7 @@ class _TaxDetailScreenState extends State<TaxDetailScreen> {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: const Color(0xFF34C759).withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),

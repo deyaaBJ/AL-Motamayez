@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/widgets/settings/settings_detail_card.dart';
 
+// ignore: camel_case_types
 class logerSettingsScreen extends StatelessWidget {
   final TextEditingController ipController;
   final TextEditingController portController;

@@ -2,6 +2,7 @@ class CashierActivityModel {
   final int userId;
   final String userName;
   final String userEmail;
+  final String userRole;
   final int totalInvoices;
   final double totalSales;
   final List<InvoiceSummary> invoices;
@@ -10,6 +11,7 @@ class CashierActivityModel {
     required this.userId,
     required this.userName,
     required this.userEmail,
+    required this.userRole,
     required this.totalInvoices,
     required this.totalSales,
     required this.invoices,
@@ -23,6 +25,7 @@ class CashierActivityModel {
       userId: map['user_id'] ?? 0,
       userName: map['user_name'] ?? '',
       userEmail: map['user_email'] ?? '',
+      userRole: map['user_role'] ?? 'cashier',
       totalInvoices: map['total_invoices'] ?? 0,
       totalSales: (map['total_sales'] as num?)?.toDouble() ?? 0.0,
       invoices: invoices,

@@ -127,6 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       await appConfig.setBackupFolderPath(selectedDir);
       setState(() => _backupFolderPath = selectedDir);
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'تم حفظ مكان النسخ الاحتياطي', ToastType.success);
     }
   }
@@ -318,6 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
+        // ignore: deprecated_member_use
         color: const Color(0xFF6A3093).withOpacity(0.1),
         shape: BoxShape.circle,
       ),
@@ -342,6 +344,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: const Color(0xFF6A3093).withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
@@ -405,6 +408,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       email: emailCtrl.text.trim(),
       phone: phoneCtrl?.text.trim(),
     );
+    // ignore: use_build_context_synchronously
     showAppToast(context, 'تم التحديث بنجاح', ToastType.success);
   }
 
@@ -415,6 +419,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     await settings.updateMarketName(name);
+    // ignore: use_build_context_synchronously
     showAppToast(context, 'تم الحفظ بنجاح', ToastType.success);
   }
 
@@ -431,6 +436,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     showAppToast(
+      // ignore: use_build_context_synchronously
       context,
       success ? 'تم تغيير كلمة المرور' : 'فشل تغيير كلمة المرور',
       success ? ToastType.success : ToastType.error,

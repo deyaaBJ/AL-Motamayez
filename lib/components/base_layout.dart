@@ -37,6 +37,7 @@ class _BaseLayoutState extends State<BaseLayout> {
     super.initState();
     Future.microtask(
       () =>
+          // ignore: use_build_context_synchronously
           Provider.of<SettingsProvider>(context, listen: false).loadSettings(),
     );
   }
@@ -181,6 +182,7 @@ class _BaseLayoutState extends State<BaseLayout> {
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
+                      // ignore: deprecated_member_use
                       color: Colors.black.withOpacity(0.1),
                       blurRadius: 8,
                       spreadRadius: 2,
@@ -275,14 +277,17 @@ class _BaseLayoutState extends State<BaseLayout> {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
+      // ignore: deprecated_member_use
       hoverColor: Colors.white.withOpacity(0.15),
       child: Container(
         decoration: BoxDecoration(
           color:
+              // ignore: deprecated_member_use
               isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           border:
               isSelected
+                  // ignore: deprecated_member_use
                   ? Border.all(color: Colors.white.withOpacity(0.4), width: 1.5)
                   : null,
         ),
@@ -330,6 +335,7 @@ class _BaseLayoutState extends State<BaseLayout> {
             decoration: BoxDecoration(
               color:
                   isSelected
+                      // ignore: deprecated_member_use
                       ? const Color(0xFF8B5FBF).withOpacity(0.1)
                       : (isPrimary
                           ? const Color(0xFF8B5FBF)
@@ -338,6 +344,7 @@ class _BaseLayoutState extends State<BaseLayout> {
               border:
                   isSelected
                       ? Border.all(
+                        // ignore: deprecated_member_use
                         color: const Color(0xFF8B5FBF).withOpacity(0.4),
                         width: 2,
                       )
@@ -354,6 +361,7 @@ class _BaseLayoutState extends State<BaseLayout> {
                 hoverColor:
                     isPrimary
                         ? const Color(0xFF7C4DFF)
+                        // ignore: deprecated_member_use
                         : const Color(0xFF8B5FBF).withOpacity(0.08),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -415,6 +423,7 @@ class _BaseLayoutState extends State<BaseLayout> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.grey.withOpacity(0.1),
             blurRadius: 20,
             spreadRadius: 2,
@@ -510,14 +519,16 @@ class _BaseLayoutState extends State<BaseLayout> {
                       Color(0xFF4A1C6D),
                     ],
                   ).createShader(const Rect.fromLTWH(0, 0, 200, 70)),
-            letterSpacing: 2, // ✅ تباعد أكبر
+            letterSpacing: 2,
             shadows: [
               Shadow(
+                // ignore: deprecated_member_use
                 color: const Color(0xFF8B5FBF).withOpacity(0.4),
                 blurRadius: 12,
                 offset: const Offset(2, 2),
               ),
               Shadow(
+                // ignore: deprecated_member_use
                 color: Colors.white.withOpacity(0.8),
                 blurRadius: 4,
                 offset: const Offset(-1, -1),

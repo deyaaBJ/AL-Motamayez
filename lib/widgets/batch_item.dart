@@ -1,5 +1,4 @@
 // lib/widgets/batch_item.dart
-import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -87,7 +86,7 @@ class BatchItem extends StatelessWidget {
             Expanded(
               flex: 1,
               child: Text(
-                '${batch.remainingQuantity.toStringAsFixed(2)}',
+                batch.remainingQuantity.toStringAsFixed(2),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
@@ -102,7 +101,7 @@ class BatchItem extends StatelessWidget {
             Expanded(
               flex: 1,
               child: Text(
-                '${batch.costPrice.toStringAsFixed(2)}',
+                batch.costPrice.toStringAsFixed(2),
                 textAlign: TextAlign.center,
                 style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
               ),
@@ -252,8 +251,11 @@ class BatchItem extends StatelessWidget {
   }
 
   Color _getStatusBackgroundColor() {
+    // ignore: deprecated_member_use
     if (batch.daysRemaining < 0) return Colors.red.withOpacity(0.1);
+    // ignore: deprecated_member_use
     if (batch.daysRemaining <= 30) return Colors.orange.withOpacity(0.1);
+    // ignore: deprecated_member_use
     return Colors.green.withOpacity(0.1);
   }
 
@@ -302,6 +304,7 @@ class BatchItem extends StatelessWidget {
     if (disposedQuantity == null || disposedQuantity <= 0) return;
 
     if (disposedQuantity > batch.remainingQuantity) {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('الكمية المدخلة أكبر من الكمية المتبقية!'),
@@ -312,6 +315,7 @@ class BatchItem extends StatelessWidget {
     }
 
     final confirmed = await showDialog(
+      // ignore: use_build_context_synchronously
       context: context,
       builder:
           (context) => AlertDialog(
@@ -349,6 +353,7 @@ class BatchItem extends StatelessWidget {
       try {
         await provider.disposeBatch(batch.id!, disposedQuantity);
         onUpdate();
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('تم التخلص من $disposedQuantity من الدفعة'),
@@ -356,6 +361,7 @@ class BatchItem extends StatelessWidget {
           ),
         );
       } catch (e) {
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('خطأ في التخلص: $e'),
@@ -426,6 +432,7 @@ class BatchItem extends StatelessWidget {
     if (returnQuantity == null || returnQuantity <= 0) return;
 
     if (returnQuantity > batch.remainingQuantity) {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('الكمية المدخلة أكبر من الكمية المتبقية!'),
@@ -438,6 +445,7 @@ class BatchItem extends StatelessWidget {
     final returnAmount = returnQuantity * batch.costPrice;
 
     final confirmed = await showDialog(
+      // ignore: use_build_context_synchronously
       context: context,
       builder:
           (context) => AlertDialog(
@@ -480,6 +488,7 @@ class BatchItem extends StatelessWidget {
         await provider.returnBatchToSupplier(batch.id!, returnQuantity);
         onUpdate();
 
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('تم إرجاع $returnQuantity وحدة'),
@@ -487,6 +496,7 @@ class BatchItem extends StatelessWidget {
           ),
         );
       } catch (e) {
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
         );

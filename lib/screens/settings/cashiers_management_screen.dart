@@ -241,10 +241,13 @@ class _CashiersManagementScreenState extends State<CashiersManagementScreen> {
                   );
 
                   if (success && mounted) {
+                    // ignore: use_build_context_synchronously
                     Navigator.pop(context);
+                    // ignore: use_build_context_synchronously
                     showAppToast(context, 'تم الحذف بنجاح', ToastType.success);
                     await _loadCashiers(); // ✅ إعادة التحميل
                   } else if (mounted) {
+                    // ignore: use_build_context_synchronously
                     showAppToast(context, 'فشل الحذف', ToastType.error);
                   }
                 },
@@ -337,6 +340,7 @@ class _CashiersManagementScreenState extends State<CashiersManagementScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
+              // ignore: deprecated_member_use
               color: Colors.black.withOpacity(0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
@@ -520,13 +524,16 @@ class _CashierDetailScreenState extends State<CashierDetailScreen> {
                   );
 
                   if (success && mounted) {
+                    // ignore: use_build_context_synchronously
                     Navigator.pop(context);
                     showAppToast(
+                      // ignore: use_build_context_synchronously
                       context,
                       'تم تغيير كلمة المرور',
                       ToastType.success,
                     );
                   } else if (mounted) {
+                    // ignore: use_build_context_synchronously
                     showAppToast(context, 'فشل التغيير', ToastType.error);
                   }
                 },
@@ -582,6 +589,7 @@ class _CashierDetailScreenState extends State<CashierDetailScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
+                      // ignore: deprecated_member_use
                       color: const Color(0xFF4A90E2).withOpacity(0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 10),

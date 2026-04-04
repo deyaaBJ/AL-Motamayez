@@ -7,7 +7,6 @@ import Foundation
 
 import file_picker
 import path_provider_foundation
-import loging
 import screen_retriever
 import shared_preferences_foundation
 import sqflite_darwin
@@ -18,7 +17,6 @@ import window_size
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   FilePickerPlugin.register(with: registry.registrar(forPlugin: "FilePickerPlugin"))
   PathProviderPlugin.register(with: registry.registrar(forPlugin: "PathProviderPlugin"))
-  logingPlugin.register(with: registry.registrar(forPlugin: "logingPlugin"))
   ScreenRetrieverPlugin.register(with: registry.registrar(forPlugin: "ScreenRetrieverPlugin"))
   SharedPreferencesPlugin.register(with: registry.registrar(forPlugin: "SharedPreferencesPlugin"))
   SqflitePlugin.register(with: registry.registrar(forPlugin: "SqflitePlugin"))

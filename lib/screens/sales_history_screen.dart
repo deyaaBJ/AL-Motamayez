@@ -1,8 +1,7 @@
-// screens/sales_history_screen.dart
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:motamayez/providers/DebtProvider.dart';
+import 'package:motamayez/providers/debt_provider.dart';
 import 'package:provider/provider.dart';
 import '../utils/app_logger.dart';
 import 'package:motamayez/components/base_layout.dart';
@@ -11,7 +10,7 @@ import 'package:motamayez/providers/auth_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/screens/pos_screen.dart';
 import '../providers/sales_provider.dart';
-import '../widgets/SaleDetailsDialog.dart';
+import '../widgets/sale_details_dialog.dart';
 import '../models/sale.dart';
 
 class SalesHistoryScreen extends StatefulWidget {

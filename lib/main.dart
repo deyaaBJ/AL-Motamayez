@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:motamayez/providers/DebtProvider.dart';
+import 'package:motamayez/providers/debt_provider.dart';
 import 'package:motamayez/providers/cashier_activity_provider.dart';
-import 'package:motamayez/screens/PurchaseInvoicesListPage.dart';
-import 'package:motamayez/screens/SalesHistoryScreen.dart';
+import 'package:motamayez/screens/purchase_invoices_list_page.dart';
+import 'package:motamayez/screens/sales_history_screen.dart';
 import 'package:motamayez/screens/cashier_activity_screen.dart';
 import 'package:motamayez/screens/csuppliers_list_page.dart';
 import 'package:provider/provider.dart';

@@ -53,6 +53,7 @@ class ProductItem extends StatelessWidget {
                       margin: EdgeInsets.only(top: 4),
                       padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
+                        // ignore: deprecated_member_use
                         color: Colors.red.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: Colors.red, width: 0.5),
@@ -72,6 +73,7 @@ class ProductItem extends StatelessWidget {
                       margin: EdgeInsets.only(top: 2),
                       padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
+                        // ignore: deprecated_member_use
                         color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: Colors.blue, width: 0.5),
@@ -240,8 +242,10 @@ class ProductItem extends StatelessWidget {
                       try {
                         await provider.toggleProductActive(product.id!);
                         onUpdate();
+                        // ignore: use_build_context_synchronously
                         Navigator.pop(context);
                         showAppToast(
+                          // ignore: use_build_context_synchronously
                           context,
                           product.active
                               ? 'تم إلغاء تنشيط ${product.name}'
@@ -249,7 +253,9 @@ class ProductItem extends StatelessWidget {
                           ToastType.success,
                         );
                       } catch (e) {
+                        // ignore: use_build_context_synchronously
                         Navigator.pop(context);
+                        // ignore: use_build_context_synchronously
                         showAppToast(context, 'خطأ: $e', ToastType.error);
                       }
                     },
@@ -281,15 +287,19 @@ class ProductItem extends StatelessWidget {
                       try {
                         await provider.deleteProduct(product.id.toString());
                         onUpdate();
+                        // ignore: use_build_context_synchronously
                         Navigator.pop(context);
                         showAppToast(
+                          // ignore: use_build_context_synchronously
                           context,
                           'تم حذف ${product.name} نهائياً',
                           ToastType.success,
                         );
                       } catch (e) {
+                        // ignore: use_build_context_synchronously
                         Navigator.pop(context);
                         showAppToast(
+                          // ignore: use_build_context_synchronously
                           context,
                           'خطأ في الحذف: $e',
                           ToastType.error,

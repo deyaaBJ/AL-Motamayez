@@ -7,7 +7,7 @@ import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/models/product.dart';
 import 'package:motamayez/models/product_unit.dart';
 import 'package:motamayez/providers/product_provider.dart';
-import 'package:motamayez/widgets/TextField.dart';
+import 'package:motamayez/widgets/text_field.dart';
 import 'package:motamayez/widgets/existing_product_message.dart';
 import 'package:motamayez/widgets/qr_scan_section.dart';
 
@@ -405,7 +405,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
                 Switch(
                   value: _isProductActive,
-                  activeColor: Colors.green,
+                  activeThumbColor: Colors.green,
                   inactiveTrackColor: Colors.red[200],
                   inactiveThumbColor: Colors.red,
                   onChanged: (value) {
@@ -457,7 +457,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
                 Switch(
                   value: _hasExpiryDate,
-                  activeColor: Colors.blue,
+                  activeThumbColor: Colors.blue,
                   onChanged: (value) {
                     setState(() {
                       _hasExpiryDate = value;
@@ -582,15 +582,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
       setState(() => _isLoading = false);
 
       showAppToast(
+        // ignore: use_build_context_synchronously
         context,
         _isNewProduct ? 'تم إضافة المنتج بنجاح' : 'تم تحديث المنتج بنجاح',
         ToastType.success,
       );
 
       await Future.delayed(const Duration(seconds: 1));
+      // ignore: use_build_context_synchronously
       Navigator.pop(context, true);
     } catch (e) {
       setState(() => _isLoading = false);
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'حدث خطأ: $e', ToastType.error);
       log('Error saving product: $e');
     }
@@ -785,7 +788,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
               Spacer(),
               Switch(
                 value: _showUnitsSection,
-                activeColor: const Color(0xFF6A3093),
+                activeThumbColor: const Color(0xFF6A3093),
                 onChanged: (value) {
                   setState(() {
                     _showUnitsSection = value;

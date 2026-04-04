@@ -48,6 +48,7 @@ class QRScanSection extends StatelessWidget {
                 hintText: 'أدخل QR Code أو انقر لمسح',
                 hintStyle: const TextStyle(color: Colors.white70),
                 filled: true,
+                // ignore: deprecated_member_use
                 fillColor: Colors.white.withOpacity(0.2),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),

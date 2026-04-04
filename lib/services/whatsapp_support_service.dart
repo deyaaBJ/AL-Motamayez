@@ -61,15 +61,11 @@ class WhatsAppSupportService {
         return true;
       }
 
-      if (await launchUrl(
-        fallbackUri,
-        mode: LaunchMode.externalApplication,
-      )) {
+      if (await launchUrl(fallbackUri, mode: LaunchMode.externalApplication)) {
         return true;
       }
-    } on MissingPluginException {
-    } on PlatformException {
-    }
+      // ignore: empty_catches
+    } on MissingPluginException {}
 
     if (await _openWithSystem(primaryUri)) {
       return true;

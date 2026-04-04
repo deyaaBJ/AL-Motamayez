@@ -8,9 +8,6 @@ import 'dart:developer';
 class DebtProvider extends ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
 
-  // ==============================
-  // بيانات محملة
-  // ==============================
   CustomerBalance? _balance;
   List<Transaction> _transactions = [];
 

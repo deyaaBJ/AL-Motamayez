@@ -25,6 +25,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   void initState() {
     super.initState();
     Future.microtask(() async {
+      // ignore: use_build_context_synchronously
       final provider = context.read<ReportsProvider>();
       await provider.loadReportsData();
       // تطبيق الفلتر الافتراضي بعد تحميل البيانات
@@ -131,6 +132,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         settingsProvider,
       );
 
+      // ignore: use_build_context_synchronously
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
       // جلب قائمة المسؤولين
@@ -159,6 +161,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         final openResult = await OpenFilex.open(result.filePath!);
 
         if (openResult.type == ResultType.done) {
+          // ignore: use_build_context_synchronously
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('تم فتح التقرير بنجاح'),
@@ -167,6 +170,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
           );
         } else {
+          // ignore: use_build_context_synchronously
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('لم يتم العثور على تطبيق لفتح PDF'),
@@ -176,6 +180,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           );
         }
       } else {
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('خطأ في تصدير التقرير: ${result.error}'),
@@ -190,6 +195,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         Navigator.of(context).pop();
       }
 
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('خطأ: $e'),
@@ -314,7 +320,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _selectedMonth,
+                    initialValue: _selectedMonth,
                     decoration: const InputDecoration(
                       labelText: 'الشهر',
                       border: OutlineInputBorder(),
@@ -338,7 +344,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _selectedYear,
+                    initialValue: _selectedYear,
                     decoration: const InputDecoration(
                       labelText: 'السنة',
                       border: OutlineInputBorder(),
@@ -386,7 +392,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           if (_selectedPeriod == 'سنة محددة') ...[
             const SizedBox(height: 10),
             DropdownButtonFormField<int>(
-              value: _selectedYear,
+              initialValue: _selectedYear,
               decoration: const InputDecoration(
                 labelText: 'السنة',
                 border: OutlineInputBorder(),
@@ -600,6 +606,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
+                    // ignore: deprecated_member_use
                     color: color.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
@@ -987,8 +994,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: netDebtChangeColor.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(12),
+                // ignore: deprecated_member_use
                 border: Border.all(color: netDebtChangeColor.withOpacity(0.2)),
               ),
               child: Text(
@@ -1019,6 +1028,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -1145,6 +1155,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
+                        // ignore: deprecated_member_use
                         color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
@@ -1166,6 +1177,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
+                        // ignore: deprecated_member_use
                         color: Colors.orange.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
@@ -1270,6 +1282,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       child: Row(
         children: [
           CircleAvatar(
+            // ignore: deprecated_member_use
             backgroundColor: Colors.blue.withOpacity(0.1),
             child: Text(
               name.isNotEmpty ? name[0] : '?',

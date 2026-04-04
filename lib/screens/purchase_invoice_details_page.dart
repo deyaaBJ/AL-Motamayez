@@ -53,6 +53,7 @@ class _PurchaseInvoiceDetailsPageState
         _purchaseItems = items;
       });
     } catch (e) {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('خطأ في تحميل تفاصيل الفاتورة: $e'),
@@ -83,6 +84,7 @@ class _PurchaseInvoiceDetailsPageState
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
@@ -209,6 +211,7 @@ class _PurchaseInvoiceDetailsPageState
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
@@ -341,6 +344,7 @@ class _PurchaseInvoiceDetailsPageState
         border: Border.all(color: Colors.grey.shade300, width: 1),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.03),
             blurRadius: 6,
             offset: const Offset(0, 2),
@@ -740,6 +744,7 @@ class _PurchaseInvoiceDetailsPageState
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: 8,
             offset: const Offset(0, -2),
@@ -774,9 +779,7 @@ class _PurchaseInvoiceDetailsPageState
           Expanded(
             flex: 2,
             child: ElevatedButton.icon(
-              onPressed: () {
-                // TODO: طباعة الفاتورة
-              },
+              onPressed: () {},
               icon: const Icon(Icons.print_outlined, size: 20),
               label: const Text(
                 'طباعة الفاتورة',

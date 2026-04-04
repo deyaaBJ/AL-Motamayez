@@ -205,6 +205,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
             CircleAvatar(
               radius: 24,
+              // ignore: deprecated_member_use
               backgroundColor: const Color(0xFF7C3AED).withOpacity(0.1),
               child: Icon(
                 Icons.person,
@@ -245,6 +246,7 @@ class _MainScreenState extends State<MainScreen> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: Colors.white.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -271,6 +273,7 @@ class _MainScreenState extends State<MainScreen> {
                   Text(
                     "أنشئ فاتورة جديدة بسرعة وسهولة",
                     style: TextStyle(
+                      // ignore: deprecated_member_use
                       color: Colors.white.withOpacity(0.9),
                       fontSize: 16,
                     ),
@@ -391,6 +394,7 @@ class _MainScreenState extends State<MainScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
+                  // ignore: deprecated_member_use
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -478,8 +482,10 @@ class _MainScreenState extends State<MainScreen> {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
+          // ignore: deprecated_member_use
           color: color.withOpacity(0.05),
           borderRadius: BorderRadius.circular(12),
+          // ignore: deprecated_member_use
           border: Border.all(color: color.withOpacity(0.2)),
         ),
         child: Padding(
@@ -489,6 +495,7 @@ class _MainScreenState extends State<MainScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
+                  // ignore: deprecated_member_use
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -607,6 +614,7 @@ class _MainScreenState extends State<MainScreen> {
             width: 60,
             height: 60,
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),

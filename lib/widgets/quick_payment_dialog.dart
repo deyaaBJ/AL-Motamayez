@@ -3,11 +3,7 @@ import 'package:motamayez/models/customer.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:provider/provider.dart';
 
-enum PaymentMode {
-  payment,
-  deposit,
-  withdrawal,
-}
+enum PaymentMode { payment, deposit, withdrawal }
 
 class QuickPaymentDialog {
   static void showPayment({
@@ -188,6 +184,7 @@ class QuickPaymentDialog {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
+                      // ignore: deprecated_member_use
                       color: config.color.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
@@ -245,10 +242,7 @@ class QuickPaymentDialog {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                            color: config.color,
-                            width: 2,
-                          ),
+                          borderSide: BorderSide(color: config.color, width: 2),
                         ),
                       ),
                       onChanged: validateAmount,

@@ -25,7 +25,6 @@ class _SupplierAccountStatementPageState
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = true;
   double _currentBalance = 0.0;
-  int _totalTransactions = 0;
   bool _isLoadingMore = false;
   late List<Map<String, dynamic>> _transactions = [];
   bool _hasMore = true;
@@ -60,7 +59,6 @@ class _SupplierAccountStatementPageState
         setState(() {
           _currentBalance = results[0] as double;
           _transactions = results[1] as List<Map<String, dynamic>>;
-          _totalTransactions = results[2] as int;
           _isLoading = false;
           _hasMore = provider.hasMoreTransactions(widget.supplierId);
         });
@@ -218,6 +216,7 @@ class _SupplierAccountStatementPageState
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.grey.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 2),
@@ -331,8 +330,10 @@ class _SupplierAccountStatementPageState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
+        // ignore: deprecated_member_use
         color: color.withOpacity(0.05),
         borderRadius: BorderRadius.circular(10),
+        // ignore: deprecated_member_use
         border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Row(
@@ -375,6 +376,7 @@ class _SupplierAccountStatementPageState
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
+                  // ignore: deprecated_member_use
                   color: Colors.grey.withOpacity(0.1),
                   blurRadius: 10,
                   offset: const Offset(0, 2),
@@ -514,9 +516,6 @@ class _SupplierAccountStatementPageState
     final typeBgColor = _getTransactionTypeBackgroundColor(type);
     final typeText = _getTransactionTypeText(type);
     final typeIcon = _getTransactionTypeIcon(type);
-
-    // تحديد سعر الحركة (الزيادة والنقصان)
-    final bool isIncrease = type == 'payment'; // المدفوعات تزيد الرصيد
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hoveredRowIndex = index),
@@ -728,7 +727,6 @@ class _SupplierAccountStatementPageState
     final typeBgColor = _getTransactionTypeBackgroundColor(type);
     final typeText = _getTransactionTypeText(type);
     final typeIcon = _getTransactionTypeIcon(type);
-    final isReturn = type == 'return';
 
     showModalBottomSheet(
       context: context,

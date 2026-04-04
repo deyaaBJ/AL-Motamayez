@@ -113,6 +113,7 @@ class _SidebarState extends State<Sidebar> {
           ),
           boxShadow: [
             BoxShadow(
+              // ignore: deprecated_member_use
               color: const Color(0xFF4A1C6D).withOpacity(0.3),
               blurRadius: 20,
               offset: const Offset(5, 0),
@@ -133,6 +134,7 @@ class _SidebarState extends State<Sidebar> {
               ),
               child: Divider(
                 height: 1,
+                // ignore: deprecated_member_use
                 color: Colors.white.withOpacity(0.3),
                 thickness: 1,
               ),
@@ -215,8 +217,10 @@ class _SidebarState extends State<Sidebar> {
       width: 36,
       height: 36,
       decoration: BoxDecoration(
+        // ignore: deprecated_member_use
         color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(8),
+        // ignore: deprecated_member_use
         border: Border.all(color: Colors.white.withOpacity(0.3)),
       ),
       child: IconButton(
@@ -274,6 +278,7 @@ class _SidebarState extends State<Sidebar> {
                   Text(
                     _getRoleTitle(role ?? 'user'),
                     style: TextStyle(
+                      // ignore: deprecated_member_use
                       color: Colors.white.withOpacity(0.8),
                       fontSize: 11,
                     ),
@@ -370,6 +375,7 @@ class _SidebarState extends State<Sidebar> {
         label,
         style: TextStyle(
           fontSize: 10,
+          // ignore: deprecated_member_use
           color: Colors.white.withOpacity(0.7),
           fontWeight: FontWeight.w600,
         ),
@@ -389,6 +395,7 @@ class _SidebarState extends State<Sidebar> {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
+        // ignore: deprecated_member_use
         hoverColor: Colors.white.withOpacity(0.1),
         child: Container(
           height: 44,
@@ -397,10 +404,12 @@ class _SidebarState extends State<Sidebar> {
           ),
           decoration: BoxDecoration(
             color:
+                // ignore: deprecated_member_use
                 isActive ? Colors.white.withOpacity(0.2) : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             border:
                 isActive
+                    // ignore: deprecated_member_use
                     ? Border.all(color: Colors.white.withOpacity(0.4))
                     : null,
           ),
@@ -435,6 +444,7 @@ class _SidebarState extends State<Sidebar> {
       width: 32,
       height: 32,
       decoration: BoxDecoration(
+        // ignore: deprecated_member_use
         color: isActive ? Colors.white : Colors.white.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -476,6 +486,7 @@ class _SidebarState extends State<Sidebar> {
             Text(
               "v1.0.0",
               style: TextStyle(
+                // ignore: deprecated_member_use
                 color: Colors.white.withOpacity(0.6),
                 fontSize: 10,
               ),

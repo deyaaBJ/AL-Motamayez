@@ -6,11 +6,11 @@ import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/models/customer.dart';
-import 'package:motamayez/providers/DebtProvider.dart';
+import 'package:motamayez/providers/debt_provider.dart';
 import 'package:motamayez/providers/customer_provider.dart';
 import 'package:motamayez/providers/sales_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
-import 'package:motamayez/screens/CustomerDetailsScreen.dart';
+import 'package:motamayez/screens/customer_details_screen.dart';
 import 'package:motamayez/widgets/customer_form_dialog.dart';
 import 'package:motamayez/widgets/quick_payment_dialog.dart';
 

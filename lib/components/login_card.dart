@@ -1,5 +1,6 @@
+// ignore: file_names
 import 'package:flutter/material.dart';
-import 'package:motamayez/widgets/TextField.dart';
+import 'package:motamayez/widgets/text_field.dart';
 
 class LoginCard extends StatefulWidget {
   final TextEditingController emailController;
@@ -39,6 +40,7 @@ class _LoginCardState extends State<LoginCard> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.purple.withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
@@ -119,6 +121,7 @@ class _LoginCardState extends State<LoginCard> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 elevation: 5,
+                // ignore: deprecated_member_use
                 shadowColor: Colors.purple.withOpacity(0.5),
               ),
               child:

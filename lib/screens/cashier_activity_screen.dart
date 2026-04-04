@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/providers/settings_provider.dart'; // ⬅️ أضف هاد
-import 'package:motamayez/widgets/SaleDetailsDialog.dart';
+import 'package:motamayez/widgets/sale_details_dialog.dart';
 import 'package:provider/provider.dart';
 import '../../providers/cashier_activity_provider.dart';
 import '../../models/cashier_activity_model.dart';
@@ -28,6 +28,42 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
       context: context,
       builder: (context) => SaleDetailsDialog(saleId: saleId),
     );
+  }
+
+  String _getRoleLabel(String role) {
+    switch (role) {
+      case 'admin':
+        return 'أدمن';
+      case 'tax':
+        return 'حساب ضريبة';
+      case 'cashier':
+      default:
+        return 'كاشير';
+    }
+  }
+
+  Color _getRoleColor(String role) {
+    switch (role) {
+      case 'admin':
+        return Colors.deepOrange;
+      case 'tax':
+        return Colors.teal;
+      case 'cashier':
+      default:
+        return Colors.indigo;
+    }
+  }
+
+  IconData _getRoleIcon(String role) {
+    switch (role) {
+      case 'admin':
+        return Icons.admin_panel_settings;
+      case 'tax':
+        return Icons.receipt_long;
+      case 'cashier':
+      default:
+        return Icons.point_of_sale;
+    }
   }
 
   Future<void> _selectSingleDay(BuildContext context) async {
@@ -221,6 +257,9 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
       symbol: '', // ⬅️ فارغ لأننا بنعرض العملة منفصلة
       decimalDigits: 0,
     );
+    final roleColor = _getRoleColor(activity.userRole);
+    final roleLabel = _getRoleLabel(activity.userRole);
+    final roleIcon = _getRoleIcon(activity.userRole);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -231,7 +270,7 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
         childrenPadding: const EdgeInsets.all(16),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         leading: CircleAvatar(
-          backgroundColor: Colors.indigo,
+          backgroundColor: roleColor,
           radius: 26,
           child: Text(
             activity.userName.substring(0, 1).toUpperCase(),
@@ -246,9 +285,37 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
           activity.userName,
           style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
         ),
-        subtitle: Text(
-          activity.userEmail,
-          style: TextStyle(color: Colors.grey[600], fontSize: 15),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              activity.userEmail,
+              style: TextStyle(color: Colors.grey[600], fontSize: 15),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: roleColor.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(roleIcon, size: 14, color: roleColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    roleLabel,
+                    style: TextStyle(
+                      color: roleColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         // ⬅️ تعديل: عرض المبلغ مع العملة كنص بدل أيقونة
         trailing: Container(

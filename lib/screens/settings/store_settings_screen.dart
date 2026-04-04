@@ -152,7 +152,7 @@ class StoreSettingsScreen extends StatelessWidget {
               value: settings.defaultTaxSetting == 1,
               onChanged:
                   (value) => settings.updateDefaultTaxSetting(value ? 1 : 0),
-              activeColor: const Color(0xFF9C27B0),
+              activeThumbColor: const Color(0xFF9C27B0),
             ),
           ],
         ),

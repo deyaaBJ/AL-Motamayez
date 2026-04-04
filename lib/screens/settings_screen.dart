@@ -310,6 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   height: 100,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
+                    // ignore: deprecated_member_use
                     color: Colors.white.withOpacity(0.1),
                   ),
                 ),
@@ -322,6 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   height: 80,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
+                    // ignore: deprecated_member_use
                     color: Colors.white.withOpacity(0.1),
                   ),
                 ),
@@ -336,6 +338,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
+                        // ignore: deprecated_member_use
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -355,6 +358,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       subtitle,
                       style: TextStyle(
                         fontSize: 14,
+                        // ignore: deprecated_member_use
                         color: Colors.white.withOpacity(0.9),
                       ),
                     ),
@@ -368,6 +372,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             vertical: 8,
                           ),
                           decoration: BoxDecoration(
+                            // ignore: deprecated_member_use
                             color: Colors.white.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(20),
                           ),
@@ -423,6 +428,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
+                      // ignore: deprecated_member_use
                       color: const Color(0xFF6A3093).withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
@@ -506,6 +512,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: const Color(0xFF6A3093).withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
@@ -549,6 +556,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     await settingsProvider.updateMarketName(newName);
 
+    // ignore: use_build_context_synchronously
     showAppToast(context, 'تم حفظ اسم السوبر ماركت بنجاح', ToastType.success);
   }
 
@@ -562,6 +570,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       phone: _adminPhoneController.text.trim(),
     );
 
+    // ignore: use_build_context_synchronously
     showAppToast(context, 'تم تحديث بيانات المدير بنجاح', ToastType.success);
   }
 
@@ -575,6 +584,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     showAppToast(
+      // ignore: use_build_context_synchronously
       context,
       'تم تحديث بيانات حساب الضريبة بنجاح',
       ToastType.success,
@@ -746,10 +756,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       newPassword: _newPasswordController.text.trim(),
     );
 
+    // ignore: use_build_context_synchronously
     Navigator.pop(context);
     _clearPasswordFields();
 
     showAppToast(
+      // ignore: use_build_context_synchronously
       context,
       success ? 'تم تغيير كلمة المرور بنجاح' : 'كلمة المرور الحالية غير صحيحة',
       success ? ToastType.success : ToastType.error,
@@ -854,6 +866,7 @@ class _AdminDetailScreenState extends State<AdminDetailScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
+                      // ignore: deprecated_member_use
                       color: const Color(0xFFFF6B35).withOpacity(0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
@@ -973,6 +986,7 @@ class _AdminDetailScreenState extends State<AdminDetailScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: 20,
             offset: const Offset(0, 10),
@@ -1222,6 +1236,7 @@ class _CashiersManagementScreenState extends State<CashiersManagementScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
@@ -1350,6 +1365,7 @@ class _TaxDetailScreenState extends State<TaxDetailScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
+                      // ignore: deprecated_member_use
                       color: const Color(0xFF34C759).withOpacity(0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
@@ -1369,6 +1385,7 @@ class _TaxDetailScreenState extends State<TaxDetailScreen> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
+                      // ignore: deprecated_member_use
                       color: Colors.black.withOpacity(0.05),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
@@ -1771,6 +1788,7 @@ class StoreSettingsScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: 20,
             offset: const Offset(0, 10),
@@ -1786,6 +1804,7 @@ class StoreSettingsScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
+                  // ignore: deprecated_member_use
                   color: const Color(0xFF9C27B0).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -1810,6 +1829,7 @@ class StoreSettingsScreen extends StatelessWidget {
 }
 
 // ==================== شاشة إعدادات الطابعة ====================
+// ignore: camel_case_types
 class logerSettingsScreen extends StatelessWidget {
   final TextEditingController ipController;
   final TextEditingController portController;
@@ -1850,6 +1870,7 @@ class logerSettingsScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
+                          // ignore: deprecated_member_use
                           color: Colors.black.withOpacity(0.05),
                           blurRadius: 20,
                           offset: const Offset(0, 10),

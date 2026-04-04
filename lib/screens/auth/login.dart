@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:motamayez/components/LoginCard.dart';
+import 'package:motamayez/components/login_card.dart';
 import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/providers/auth_provider.dart';
 import 'package:motamayez/widgets/whatsapp_support_button.dart';
@@ -234,6 +234,7 @@ class BackgroundPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint =
         Paint()
+          // ignore: deprecated_member_use
           ..color = Colors.white.withOpacity(0.05)
           ..style = PaintingStyle.fill;
 

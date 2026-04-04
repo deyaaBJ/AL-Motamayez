@@ -265,6 +265,7 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
+          // ignore: deprecated_member_use
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -297,6 +298,7 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
     return Card(
       color: Colors.white,
       elevation: 4,
+      // ignore: deprecated_member_use
       shadowColor: Colors.grey.withOpacity(0.2),
       margin: const EdgeInsets.all(16),
       shape: RoundedRectangleBorder(
@@ -452,6 +454,7 @@ class _SuppliersListPageState extends State<SuppliersListPage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.grey.withOpacity(0.15),
             blurRadius: 10,
             offset: const Offset(0, 4),

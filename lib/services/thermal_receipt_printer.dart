@@ -1,11 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:convert';
-import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:motamayez/models/cart_item.dart';
-import 'package:path_provider/path_provider.dart'
-    show getApplicationDocumentsDirectory;
 
 class ThermalReceiptloger {
   // -------- تحويل النص العربي لـ CP1256 --------
@@ -92,7 +88,6 @@ class ThermalReceiptloger {
   // -------- بناء سطر عربي بعرض محدد --------
   static List<int> _arabicLine(
     String text, {
-    int width = 32,
     bool center = false,
     bool rightAlign = false,
     bool bold = false,

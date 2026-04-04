@@ -56,13 +56,16 @@ class _SectionCard extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
+              // ignore: deprecated_member_use
               section.color.withOpacity(0.9),
+              // ignore: deprecated_member_use
               section.color.withOpacity(0.7),
             ],
           ),
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
             BoxShadow(
+              // ignore: deprecated_member_use
               color: section.color.withOpacity(0.2),
               blurRadius: 10,
               offset: const Offset(0, 3),
@@ -82,6 +85,7 @@ class _SectionCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
+                      // ignore: deprecated_member_use
                       color: Colors.white.withOpacity(0.2),
                       shape: BoxShape.circle,
                     ),
@@ -102,6 +106,7 @@ class _SectionCard extends StatelessWidget {
                     _getSectionDescription(section.title),
                     textAlign: TextAlign.center,
                     style: TextStyle(
+                      // ignore: deprecated_member_use
                       color: Colors.white.withOpacity(0.9),
                       fontSize: 12,
                     ),

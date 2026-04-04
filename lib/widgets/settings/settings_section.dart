@@ -25,6 +25,7 @@ class SettingsSection extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.05),
             blurRadius: 20,
             offset: const Offset(0, 10),
@@ -40,6 +41,7 @@ class SettingsSection extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
+                  // ignore: deprecated_member_use
                   color: effectiveColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),

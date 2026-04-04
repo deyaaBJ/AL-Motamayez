@@ -130,6 +130,7 @@ class _BeautifulCartAnimationState extends State<BeautifulCartAnimation>
         borderRadius: BorderRadius.circular(35),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.1),
             blurRadius: 20,
             spreadRadius: 2,
@@ -147,6 +148,7 @@ class _BeautifulCartAnimationState extends State<BeautifulCartAnimation>
             child: Container(
               height: 3,
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: Colors.grey.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
@@ -213,6 +215,7 @@ class _BeautifulCartAnimationState extends State<BeautifulCartAnimation>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
+                            // ignore: deprecated_member_use
                             color: widget.color.withOpacity(0.5),
                             blurRadius: 10,
                             spreadRadius: 2,
@@ -273,6 +276,7 @@ class _BeautifulCartAnimationState extends State<BeautifulCartAnimation>
                   border: Border.all(color: product.color, width: 2),
                   boxShadow: [
                     BoxShadow(
+                      // ignore: deprecated_member_use
                       color: product.color.withOpacity(0.3),
                       blurRadius: 5,
                     ),

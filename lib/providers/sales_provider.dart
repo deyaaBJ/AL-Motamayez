@@ -6,7 +6,7 @@ import 'package:sqflite/sqflite.dart';
 import '../db/db_helper.dart';
 import '../models/sale.dart';
 import '../utils/app_logger.dart';
-import 'DebtProvider.dart';
+import 'debt_provider.dart';
 import 'dart:developer';
 
 class SalesProvider extends ChangeNotifier {

@@ -168,6 +168,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                         Container(
                                           padding: const EdgeInsets.all(12),
                                           decoration: BoxDecoration(
+                                            // ignore: deprecated_member_use
                                             color: Colors.white.withOpacity(
                                               0.15,
                                             ),
@@ -205,7 +206,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                                     ),
                                                 decoration: BoxDecoration(
                                                   color: Colors.white
-                                                      .withOpacity(0.2),
+                                                  // ignore: deprecated_member_use
+                                                  .withOpacity(0.2),
                                                   borderRadius:
                                                       BorderRadius.circular(20),
                                                 ),
@@ -214,7 +216,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                                   style: TextStyle(
                                                     fontSize: 14,
                                                     color: Colors.white
-                                                        .withOpacity(0.95),
+                                                    // ignore: deprecated_member_use
+                                                    .withOpacity(0.95),
                                                     fontWeight: FontWeight.w500,
                                                   ),
                                                 ),
@@ -315,6 +318,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   ),
                                   boxShadow: [
                                     BoxShadow(
+                                      // ignore: deprecated_member_use
                                       color: Colors.black.withOpacity(0.03),
                                       blurRadius: 8,
                                       offset: const Offset(0, 2),
@@ -461,9 +465,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   ),
                                   elevation: 0,
                                 ),
-                                onPressed: () {
-                                  // TODO: Navigate to edit screen
-                                },
+                                onPressed: () {},
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -521,6 +523,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         border: Border.all(
           color:
               backgroundColor != null
+                  // ignore: deprecated_member_use
                   ? color.withOpacity(0.3)
                   : Colors.grey.shade200,
         ),
@@ -528,6 +531,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             backgroundColor == null
                 ? [
                   BoxShadow(
+                    // ignore: deprecated_member_use
                     color: Colors.black.withOpacity(0.03),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
@@ -577,8 +581,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
+        // ignore: deprecated_member_use
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
+        // ignore: deprecated_member_use
         border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Column(
@@ -588,6 +594,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             label,
             style: TextStyle(
               fontSize: 14,
+              // ignore: deprecated_member_use
               color: color.withOpacity(0.8),
               fontWeight: FontWeight.w600,
             ),
@@ -613,6 +620,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   'شيكل',
                   style: TextStyle(
                     fontSize: 14,
+                    // ignore: deprecated_member_use
                     color: color.withOpacity(0.7),
                     fontWeight: FontWeight.w600,
                   ),
