@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:developer';
 import 'package:motamayez/services/password_service.dart';
+import 'package:path_provider/path_provider.dart';
 
 class DBHelper {
   static Database? _db;
@@ -20,7 +21,8 @@ class DBHelper {
       databaseFactory = databaseFactoryFfi;
     }
 
-    String folderPath = join(Directory.current.path, 'data');
+    final appDir = await getApplicationDocumentsDirectory();
+    String folderPath = join(appDir.path, 'Motamayez', 'data');
     Directory(folderPath).createSync(recursive: true);
 
     String path = join(folderPath, 'motamayez.db');
