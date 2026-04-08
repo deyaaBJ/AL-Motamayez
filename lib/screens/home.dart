@@ -228,6 +228,7 @@ class _MainScreenState extends State<MainScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
+                    // ignore: deprecated_member_use
                     color: const Color(0xFF7C3AED).withOpacity(0.2),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
@@ -246,6 +247,7 @@ class _MainScreenState extends State<MainScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
+            // ignore: deprecated_member_use
             color: const Color(0xFF7C3AED).withOpacity(0.1),
             borderRadius: BorderRadius.circular(20),
           ),
@@ -280,6 +282,7 @@ class _MainScreenState extends State<MainScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: const Color(0xFF7C3AED).withOpacity(0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
@@ -298,6 +301,7 @@ class _MainScreenState extends State<MainScreen> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
+                    // ignore: deprecated_member_use
                     color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -324,6 +328,7 @@ class _MainScreenState extends State<MainScreen> {
                       Text(
                         "امسح الباركود أو ابحث عن المنتج",
                         style: TextStyle(
+                          // ignore: deprecated_member_use
                           color: Colors.white.withOpacity(0.85),
                           fontSize: 14,
                         ),
@@ -519,6 +524,7 @@ class _MainScreenState extends State<MainScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
+                  // ignore: deprecated_member_use
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
@@ -548,6 +554,7 @@ class _MainScreenState extends State<MainScreen> {
                 subtitle,
                 style: TextStyle(
                   fontSize: 11,
+                  // ignore: deprecated_member_use
                   color: color.withOpacity(0.7),
                   fontWeight: FontWeight.w500,
                 ),
@@ -571,8 +578,10 @@ class _MainScreenState extends State<MainScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         decoration: BoxDecoration(
+          // ignore: deprecated_member_use
           color: color.withOpacity(0.05),
           borderRadius: BorderRadius.circular(16),
+          // ignore: deprecated_member_use
           border: Border.all(color: color.withOpacity(0.15)),
         ),
         child: Column(
@@ -580,6 +589,7 @@ class _MainScreenState extends State<MainScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(14),
               ),
@@ -609,6 +619,7 @@ class _MainScreenState extends State<MainScreen> {
               subtitle,
               style: TextStyle(
                 fontSize: 11,
+                // ignore: deprecated_member_use
                 color: color.withOpacity(0.7),
                 fontWeight: FontWeight.w500,
               ),
@@ -630,6 +641,7 @@ class _MainScreenState extends State<MainScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
+            // ignore: deprecated_member_use
             color: const Color(0xFFEF4444).withOpacity(0.1),
             borderRadius: BorderRadius.circular(20),
           ),
@@ -693,9 +705,11 @@ class _MainScreenState extends State<MainScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
+          // ignore: deprecated_member_use
           border: Border.all(color: color.withOpacity(0.2)),
           boxShadow: [
             BoxShadow(
+              // ignore: deprecated_member_use
               color: color.withOpacity(0.08),
               blurRadius: 8,
               offset: const Offset(0, 2),
@@ -709,6 +723,7 @@ class _MainScreenState extends State<MainScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
+                  // ignore: deprecated_member_use
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
@@ -827,6 +842,7 @@ class _MainScreenState extends State<MainScreen> {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(18),
             ),

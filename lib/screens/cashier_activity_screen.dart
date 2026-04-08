@@ -296,6 +296,7 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: roleColor.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(999),
               ),

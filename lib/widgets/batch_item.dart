@@ -157,6 +157,7 @@ class BatchItem extends StatelessWidget {
                   border: Border.all(
                     color:
                         batch.hasExpiry
+                            // ignore: deprecated_member_use
                             ? _getStatusColor().withOpacity(0.35)
                             : Colors.grey.shade400,
                   ),

@@ -6,7 +6,8 @@ import 'package:motamayez/models/product.dart';
 import 'package:motamayez/models/product_filter.dart';
 import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
-import 'package:motamayez/screens/add_product_screen.dart' show AddProductScreen;
+import 'package:motamayez/screens/add_product_screen.dart'
+    show AddProductScreen;
 import 'package:motamayez/widgets/product_filter_bar.dart';
 import 'package:motamayez/widgets/product_item.dart';
 import 'package:motamayez/widgets/product_table_header.dart';
@@ -72,9 +73,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
     } catch (e) {
       log('Error loading products by filter: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('حدث خطأ في تحميل المنتجات: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('حدث خطأ في تحميل المنتجات: $e')));
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -107,6 +108,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: _getFilterColor().withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: _getFilterColor(), width: 1),
@@ -196,7 +198,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   List<Product> get _displayedProducts {
-    final source = _searchQuery.isNotEmpty ? _searchResults : _provider.products;
+    final source =
+        _searchQuery.isNotEmpty ? _searchResults : _provider.products;
     return source
         .where((product) => matchesFilter(context, product, _currentFilter))
         .toList();
@@ -291,14 +294,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
           if (_searchQuery.isEmpty) ...[
             const SizedBox(height: 8),
             ElevatedButton(
-              onPressed: () => _loadProductsByFilter(_currentFilter, reset: true),
+              onPressed:
+                  () => _loadProductsByFilter(_currentFilter, reset: true),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _getFilterColor(),
               ),
-              child: const Text(
-                'تحديث',
-                style: TextStyle(color: Colors.white),
-              ),
+              child: const Text('تحديث', style: TextStyle(color: Colors.white)),
             ),
           ],
         ],
@@ -353,8 +354,8 @@ bool matchesFilter(
   Product product,
   ProductFilter currentFilter,
 ) {
-  bool hasOffer = product.active &&
-      (product.hasValidOffer || product.hasOfferInUnits);
+  bool hasOffer =
+      product.active && (product.hasValidOffer || product.hasOfferInUnits);
 
   try {
     final settingsProvider = Provider.of<SettingsProvider>(
