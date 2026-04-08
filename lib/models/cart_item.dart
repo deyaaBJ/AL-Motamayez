@@ -27,9 +27,12 @@ class CartItem {
       selectedUnit = null,
       customPrice = price;
 
-  double get unitPrice =>
-      customPrice ??
-      (isService ? 0 : (selectedUnit?.sellPrice ?? product!.price));
+  double get defaultPrice =>
+      isService
+          ? (customPrice ?? 0)
+          : (selectedUnit?.effectivePrice ?? product!.effectivePrice);
+
+  double get unitPrice => customPrice ?? defaultPrice;
 
   double get totalPrice => unitPrice * quantity;
 
@@ -38,7 +41,6 @@ class CartItem {
   String get unitName =>
       isService ? 'خدمة' : (selectedUnit?.unitName ?? product!.baseUnit);
 
-  // أضف هذه الدالة لتعديل السعر
   void setCustomPrice(double? price) {
     customPrice = price;
   }

@@ -239,10 +239,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
     if (widget.item.isService) {
       return false; // الخدمات لا يوجد لها سعر أصلي للتعديل
     }
-    if (widget.item.selectedUnit != null) {
-      return widget.item.unitPrice != widget.item.selectedUnit!.sellPrice;
-    }
-    return widget.item.unitPrice != widget.item.product!.price;
+    return widget.item.unitPrice != widget.item.defaultPrice;
   }
 
   // دالة للحصول على السعر الأصلي (للمنتجات فقط)
@@ -250,10 +247,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
     if (widget.item.isService) {
       return widget.item.unitPrice; // للخدمات، السعر الحالي هو السعر الوحيد
     }
-    if (widget.item.selectedUnit != null) {
-      return widget.item.selectedUnit!.sellPrice;
-    }
-    return widget.item.product!.price;
+    return widget.item.defaultPrice;
   }
 
   // دالة لعرض محرر السعر

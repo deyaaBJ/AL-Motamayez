@@ -1,4 +1,4 @@
-import 'dart:developer' show log;
+﻿import 'dart:developer' show log;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -24,11 +24,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final TextEditingController _qrController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _offerPriceController = TextEditingController();
   final TextEditingController _costPriceController = TextEditingController();
   final TextEditingController _quantityController = TextEditingController();
   final TextEditingController _barcodeController = TextEditingController();
   final TextEditingController _originalQuantityController =
       TextEditingController();
+  DateTime? _offerStartDate;
+  DateTime? _offerEndDate;
+  bool _offerEnabled = false;
 
   // ⬅️ جديد: متحكمات لسويتشين
   bool _isProductActive = true;
@@ -94,6 +98,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
               .toStringAsFixed(2);
           _barcodeController.text = _existingProduct!.barcode ?? '';
           _selectedUnit = _existingProduct!.baseUnit;
+          _offerEnabled = _existingProduct!.offerEnabled;
+          _offerPriceController.text =
+              _existingProduct!.offerPrice?.toString() ?? '';
+          _offerStartDate = _parseStoredDate(_existingProduct!.offerStartDate);
+          _offerEndDate = _parseStoredDate(_existingProduct!.offerEndDate);
 
           // ⬅️ تأكد من تعبئة حالة السويتشين بشكل صحيح
           _isProductActive = _existingProduct!.active;
@@ -150,6 +159,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
           _quantityController.text = '0';
           _barcodeController.text = _existingProduct!.barcode ?? '';
           _selectedUnit = _existingProduct!.baseUnit;
+          _offerEnabled = _existingProduct!.offerEnabled;
+          _offerPriceController.text =
+              _existingProduct!.offerPrice?.toString() ?? '';
+          _offerStartDate = _parseStoredDate(_existingProduct!.offerStartDate);
+          _offerEndDate = _parseStoredDate(_existingProduct!.offerEndDate);
 
           // ⬅️ تعبئة حالة السويتشين
           _isProductActive = _existingProduct!.active;
@@ -311,6 +325,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
         SizedBox(height: 16),
         _buildPriceFields(),
         SizedBox(height: 16),
+        _buildOfferSection(),
+        SizedBox(height: 16),
         _buildQuantitySection(),
         SizedBox(height: 16),
         _buildBarcodeField(),
@@ -340,6 +356,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
             Expanded(child: _buildCostPriceField()),
           ],
         ),
+        SizedBox(height: 16),
+        _buildOfferSection(),
         SizedBox(height: 16),
         _buildQuantitySection(),
         SizedBox(height: 16),
@@ -510,6 +528,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
     log('السعر: ${_priceController.text}');
 
     try {
+      final productOfferData = _buildOfferData(
+        enabled: _offerEnabled,
+        priceText: _offerPriceController.text,
+        startDate: _offerStartDate,
+        endDate: _offerEndDate,
+        regularPrice: double.tryParse(_priceController.text) ?? 0.0,
+      );
+
       if (_isNewProduct) {
         // إنشاء كائن المنتج الجديد مع السويتشين
         final product = Product(
@@ -517,6 +543,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
           barcode: _barcodeController.text,
           baseUnit: _selectedUnit,
           price: double.tryParse(_priceController.text) ?? 0.0,
+          offerPrice: productOfferData.offerPrice,
+          offerStartDate: productOfferData.offerStartDate,
+          offerEndDate: productOfferData.offerEndDate,
+          offerEnabled: productOfferData.offerEnabled,
           quantity: finalQuantity,
           costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
           active: _isProductActive, // ⬅️ هذا هو المهم!
@@ -560,6 +590,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
           barcode: _barcodeController.text,
           baseUnit: _selectedUnit,
           price: double.tryParse(_priceController.text) ?? 0.0,
+          offerPrice: productOfferData.offerPrice,
+          offerStartDate: productOfferData.offerStartDate,
+          offerEndDate: productOfferData.offerEndDate,
+          offerEnabled: productOfferData.offerEnabled,
           quantity: finalQuantity,
           costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
           addedDate: _existingProduct?.addedDate,
@@ -666,6 +700,138 @@ class _AddProductScreenState extends State<AddProductScreen> {
         }
         return null;
       },
+    );
+  }
+
+  Widget _buildOfferSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.local_offer, color: Colors.deepOrange),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'عرض مؤقت للسعر الأساسي',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+              Switch(
+                value: _offerEnabled,
+                activeThumbColor: Colors.deepOrange,
+                onChanged: (value) {
+                  setState(() {
+                    _offerEnabled = value;
+                    if (value) {
+                      _offerStartDate ??= _today();
+                    } else {
+                      _clearProductOffer();
+                    }
+                  });
+                },
+              ),
+            ],
+          ),
+          if (_offerEnabled) ...[
+            const SizedBox(height: 12),
+            CustomTextField(
+              controller: _offerPriceController,
+              label: 'سعر العرض',
+              prefixIcon: Icons.price_change,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildDatePickerField(
+                    label: 'تاريخ البداية',
+                    value: _offerStartDate,
+                    onTap: () async {
+                      final picked = await _pickDate(_offerStartDate ?? _today());
+                      if (picked != null) {
+                        setState(() {
+                          _offerStartDate = picked;
+                          _offerEndDate ??= picked;
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildDatePickerField(
+                    label: 'تاريخ النهاية',
+                    value: _offerEndDate,
+                    onTap: () async {
+                      final picked = await _pickDate(
+                        _offerEndDate ?? _offerStartDate ?? _today(),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _offerEndDate = picked;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () {
+                setState(_clearProductOffer);
+              },
+              icon: const Icon(Icons.close, color: Colors.red),
+              label: const Text(
+                'إلغاء العرض',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDatePickerField({
+    required String label,
+    required DateTime? value,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_month, color: Color(0xFF6A3093)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                value == null ? label : '$label: ${_formatDate(value)}',
+                style: TextStyle(
+                  color: value == null ? Colors.grey[600] : Colors.black87,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -913,6 +1079,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
             ),
 
             SizedBox(height: 12),
+            _buildUnitOfferSection(controller),
+
+            SizedBox(height: 12),
             CustomTextField(
               controller: controller.barcodeController,
               label: 'باركود الوحدة (اختياري)',
@@ -941,6 +1110,109 @@ class _AddProductScreenState extends State<AddProductScreen> {
           side: BorderSide(color: Color(0xFF6A3093)),
         ),
         onPressed: _addNewUnit,
+      ),
+    );
+  }
+
+  Widget _buildUnitOfferSection(UnitController controller) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.local_offer_outlined, color: Colors.deepOrange),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'عرض مؤقت لهذه الوحدة',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              Switch(
+                value: controller.offerEnabled,
+                activeThumbColor: Colors.deepOrange,
+                onChanged: (value) {
+                  setState(() {
+                    controller.offerEnabled = value;
+                    if (value) {
+                      controller.offerStartDate ??= _today();
+                    } else {
+                      controller.clearOffer();
+                    }
+                  });
+                },
+              ),
+            ],
+          ),
+          if (controller.offerEnabled) ...[
+            const SizedBox(height: 12),
+            CustomTextField(
+              controller: controller.offerPriceController,
+              label: 'سعر عرض الوحدة',
+              prefixIcon: Icons.sell,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildDatePickerField(
+                    label: 'من',
+                    value: controller.offerStartDate,
+                    onTap: () async {
+                      final picked = await _pickDate(
+                        controller.offerStartDate ?? _today(),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          controller.offerStartDate = picked;
+                          controller.offerEndDate ??= picked;
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildDatePickerField(
+                    label: 'إلى',
+                    value: controller.offerEndDate,
+                    onTap: () async {
+                      final picked = await _pickDate(
+                        controller.offerEndDate ??
+                            controller.offerStartDate ??
+                            _today(),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          controller.offerEndDate = picked;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () {
+                setState(controller.clearOffer);
+              },
+              icon: const Icon(Icons.close, color: Colors.red),
+              label: const Text(
+                'إلغاء العرض',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -1014,7 +1286,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ..unitNameController.text = unit.unitName
               ..barcodeController.text = unit.barcode ?? ''
               ..containQtyController.text = unit.containQty.toString()
-              ..sellPriceController.text = unit.sellPrice.toString(),
+              ..sellPriceController.text = unit.sellPrice.toString()
+              ..offerPriceController.text = unit.offerPrice?.toString() ?? ''
+              ..offerEnabled = unit.offerEnabled
+              ..offerStartDate = _parseStoredDate(unit.offerStartDate)
+              ..offerEndDate = _parseStoredDate(unit.offerEndDate),
           );
           _unitIds.add(unit.id!);
         }
@@ -1030,6 +1306,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void _resetForm() {
     _nameController.text = '';
     _priceController.text = '';
+    _offerPriceController.text = '';
     _costPriceController.text = '';
     _quantityController.text = '0';
     _selectedUnit = 'piece';
@@ -1037,6 +1314,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _unitControllers.clear();
     _unitIds.clear();
     _barcodeController.text = '';
+    _offerStartDate = null;
+    _offerEndDate = null;
+    _offerEnabled = false;
     // ⬅️ جديد: إعادة تعيين السويتشين
     _isProductActive = true; // الافتراضي نشط
     _hasExpiryDate = false; // الافتراضي بدون صلاحية
@@ -1064,6 +1344,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
         final barcode = controller.barcodeController.text.trim();
         final containQtyText = controller.containQtyController.text.trim();
         final sellPriceText = controller.sellPriceController.text.trim();
+        final sellPrice = double.tryParse(sellPriceText) ?? 0.0;
+        final unitOfferData = _buildOfferData(
+          enabled: controller.offerEnabled,
+          priceText: controller.offerPriceController.text,
+          startDate: controller.offerStartDate,
+          endDate: controller.offerEndDate,
+          regularPrice: sellPrice,
+        );
 
         if (unitName.isEmpty) {
           log('⚠️ تخطي وحدة بدون اسم');
@@ -1071,7 +1359,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
         }
 
         final containQty = double.tryParse(containQtyText) ?? 0.0;
-        final sellPrice = double.tryParse(sellPriceText) ?? 0.0;
 
         if (containQty <= 0) {
           log('⚠️ تخطي وحدة $unitName - الكمية غير صحيحة: $containQty');
@@ -1092,6 +1379,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
           barcode: barcode.isNotEmpty ? barcode : null,
           containQty: containQty,
           sellPrice: sellPrice,
+          offerPrice: unitOfferData.offerPrice,
+          offerStartDate: unitOfferData.offerStartDate,
+          offerEndDate: unitOfferData.offerEndDate,
+          offerEnabled: unitOfferData.offerEnabled,
         );
 
         try {
@@ -1154,11 +1445,88 @@ class _AddProductScreenState extends State<AddProductScreen> {
     log('✅ تم حذف $deletedCount وحدة');
   }
 
+  _OfferData _buildOfferData({
+    required bool enabled,
+    required String priceText,
+    required DateTime? startDate,
+    required DateTime? endDate,
+    required double regularPrice,
+  }) {
+    if (!enabled) {
+      return const _OfferData.disabled();
+    }
+
+    final offerPrice = double.tryParse(priceText.trim());
+    if (offerPrice == null || offerPrice <= 0) {
+      throw Exception('يرجى إدخال سعر عرض صحيح');
+    }
+    if (regularPrice <= 0) {
+      throw Exception('يرجى إدخال السعر الأصلي أولاً');
+    }
+    if (offerPrice >= regularPrice) {
+      throw Exception('سعر العرض يجب أن يكون أقل من السعر الأصلي');
+    }
+    if (startDate == null || endDate == null) {
+      throw Exception('يرجى اختيار تاريخ بداية ونهاية للعرض');
+    }
+    if (endDate.isBefore(startDate)) {
+      throw Exception('تاريخ نهاية العرض يجب أن يكون بعد تاريخ البداية');
+    }
+
+    return _OfferData(
+      offerPrice: offerPrice,
+      offerStartDate: _formatDateForStorage(startDate),
+      offerEndDate: _formatDateForStorage(endDate),
+      offerEnabled: true,
+    );
+  }
+
+  Future<DateTime?> _pickDate(DateTime initialDate) async {
+    return showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+  }
+
+  DateTime _today() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  DateTime? _parseStoredDate(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return null;
+    }
+
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) {
+      return null;
+    }
+
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDateForStorage(DateTime date) => _formatDate(date);
+
+  void _clearProductOffer() {
+    _offerEnabled = false;
+    _offerPriceController.clear();
+    _offerStartDate = null;
+    _offerEndDate = null;
+  }
+
   @override
   void dispose() {
     _qrController.dispose();
     _nameController.dispose();
     _priceController.dispose();
+    _offerPriceController.dispose();
     _costPriceController.dispose();
     _quantityController.dispose();
     _barcodeController.dispose();
@@ -1178,11 +1546,43 @@ class UnitController {
   final TextEditingController barcodeController = TextEditingController();
   final TextEditingController containQtyController = TextEditingController();
   final TextEditingController sellPriceController = TextEditingController();
+  final TextEditingController offerPriceController = TextEditingController();
+  DateTime? offerStartDate;
+  DateTime? offerEndDate;
+  bool offerEnabled = false;
+
+  void clearOffer() {
+    offerEnabled = false;
+    offerPriceController.clear();
+    offerStartDate = null;
+    offerEndDate = null;
+  }
 
   void dispose() {
     unitNameController.dispose();
     barcodeController.dispose();
     containQtyController.dispose();
     sellPriceController.dispose();
+    offerPriceController.dispose();
   }
+}
+
+class _OfferData {
+  final double? offerPrice;
+  final String? offerStartDate;
+  final String? offerEndDate;
+  final bool offerEnabled;
+
+  const _OfferData({
+    required this.offerPrice,
+    required this.offerStartDate,
+    required this.offerEndDate,
+    required this.offerEnabled,
+  });
+
+  const _OfferData.disabled()
+    : offerPrice = null,
+      offerStartDate = null,
+      offerEndDate = null,
+      offerEnabled = false;
 }

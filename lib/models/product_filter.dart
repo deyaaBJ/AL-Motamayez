@@ -1,1 +1,1 @@
-enum ProductFilter { all, available, unavailable, lowStock, inactive }
+enum ProductFilter { all, available, unavailable, lowStock, onOffer, inactive }

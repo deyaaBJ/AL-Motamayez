@@ -4,11 +4,16 @@ class Product {
   String? barcode;
   String baseUnit;
   double price;
+  double? offerPrice;
+  String? offerStartDate;
+  String? offerEndDate;
+  bool offerEnabled;
   double quantity;
   double costPrice;
   String? addedDate;
-  bool hasExpiryDate; // ⬅️ جديد: لتحديد إذا كان للمنتج تاريخ صلاحية
-  bool active; // ⬅️ جديد: حالة المنتج
+  bool hasExpiryDate;
+  bool hasOfferInUnits;
+  bool active;
 
   Product({
     this.id,
@@ -16,14 +21,18 @@ class Product {
     this.barcode,
     required this.baseUnit,
     required this.price,
+    this.offerPrice,
+    this.offerStartDate,
+    this.offerEndDate,
+    this.offerEnabled = false,
     required this.quantity,
     required this.costPrice,
     this.addedDate,
-    this.hasExpiryDate = false, // ⬅️ جديد: الافتراضي بدون تاريخ صلاحية
-    this.active = true, // ⬅️ جديد: الافتراضي نشط
+    this.hasExpiryDate = false,
+    this.hasOfferInUnits = false,
+    this.active = true,
   });
 
-  // Convert a Product object into a Map
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -31,15 +40,19 @@ class Product {
       'barcode': barcode ?? '',
       'base_unit': baseUnit,
       'price': price,
+      'offer_price': offerPrice,
+      'offer_start_date': offerStartDate,
+      'offer_end_date': offerEndDate,
+      'offer_enabled': offerEnabled ? 1 : 0,
       'quantity': quantity,
       'cost_price': costPrice,
       'added_date': addedDate,
-      'has_expiry_date': hasExpiryDate ? 1 : 0, // ⬅️ جديد
-      'active': active ? 1 : 0, // ⬅️ جديد
+      'has_expiry_date': hasExpiryDate ? 1 : 0,
+      'has_offer_in_units': hasOfferInUnits ? 1 : 0,
+      'active': active ? 1 : 0,
     };
   }
 
-  // Create a Product object from a Map
   factory Product.fromMap(Map<String, dynamic> map) {
     return Product(
       id: map['id'],
@@ -47,11 +60,47 @@ class Product {
       barcode: map['barcode'],
       baseUnit: map['base_unit'] ?? 'piece',
       price: map['price']?.toDouble() ?? 0.0,
+      offerPrice: map['offer_price']?.toDouble(),
+      offerStartDate: map['offer_start_date'],
+      offerEndDate: map['offer_end_date'],
+      offerEnabled: map['offer_enabled'] == 1,
       quantity: map['quantity']?.toDouble() ?? 0.0,
       costPrice: map['cost_price']?.toDouble() ?? 0.0,
       addedDate: map['added_date'],
-      hasExpiryDate: map['has_expiry_date'] == 1, // ⬅️ جديد
-      active: map['active'] == 1, // ⬅️ جديد
+      hasExpiryDate: map['has_expiry_date'] == 1,
+      hasOfferInUnits: map['has_offer_in_units'] == 1,
+      active: map['active'] == 1,
     );
+  }
+
+  bool get hasValidOffer {
+    if (!offerEnabled || offerPrice == null || offerPrice! <= 0) {
+      return false;
+    }
+
+    final start = _parseDateOnly(offerStartDate);
+    final end = _parseDateOnly(offerEndDate);
+    if (start == null || end == null) {
+      return false;
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return !today.isBefore(start) && !today.isAfter(end);
+  }
+
+  double get effectivePrice => hasValidOffer ? offerPrice! : price;
+
+  static DateTime? _parseDateOnly(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return null;
+    }
+
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) {
+      return null;
+    }
+
+    return DateTime(parsed.year, parsed.month, parsed.day);
   }
 }

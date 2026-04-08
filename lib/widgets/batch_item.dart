@@ -1,5 +1,3 @@
-// lib/widgets/batch_item.dart
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:motamayez/models/batch.dart';
@@ -23,7 +21,7 @@ class BatchItem extends StatelessWidget {
     final dateFormat = DateFormat('yyyy-MM-dd');
 
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 1),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(
@@ -34,7 +32,6 @@ class BatchItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Row(
           children: [
-            // اسم المنتج
             Expanded(
               flex: 1,
               child: Column(
@@ -43,9 +40,9 @@ class BatchItem extends StatelessWidget {
                   Text(
                     batch.productName ?? 'غير معروف',
                     style: TextStyle(
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                       fontSize: 13,
-                      color: _getStatusColor(),
+                      color: Colors.grey.shade900,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -67,14 +64,13 @@ class BatchItem extends StatelessWidget {
                 ],
               ),
             ),
-            // ✅ المورد (جديد)
             Expanded(
               flex: 1,
               child: Text(
                 batch.supplierName ?? 'غير محدد',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                   fontSize: 12,
                   color: Colors.blue.shade700,
                 ),
@@ -82,7 +78,6 @@ class BatchItem extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            // الكمية المتبقية
             Expanded(
               flex: 1,
               child: Text(
@@ -96,18 +91,17 @@ class BatchItem extends StatelessWidget {
                 ),
               ),
             ),
-
-            // سعر الشراء
             Expanded(
               flex: 1,
               child: Text(
                 batch.costPrice.toStringAsFixed(2),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
               ),
             ),
-
-            // تاريخ الانتهاء
             Expanded(
               flex: 1,
               child: Text(
@@ -122,8 +116,6 @@ class BatchItem extends StatelessWidget {
                 ),
               ),
             ),
-
-            // الأيام المتبقية
             Expanded(
               flex: 1,
               child: Container(
@@ -151,35 +143,39 @@ class BatchItem extends StatelessWidget {
                 ),
               ),
             ),
-
-            // الحالة
             Expanded(
               flex: 1,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
                   color:
                       batch.hasExpiry
                           ? _getStatusBackgroundColor()
                           : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color:
+                        batch.hasExpiry
+                            ? _getStatusColor().withOpacity(0.35)
+                            : Colors.grey.shade400,
+                  ),
                 ),
                 child: Text(
                   batch.status,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    letterSpacing: 0.2,
                     color:
                         batch.hasExpiry
                             ? _getStatusColor()
-                            : Colors.grey.shade600,
+                            : Colors.grey.shade700,
                   ),
                 ),
               ),
             ),
-
-            // الإجراءات
             Expanded(
               flex: 1,
               child: PopupMenuButton<String>(
@@ -190,7 +186,7 @@ class BatchItem extends StatelessWidget {
                       PopupMenuItem(
                         value: 'product_details',
                         child: Row(
-                          children: [
+                          children: const [
                             Icon(Icons.info, color: Colors.purple, size: 14),
                             SizedBox(width: 6),
                             Text(
@@ -200,11 +196,10 @@ class BatchItem extends StatelessWidget {
                           ],
                         ),
                       ),
-                      // خيار جديد: التخلص من الدفعة
                       PopupMenuItem(
                         value: 'dispose',
                         child: Row(
-                          children: [
+                          children: const [
                             Icon(
                               Icons.delete_sweep,
                               color: Colors.orange,
@@ -221,7 +216,7 @@ class BatchItem extends StatelessWidget {
                       PopupMenuItem(
                         value: 'return_to_supplier',
                         child: Row(
-                          children: [
+                          children: const [
                             Icon(
                               Icons.assignment_return,
                               color: Colors.blue,
@@ -245,18 +240,20 @@ class BatchItem extends StatelessWidget {
   }
 
   Color _getStatusColor() {
-    if (batch.daysRemaining < 0) return Colors.red;
-    if (batch.daysRemaining <= 30) return Colors.orange;
-    return Colors.green;
+    if (!batch.hasExpiry) return Colors.grey.shade700;
+    if (batch.daysRemaining < 0) return Colors.red.shade800;
+    if (batch.daysRemaining <= 30) return Colors.orange.shade900;
+    return Colors.green.shade800;
   }
 
   Color _getStatusBackgroundColor() {
+    if (!batch.hasExpiry) return Colors.grey.shade200;
     // ignore: deprecated_member_use
-    if (batch.daysRemaining < 0) return Colors.red.withOpacity(0.1);
+    if (batch.daysRemaining < 0) return Colors.red.withOpacity(0.16);
     // ignore: deprecated_member_use
-    if (batch.daysRemaining <= 30) return Colors.orange.withOpacity(0.1);
+    if (batch.daysRemaining <= 30) return Colors.orange.withOpacity(0.18);
     // ignore: deprecated_member_use
-    return Colors.green.withOpacity(0.1);
+    return Colors.green.withOpacity(0.16);
   }
 
   Color _getDaysRemainingColor() {
@@ -292,7 +289,7 @@ class BatchItem extends StatelessWidget {
   Future<void> _disposeBatch(BuildContext context) async {
     if (batch.remainingQuantity == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('هذه الدفعة فارغة بالفعل!'),
           backgroundColor: Colors.orange,
         ),
@@ -306,7 +303,7 @@ class BatchItem extends StatelessWidget {
     if (disposedQuantity > batch.remainingQuantity) {
       // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('الكمية المدخلة أكبر من الكمية المتبقية!'),
           backgroundColor: Colors.red,
         ),
@@ -314,7 +311,7 @@ class BatchItem extends StatelessWidget {
       return;
     }
 
-    final confirmed = await showDialog(
+    final confirmed = await showDialog<bool>(
       // ignore: use_build_context_synchronously
       context: context,
       builder:
@@ -325,10 +322,10 @@ class BatchItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('هل تريد التخلص من $disposedQuantity من هذه الدفعة؟'),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'سيبقى في الدفعة: ${(batch.remainingQuantity - disposedQuantity).toStringAsFixed(2)}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.green,
                     fontWeight: FontWeight.bold,
                   ),
@@ -385,16 +382,18 @@ class BatchItem extends StatelessWidget {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('أدخل الكمية التي تريد التخلص منها:'),
-                SizedBox(height: 12),
+                const Text('أدخل الكمية التي تريد التخلص منها:'),
+                const SizedBox(height: 12),
                 TextField(
                   controller: controller,
-                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'الكمية',
                     suffixText:
                         'المتبقي: ${batch.remainingQuantity.toStringAsFixed(2)}',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
                   ),
                 ),
               ],
@@ -420,7 +419,7 @@ class BatchItem extends StatelessWidget {
   Future<void> _returnToSupplier(BuildContext context) async {
     if (batch.remainingQuantity == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('هذه الدفعة فارغة!'),
           backgroundColor: Colors.orange,
         ),
@@ -434,7 +433,7 @@ class BatchItem extends StatelessWidget {
     if (returnQuantity > batch.remainingQuantity) {
       // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('الكمية المدخلة أكبر من الكمية المتبقية!'),
           backgroundColor: Colors.red,
         ),
@@ -444,7 +443,7 @@ class BatchItem extends StatelessWidget {
 
     final returnAmount = returnQuantity * batch.costPrice;
 
-    final confirmed = await showDialog(
+    final confirmed = await showDialog<bool>(
       // ignore: use_build_context_synchronously
       context: context,
       builder:
@@ -455,15 +454,15 @@ class BatchItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('الكمية المُرجَعة: ${returnQuantity.toStringAsFixed(2)}'),
-                SizedBox(height: 6),
+                const SizedBox(height: 6),
                 Text(
-                  'المبلغ المُسترجَع: ${returnAmount.toStringAsFixed(2)}',
-                  style: TextStyle(
+                  'المبلغ المُسترَجع: ${returnAmount.toStringAsFixed(2)}',
+                  style: const TextStyle(
                     color: Colors.green,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(height: 6),
+                const SizedBox(height: 6),
                 Text(
                   'سيبقى في الدفعة: ${(batch.remainingQuantity - returnQuantity).toStringAsFixed(2)}',
                 ),
@@ -517,19 +516,21 @@ class BatchItem extends StatelessWidget {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('أدخل الكمية التي تريد إرجاعها للمورد:'),
-                SizedBox(height: 12),
+                const Text('أدخل الكمية التي تريد إرجاعها للمورد:'),
+                const SizedBox(height: 12),
                 TextField(
                   controller: controller,
-                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'الكمية',
                     suffixText:
                         'المتبقي: ${batch.remainingQuantity.toStringAsFixed(2)}',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
                   ),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'سعر الشراء: ${batch.costPrice.toStringAsFixed(2)} لكل وحدة',
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 12),

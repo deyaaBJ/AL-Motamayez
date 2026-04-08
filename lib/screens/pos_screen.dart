@@ -131,7 +131,8 @@ class _PosScreenState extends State<PosScreen>
               }
             }
 
-            final defaultUnitPrice = selectedUnit?.sellPrice ?? product.price;
+            final defaultUnitPrice =
+                selectedUnit?.effectivePrice ?? product.effectivePrice;
             final hasCustomPrice =
                 (saleItem.price - defaultUnitPrice).abs() > 0.0001;
 
@@ -436,7 +437,7 @@ class _PosScreenState extends State<PosScreen>
                 style: const TextStyle(fontSize: 10),
               ),
               Text(
-                'سعر الوحدة: ${_getCurrency()}${unit.sellPrice.toStringAsFixed(2)}',
+                'سعر الوحدة: ${_getCurrency()}${unit.effectivePrice.toStringAsFixed(2)}',
                 style: const TextStyle(fontSize: 10),
               ),
             ],

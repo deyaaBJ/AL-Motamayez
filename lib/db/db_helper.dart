@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 class DBHelper {
   static Database? _db;
-  static const int _version = 6;
+  static const int _version = 7;
 
   Future<Database> get db async {
     if (_db != null) return _db!;
@@ -65,6 +65,10 @@ class DBHelper {
 
     if (oldVersion < 6) {
       await _upgradeToVersion6(db);
+    }
+
+    if (oldVersion < 7) {
+      await _upgradeToVersion7(db);
     }
   }
 
@@ -184,6 +188,20 @@ class DBHelper {
     await archiveHistoricalSales(database: db);
   }
 
+  Future<void> _upgradeToVersion7(Database db) async {
+    await _ensureOfferColumns(
+      db,
+      tableName: 'products',
+      priceColumnName: 'price',
+    );
+    await _ensureOfferColumns(
+      db,
+      tableName: 'product_units',
+      priceColumnName: 'sell_price',
+    );
+    await _createIndexes(db);
+  }
+
   Future _onCreate(Database db, int version) async {
     // ========== جدول المنتجات ==========
     await db.execute('''
@@ -193,6 +211,10 @@ class DBHelper {
         barcode TEXT UNIQUE,
         base_unit TEXT NOT NULL DEFAULT 'piece',
         price REAL NOT NULL,
+        offer_price REAL,
+        offer_start_date TEXT,
+        offer_end_date TEXT,
+        offer_enabled INTEGER NOT NULL DEFAULT 0,
         quantity REAL NOT NULL,
         cost_price REAL NOT NULL,
         has_expiry INTEGER DEFAULT 1,
@@ -211,6 +233,10 @@ class DBHelper {
         barcode TEXT UNIQUE,
         contain_qty REAL NOT NULL,
         sell_price REAL NOT NULL,
+        offer_price REAL,
+        offer_start_date TEXT,
+        offer_end_date TEXT,
+        offer_enabled INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
       );
     ''');
@@ -514,14 +540,8 @@ class DBHelper {
       'role': 'admin',
     });
     await db.insert('users', {
-      'name': 'Cashier',
-      'email': 'cashier@gmail.com',
-      'password': defaultPasswordHash,
-      'role': 'cashier',
-    });
-    await db.insert('users', {
-      'name': 'Deyaa',
-      'email': 'deyaa@system.com',
+      'name': 'tax',
+      'email': 'tax@system.com',
       'password': defaultPasswordHash,
       'role': 'tax',
     });
@@ -703,6 +723,63 @@ class DBHelper {
       log('Adding missing column $columnName to $tableName');
       await db.execute(statement);
     }
+  }
+
+  Future<void> _ensureOfferColumns(
+    Database db, {
+    required String tableName,
+    required String priceColumnName,
+  }) async {
+    final columns = await db.rawQuery('PRAGMA table_info($tableName)');
+
+    await _addColumnIfMissing(
+      db,
+      tableName: tableName,
+      columns: columns,
+      columnName: 'offer_price',
+      statement: 'ALTER TABLE $tableName ADD COLUMN offer_price REAL',
+    );
+    await _addColumnIfMissing(
+      db,
+      tableName: tableName,
+      columns: columns,
+      columnName: 'offer_start_date',
+      statement: 'ALTER TABLE $tableName ADD COLUMN offer_start_date TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      tableName: tableName,
+      columns: columns,
+      columnName: 'offer_end_date',
+      statement: 'ALTER TABLE $tableName ADD COLUMN offer_end_date TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      tableName: tableName,
+      columns: columns,
+      columnName: 'offer_enabled',
+      statement:
+          'ALTER TABLE $tableName ADD COLUMN offer_enabled INTEGER NOT NULL DEFAULT 0',
+    );
+
+    await db.execute('''
+      UPDATE $tableName
+      SET offer_enabled = 0
+      WHERE offer_enabled IS NULL
+    ''');
+
+    await db.execute('''
+      UPDATE $tableName
+      SET offer_enabled = 0
+      WHERE offer_enabled = 1
+        AND (
+          offer_price IS NULL
+          OR offer_price <= 0
+          OR offer_end_date IS NULL
+          OR TRIM(offer_end_date) = ''
+          OR offer_price = $priceColumnName
+        )
+    ''');
   }
 
   Future<int> archiveHistoricalSales({Database? database}) async {

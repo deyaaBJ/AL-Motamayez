@@ -13,6 +13,24 @@ import 'dart:developer';
 
 class ProductProvider with ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
+  static const String _expiredOfferSql = '''
+offer_enabled = 1
+AND offer_end_date IS NOT NULL
+AND TRIM(offer_end_date) != ''
+AND date(offer_end_date) < date('now', 'localtime')
+''';
+  static const String _activeOfferDateSql = '''
+(
+  offer_enabled = 1
+  AND offer_price IS NOT NULL
+  AND offer_price > 0
+  AND offer_start_date IS NOT NULL
+  AND TRIM(offer_start_date) != ''
+  AND offer_end_date IS NOT NULL
+  AND TRIM(offer_end_date) != ''
+  AND date('now', 'localtime') BETWEEN date(offer_start_date) AND date(offer_end_date)
+)
+''';
 
   // ========== متغيرات المنتجات ==========
   int _page = 0;
@@ -79,6 +97,57 @@ class ProductProvider with ChangeNotifier {
     return Sqflite.firstIntValue(res) ?? 0;
   }
 
+  Future<void> _clearExpiredOffers({
+    int? productId,
+    bool notify = false,
+  }) async {
+    final db = await _dbHelper.db;
+
+    final productWhere = StringBuffer(_expiredOfferSql);
+    final productWhereArgs = <Object?>[];
+    if (productId != null) {
+      productWhere.write(' AND id = ?');
+      productWhereArgs.add(productId);
+    }
+
+    final unitWhere = StringBuffer(_expiredOfferSql);
+    final unitWhereArgs = <Object?>[];
+    if (productId != null) {
+      unitWhere.write(' AND product_id = ?');
+      unitWhereArgs.add(productId);
+    }
+
+    await db.transaction((txn) async {
+      await txn.update(
+        'products',
+        {
+          'offer_price': null,
+          'offer_start_date': null,
+          'offer_end_date': null,
+          'offer_enabled': 0,
+        },
+        where: productWhere.toString(),
+        whereArgs: productWhereArgs,
+      );
+
+      await txn.update(
+        'product_units',
+        {
+          'offer_price': null,
+          'offer_start_date': null,
+          'offer_end_date': null,
+          'offer_enabled': 0,
+        },
+        where: unitWhere.toString(),
+        whereArgs: unitWhereArgs,
+      );
+    });
+
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
   Future<List<Product>> loadProducts({bool reset = false, bool? active}) async {
     if (!reset && !_hasMore) return [];
 
@@ -89,21 +158,32 @@ class ProductProvider with ChangeNotifier {
     final db = await _dbHelper.db;
 
     try {
+      await _clearExpiredOffers();
+
       String whereClause = '';
-      List<Object?> whereArgs = [];
+      final List<Object?> whereArgs = [];
 
       if (active != null) {
         whereClause = 'active = ?';
         whereArgs.add(active ? 1 : 0);
       }
 
-      final result = await db.query(
-        'products',
-        where: whereClause.isNotEmpty ? whereClause : null,
-        whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
-        limit: _limit,
-        offset: _page * _limit,
-        orderBy: 'id DESC',
+      final result = await db.rawQuery(
+        '''
+        SELECT
+          p.*,
+          EXISTS(
+            SELECT 1
+            FROM product_units pu
+            WHERE pu.product_id = p.id
+              AND $_activeOfferDateSql
+          ) AS has_offer_in_units
+        FROM products p
+        ${whereClause.isNotEmpty ? 'WHERE $whereClause' : ''}
+        ORDER BY p.id DESC
+        LIMIT ? OFFSET ?
+        ''',
+        [...whereArgs, _limit, _page * _limit],
       );
 
       if (result.isEmpty) {
@@ -120,10 +200,15 @@ class ProductProvider with ChangeNotifier {
                 barcode: map['barcode'] as String?,
                 baseUnit: (map['base_unit'] ?? 'piece') as String,
                 price: ((map['price'] ?? 0) as num).toDouble(),
+                offerPrice: (map['offer_price'] as num?)?.toDouble(),
+                offerStartDate: map['offer_start_date'] as String?,
+                offerEndDate: map['offer_end_date'] as String?,
+                offerEnabled: (map['offer_enabled'] as int?) == 1,
                 quantity: ((map['quantity'] ?? 0) as num).toDouble(),
                 costPrice: ((map['cost_price'] ?? 0) as num).toDouble(),
                 addedDate: map['added_date'] as String?,
                 hasExpiryDate: (map['has_expiry_date'] as int?) == 1,
+                hasOfferInUnits: (map['has_offer_in_units'] as int?) == 1,
                 active: (map['active'] as int?) != 0,
               );
             } catch (e) {
@@ -150,7 +235,7 @@ class ProductProvider with ChangeNotifier {
         _products.addAll(newProducts);
       }
 
-      await _loadTotalProductsByFilter(active);
+      await _loadTotalProductsByFilter(_currentActiveFilter);
       notifyListeners();
       return newProducts;
     } catch (e) {
@@ -159,21 +244,54 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
-  Future<void> _loadTotalProductsByFilter(bool? active) async {
+  Future<void> _loadTotalProductsByFilter(ProductFilter? filter) async {
     try {
       final db = await _dbHelper.db;
       String whereClause = '';
       List<Object?> whereArgs = [];
 
-      if (active != null) {
-        whereClause = 'active = ?';
-        whereArgs.add(active ? 1 : 0);
+      switch (filter) {
+        case ProductFilter.inactive:
+          whereClause = 'p.active = ?';
+          whereArgs = [0];
+          break;
+        case ProductFilter.available:
+          whereClause = 'p.active = ? AND p.quantity > 0';
+          whereArgs = [1];
+          break;
+        case ProductFilter.unavailable:
+          whereClause = 'p.active = ? AND p.quantity = 0';
+          whereArgs = [1];
+          break;
+        case ProductFilter.lowStock:
+          whereClause = 'p.active = ? AND p.quantity > 0';
+          whereArgs = [1];
+          break;
+        case ProductFilter.onOffer:
+          whereClause = '''
+            p.active = 1
+            AND (
+              $_activeOfferDateSql
+              OR EXISTS(
+                SELECT 1
+                FROM product_units pu
+                WHERE pu.product_id = p.id
+                  AND $_activeOfferDateSql
+              )
+            )
+          ''';
+          break;
+        case ProductFilter.all:
+        case null:
+          break;
       }
 
       final res = await db.rawQuery(
-        whereClause.isNotEmpty
-            ? "SELECT COUNT(*) as count FROM products WHERE $whereClause"
-            : "SELECT COUNT(*) as count FROM products",
+        '''
+        SELECT COUNT(*) as count
+        FROM products p
+        ${whereClause.isNotEmpty ? 'WHERE $whereClause' : ''}
+        ''',
         whereArgs,
       );
 
@@ -205,6 +323,7 @@ class ProductProvider with ChangeNotifier {
       case ProductFilter.available:
       case ProductFilter.unavailable:
       case ProductFilter.lowStock:
+      case ProductFilter.onOffer:
         active = true;
         break;
     }
@@ -219,8 +338,10 @@ class ProductProvider with ChangeNotifier {
     }
 
     try {
+      await _clearExpiredOffers();
+
       String whereClause =
-          'LOWER(name) LIKE LOWER(?) OR LOWER(barcode) LIKE LOWER(?)';
+          '(LOWER(name) LIKE LOWER(?) OR LOWER(barcode) LIKE LOWER(?))';
       List<Object?> whereArgs = ['%$query%', '%$query%'];
 
       if (active != null) {
@@ -228,11 +349,21 @@ class ProductProvider with ChangeNotifier {
         whereArgs.add(active ? 1 : 0);
       }
 
-      final result = await db.query(
-        'products',
-        where: whereClause,
-        whereArgs: whereArgs,
-        orderBy: 'name ASC',
+      final result = await db.rawQuery(
+        '''
+        SELECT
+          p.*,
+          EXISTS(
+            SELECT 1
+            FROM product_units pu
+            WHERE pu.product_id = p.id
+              AND $_activeOfferDateSql
+          ) AS has_offer_in_units
+        FROM products p
+        WHERE $whereClause
+        ORDER BY p.name ASC
+        ''',
+        whereArgs,
       );
 
       return result.map(Product.fromMap).toList();
@@ -249,6 +380,9 @@ class ProductProvider with ChangeNotifier {
       switch (_currentActiveFilter!) {
         case ProductFilter.inactive:
           active = false;
+          break;
+        case ProductFilter.all:
+          active = null;
           break;
         default:
           active = true;
@@ -293,6 +427,8 @@ class ProductProvider with ChangeNotifier {
   Future<List<Product>> searchProductsByBarcode(String barcode) async {
     final db = await _dbHelper.db;
     try {
+      await _clearExpiredOffers();
+
       final result = await db.query(
         'products',
         where: 'barcode = ?',
@@ -306,6 +442,10 @@ class ProductProvider with ChangeNotifier {
           barcode: map['barcode'] as String?,
           baseUnit: map['base_unit'] as String? ?? 'piece',
           price: (map['price'] as num?)?.toDouble() ?? 0.0,
+          offerPrice: (map['offer_price'] as num?)?.toDouble(),
+          offerStartDate: map['offer_start_date'] as String?,
+          offerEndDate: map['offer_end_date'] as String?,
+          offerEnabled: (map['offer_enabled'] as int?) == 1,
           quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
           costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
           addedDate: map['added_date'] as String?,
@@ -322,6 +462,8 @@ class ProductProvider with ChangeNotifier {
   Future<List<ProductUnit>> searchProductUnitsByBarcode(String barcode) async {
     final db = await _dbHelper.db;
     try {
+      await _clearExpiredOffers();
+
       final result = await db.query(
         'product_units',
         where: 'barcode = ?',
@@ -341,6 +483,8 @@ class ProductProvider with ChangeNotifier {
 
   Future<List<ProductUnit>> getProductUnits(int productId) async {
     try {
+      await _clearExpiredOffers(productId: productId);
+
       final db = await _dbHelper.db;
       final result = await db.query(
         'product_units',
@@ -418,6 +562,11 @@ class ProductProvider with ChangeNotifier {
             'quantity': newQuantity,
             'cost_price': newCostPriceFixed,
             'price': safePrice,
+            'offer_price': product.offerEnabled ? product.offerPrice : null,
+            'offer_start_date':
+                product.offerEnabled ? product.offerStartDate : null,
+            'offer_end_date': product.offerEnabled ? product.offerEndDate : null,
+            'offer_enabled': product.offerEnabled ? 1 : 0,
             'active': product.active ? 1 : 0,
             'has_expiry_date': product.hasExpiryDate ? 1 : 0,
           },
@@ -436,6 +585,10 @@ class ProductProvider with ChangeNotifier {
       'barcode': hasBarcode ? product.barcode : null,
       'base_unit': product.baseUnit,
       'price': safePrice,
+      'offer_price': product.offerEnabled ? product.offerPrice : null,
+      'offer_start_date': product.offerEnabled ? product.offerStartDate : null,
+      'offer_end_date': product.offerEnabled ? product.offerEndDate : null,
+      'offer_enabled': product.offerEnabled ? 1 : 0,
       'quantity': safeQuantity,
       'cost_price': safeCostPrice,
       'added_date': product.addedDate,
@@ -459,8 +612,16 @@ class ProductProvider with ChangeNotifier {
       'barcode': updatedProduct.barcode,
       'base_unit': updatedProduct.baseUnit,
       'price': updatedProduct.price,
+      'offer_price': updatedProduct.offerEnabled ? updatedProduct.offerPrice : null,
+      'offer_start_date':
+          updatedProduct.offerEnabled ? updatedProduct.offerStartDate : null,
+      'offer_end_date':
+          updatedProduct.offerEnabled ? updatedProduct.offerEndDate : null,
+      'offer_enabled': updatedProduct.offerEnabled ? 1 : 0,
       'cost_price': updatedProduct.costPrice,
       'quantity': updatedProduct.quantity,
+      'active': updatedProduct.active ? 1 : 0,
+      'has_expiry_date': updatedProduct.hasExpiryDate ? 1 : 0,
     };
 
     await db.update(
@@ -486,6 +647,8 @@ class ProductProvider with ChangeNotifier {
 
   Future<Product?> getProductById(int id) async {
     try {
+      await _clearExpiredOffers(productId: id);
+
       final db = await _dbHelper.db;
       final result = await db.query(
         'products',
@@ -502,6 +665,10 @@ class ProductProvider with ChangeNotifier {
         barcode: map['barcode'] as String?,
         baseUnit: map['base_unit'] as String? ?? 'piece',
         price: (map['price'] as num?)?.toDouble() ?? 0.0,
+        offerPrice: (map['offer_price'] as num?)?.toDouble(),
+        offerStartDate: map['offer_start_date'] as String?,
+        offerEndDate: map['offer_end_date'] as String?,
+        offerEnabled: (map['offer_enabled'] as int?) == 1,
         quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
         costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
         addedDate: map['added_date'] as String?,

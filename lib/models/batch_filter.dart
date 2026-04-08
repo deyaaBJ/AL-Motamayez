@@ -1,14 +1,21 @@
-// lib/models/batch_filter.dart
 class BatchFilter {
   final String? status;
   final String? expiryFilter;
 
+  static const Object _keepValue = Object();
+
   BatchFilter({this.status, this.expiryFilter});
 
-  BatchFilter copyWith({String? status, String? expiryFilter}) {
+  BatchFilter copyWith({
+    Object? status = _keepValue,
+    Object? expiryFilter = _keepValue,
+  }) {
     return BatchFilter(
-      status: status ?? this.status,
-      expiryFilter: expiryFilter ?? this.expiryFilter,
+      status: identical(status, _keepValue) ? this.status : status as String?,
+      expiryFilter:
+          identical(expiryFilter, _keepValue)
+              ? this.expiryFilter
+              : expiryFilter as String?,
     );
   }
 
@@ -23,47 +30,82 @@ class BatchFilter {
     return count;
   }
 
-  // دالة لبناء جملة WHERE بناءً على الفلاتر
   String buildWhereClause(List<Object?> args) {
     final conditions = <String>[];
 
-    // الدفعات تكون دائماً active
     conditions.add('pb.active = 1');
 
     if (status != null && status!.isNotEmpty) {
       if (status == 'منتهي') {
-        conditions.add('pb.days_remaining < 0');
+        conditions.add("""
+pb.expiry_date IS NOT NULL
+AND pb.expiry_date != ''
+AND pb.expiry_date != '2099-12-31'
+AND DATE(pb.expiry_date) < DATE('now')
+""");
       } else if (status == 'قريب') {
-        conditions.add('pb.days_remaining <= 30 AND pb.days_remaining > 0');
+        conditions.add("""
+pb.expiry_date IS NOT NULL
+AND pb.expiry_date != ''
+AND pb.expiry_date != '2099-12-31'
+AND DATE(pb.expiry_date) >= DATE('now')
+AND DATE(pb.expiry_date) <= DATE('now', '+30 days')
+""");
       } else if (status == 'جيد') {
-        conditions.add('pb.days_remaining > 30');
+        conditions.add("""
+(
+  pb.expiry_date = '2099-12-31'
+  OR pb.expiry_date IS NULL
+  OR pb.expiry_date = ''
+  OR DATE(pb.expiry_date) > DATE('now', '+30 days')
+)
+""");
       }
     }
 
     if (expiryFilter != null && expiryFilter!.isNotEmpty) {
       final today = DateTime.now();
-      final todayStr = today.toIso8601String().split('T')[0];
+      final todayStr = today.toIso8601String().split('T').first;
 
       if (expiryFilter == 'أسبوع') {
-        final weekFromNow = today.add(Duration(days: 7));
-        final weekFromNowStr = weekFromNow.toIso8601String().split('T')[0];
-        conditions.add('pb.expiry_date BETWEEN ? AND ?');
+        final weekFromNow = today.add(const Duration(days: 7));
+        final weekFromNowStr = weekFromNow.toIso8601String().split('T').first;
+        conditions.add("""
+pb.expiry_date IS NOT NULL
+AND pb.expiry_date != ''
+AND pb.expiry_date != '2099-12-31'
+AND pb.expiry_date BETWEEN ? AND ?
+""");
         args.addAll([todayStr, weekFromNowStr]);
       } else if (expiryFilter == 'شهر') {
-        final monthFromNow = today.add(Duration(days: 30));
-        final monthFromNowStr = monthFromNow.toIso8601String().split('T')[0];
-        conditions.add('pb.expiry_date BETWEEN ? AND ?');
+        final monthFromNow = today.add(const Duration(days: 30));
+        final monthFromNowStr =
+            monthFromNow.toIso8601String().split('T').first;
+        conditions.add("""
+pb.expiry_date IS NOT NULL
+AND pb.expiry_date != ''
+AND pb.expiry_date != '2099-12-31'
+AND pb.expiry_date BETWEEN ? AND ?
+""");
         args.addAll([todayStr, monthFromNowStr]);
       } else if (expiryFilter == 'منتهي') {
-        conditions.add('pb.expiry_date < ?');
+        conditions.add("""
+pb.expiry_date IS NOT NULL
+AND pb.expiry_date != ''
+AND pb.expiry_date != '2099-12-31'
+AND pb.expiry_date < ?
+""");
         args.add(todayStr);
       } else if (expiryFilter == 'مستقبل') {
-        conditions.add('pb.expiry_date >= ?');
+        conditions.add("""
+pb.expiry_date IS NOT NULL
+AND pb.expiry_date != ''
+AND pb.expiry_date != '2099-12-31'
+AND pb.expiry_date >= ?
+""");
         args.add(todayStr);
       }
     }
-
-    if (conditions.isEmpty) return '';
 
     return conditions.join(' AND ');
   }

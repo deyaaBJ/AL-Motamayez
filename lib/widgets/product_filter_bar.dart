@@ -1,42 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:motamayez/models/product_filter.dart';
-import 'package:motamayez/providers/settings_provider.dart';
-import '../models/product.dart';
 
-// ==================== دالة الفلترة ====================
-bool matchesFilter(
-  BuildContext context,
-  Product product,
-  ProductFilter currentFilter,
-) {
-  final settingsProvider = Provider.of<SettingsProvider>(
-    context,
-    listen: false,
-  );
-  final threshold = settingsProvider.lowStockThreshold;
-
-  switch (currentFilter) {
-    case ProductFilter.all:
-      return product.active; // ⬅️ يظهر المنتجات النشطة فقط
-
-    case ProductFilter.available:
-      return product.active && product.quantity > 0;
-
-    case ProductFilter.unavailable:
-      return product.active && product.quantity == 0;
-
-    case ProductFilter.lowStock:
-      return product.active &&
-          product.quantity > 0 &&
-          product.quantity <= threshold;
-
-    case ProductFilter.inactive: // ⬅️ جديد
-      return !product.active; // المنتجات غير النشطة فقط
-  }
-}
-
-// ==================== Filter Bar ====================
 class ProductFilterBar extends StatelessWidget {
   final ProductFilter currentFilter;
   final Function(ProductFilter) onFilterChanged;
@@ -56,7 +20,7 @@ class ProductFilterBar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _buildFilterChip('الكــل', ProductFilter.all),
+            _buildFilterChip('📦 الكل', ProductFilter.all),
             const SizedBox(width: 8),
             _buildFilterChip('🔄 متوفر', ProductFilter.available),
             const SizedBox(width: 8),
@@ -64,7 +28,9 @@ class ProductFilterBar extends StatelessWidget {
             const SizedBox(width: 8),
             _buildFilterChip('📊 منخفض', ProductFilter.lowStock),
             const SizedBox(width: 8),
-            _buildFilterChip('🚫 غير نشط', ProductFilter.inactive), // ⬅️ جديد
+            _buildFilterChip('🏷️ عروض', ProductFilter.onOffer),
+            const SizedBox(width: 8),
+            _buildFilterChip('🚫 غير نشط', ProductFilter.inactive),
           ],
         ),
       ),

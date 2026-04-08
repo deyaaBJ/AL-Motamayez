@@ -1,15 +1,15 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:motamayez/components/base_layout.dart';
+import 'package:motamayez/models/product.dart';
 import 'package:motamayez/models/product_filter.dart';
 import 'package:motamayez/providers/product_provider.dart';
-import 'package:motamayez/models/product.dart';
 import 'package:motamayez/providers/settings_provider.dart';
-import 'package:motamayez/screens/add_product_screen.dart'
-    show AddProductScreen;
+import 'package:motamayez/screens/add_product_screen.dart' show AddProductScreen;
 import 'package:motamayez/widgets/product_filter_bar.dart';
 import 'package:motamayez/widgets/product_item.dart';
 import 'package:motamayez/widgets/product_table_header.dart';
-import 'dart:developer';
 import 'package:provider/provider.dart';
 
 class ProductsScreen extends StatefulWidget {
@@ -27,7 +27,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   final ScrollController _scrollController = ScrollController();
   final ProductProvider _provider = ProductProvider();
-  final List<HeaderColumn> productTableColumns = [
+  final List<HeaderColumn> productTableColumns = const [
     HeaderColumn(label: 'المنتج', flex: 3),
     HeaderColumn(label: 'سعر البيع', flex: 2),
     HeaderColumn(label: 'سعر الشراء', flex: 2),
@@ -56,7 +56,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
     });
   }
 
-  // ✅ دالة جديدة: تحميل المنتجات حسب الفلتر
   Future<void> _loadProductsByFilter(
     ProductFilter filter, {
     bool reset = true,
@@ -72,16 +71,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
       await _provider.loadProductsByFilter(filter, reset: reset);
     } catch (e) {
       log('Error loading products by filter: $e');
-      ScaffoldMessenger.of(
-        // ignore: use_build_context_synchronously
-        context,
-      ).showSnackBar(SnackBar(content: Text('حدث خطأ في تحميل المنتجات: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('حدث خطأ في تحميل المنتجات: $e')),
+      );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  // ✅ تحديث دالة _loadMoreProducts
   Future<void> _loadMoreProducts() async {
     if (_isLoading || !_provider.hasMore || _searchQuery.isNotEmpty) return;
 
@@ -92,23 +92,21 @@ class _ProductsScreenState extends State<ProductsScreen> {
     } catch (e) {
       log('Error loading more products: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  // ✅ تحديث شريط البحث ليتناسب مع الفلتر
-  // ✅ Search Bar مع عدد المنتجات بجانبه
   Widget _buildSearchBar() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: Colors.transparent,
       child: Row(
         children: [
-          // ✅ عدد المنتجات (شارة صغيرة)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              // ignore: deprecated_member_use
               color: _getFilterColor().withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: _getFilterColor(), width: 1),
@@ -129,10 +127,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
               ],
             ),
           ),
-
           const SizedBox(width: 12),
-
-          // ✅ Search Bar (ياخد باقي المساحة)
           Expanded(
             child: TextField(
               onChanged: (value) async {
@@ -159,10 +154,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   value,
                   active: active,
                 );
+
+                if (!mounted) return;
                 setState(() => _searchResults = results);
               },
               decoration: InputDecoration(
-                hintText: '🔍 ابحث عن منتج...',
+                hintText: 'ابحث عن منتج...',
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
@@ -181,7 +178,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
-  // ⬅️ دوال مساعدة لتحديد الألوان والرموز حسب الفلتر
   Color _getFilterColor() {
     switch (_currentFilter) {
       case ProductFilter.inactive:
@@ -192,22 +188,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
         return Colors.orange;
       case ProductFilter.lowStock:
         return Colors.amber;
-      default:
-        return Color(0xFF6A3093);
+      case ProductFilter.onOffer:
+        return Colors.pink;
+      case ProductFilter.all:
+        return const Color(0xFF6A3093);
     }
   }
 
-  // ✅ الحصول على المنتجات المعروضة
   List<Product> get _displayedProducts {
-    if (_searchQuery.isNotEmpty) {
-      return _searchResults.where((product) {
-        return matchesFilter(context, product, _currentFilter);
-      }).toList();
-    }
-
-    return _provider.products.where((product) {
-      return matchesFilter(context, product, _currentFilter);
-    }).toList();
+    final source = _searchQuery.isNotEmpty ? _searchResults : _provider.products;
+    return source
+        .where((product) => matchesFilter(context, product, _currentFilter))
+        .toList();
   }
 
   Widget _buildProductsList() {
@@ -272,9 +264,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
         emptyMessage = 'لا توجد منتجات منخفضة المخزون';
         emptyIcon = Icons.warning;
         break;
-      default:
-        emptyMessage = 'لا توجد منتجات';
-        emptyIcon = Icons.inventory_2;
+      case ProductFilter.onOffer:
+        emptyMessage = 'لا توجد منتجات عليها عروض';
+        emptyIcon = Icons.local_offer;
+        break;
+      case ProductFilter.all:
+        break;
     }
 
     return Center(
@@ -296,12 +291,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
           if (_searchQuery.isEmpty) ...[
             const SizedBox(height: 8),
             ElevatedButton(
-              onPressed:
-                  () => _loadProductsByFilter(_currentFilter, reset: true),
+              onPressed: () => _loadProductsByFilter(_currentFilter, reset: true),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _getFilterColor(),
               ),
-              child: Text('تحديث', style: TextStyle(color: Colors.white)),
+              child: const Text(
+                'تحديث',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ],
@@ -335,8 +332,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
               currentFilter: _currentFilter,
               onFilterChanged: _loadProductsByFilter,
             ),
-            // ✅ شيل _buildTotalProductsIndicator() إذا بدك، أو خليه فوق
-            _buildSearchBar(), // ✅ هلأ فيه العدد بجانبه
+            _buildSearchBar(),
             ProductTableHeader(columns: productTableColumns),
             Expanded(child: _buildProductsList()),
           ],
@@ -352,41 +348,20 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 }
 
-// ✅ دالة الفلترة المحدثة (يجب أن تكون في ملف منفصل ولكن نضيفها هنا للتوضيح)
-// تأكد من وجود هذه الدالة في صفحة ProductsScreen
 bool matchesFilter(
   BuildContext context,
   Product product,
   ProductFilter currentFilter,
 ) {
-  // الحصول على الإعدادات من Provider
+  bool hasOffer = product.active &&
+      (product.hasValidOffer || product.hasOfferInUnits);
+
   try {
     final settingsProvider = Provider.of<SettingsProvider>(
       context,
       listen: false,
     );
     final threshold = settingsProvider.lowStockThreshold;
-
-    switch (currentFilter) {
-      case ProductFilter.all:
-        return true; // يظهر جميع المنتجات
-
-      case ProductFilter.available:
-        return product.quantity > 0;
-
-      case ProductFilter.unavailable:
-        return product.quantity == 0;
-
-      case ProductFilter.lowStock:
-        return product.quantity > 0 && product.quantity <= threshold;
-
-      case ProductFilter.inactive:
-        return !product.active; // المنتجات غير النشطة فقط
-    }
-  } catch (e) {
-    // إذا حدث خطأ في Provider، استخدم قيم افتراضية
-    log('Error in matchesFilter: $e');
-    final threshold = 5; // قيمة افتراضية
 
     switch (currentFilter) {
       case ProductFilter.all:
@@ -397,6 +372,26 @@ bool matchesFilter(
         return product.quantity == 0;
       case ProductFilter.lowStock:
         return product.quantity > 0 && product.quantity <= threshold;
+      case ProductFilter.onOffer:
+        return hasOffer;
+      case ProductFilter.inactive:
+        return !product.active;
+    }
+  } catch (e) {
+    log('Error in matchesFilter: $e');
+    const threshold = 5;
+
+    switch (currentFilter) {
+      case ProductFilter.all:
+        return true;
+      case ProductFilter.available:
+        return product.quantity > 0;
+      case ProductFilter.unavailable:
+        return product.quantity == 0;
+      case ProductFilter.lowStock:
+        return product.quantity > 0 && product.quantity <= threshold;
+      case ProductFilter.onOffer:
+        return hasOffer;
       case ProductFilter.inactive:
         return !product.active;
     }

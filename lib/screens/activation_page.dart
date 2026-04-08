@@ -110,8 +110,7 @@ class _ActivationPageState extends State<ActivationPage> {
 
     if (status == 'already_activated') {
       setState(() {
-        _info =
-            '??? ?????? ????? ?????? ??? ???????? ??? ?? ??? ??????? ?????? ??? ??? ????? ????? ??????.';
+        _info = 'تم التفعيل من قبل';
       });
       return;
     }
@@ -177,8 +176,7 @@ class _ActivationPageState extends State<ActivationPage> {
     if (status == 'completed') {
       _statusTimer?.cancel();
       setState(() {
-        _info =
-            '????? ????? ??? ???????. ??? ?? ??? ??????? ??? ??? ?????? ???? ???? ????? ?????? ?? ???? ?????.';
+        _info = 'تم تفعيل البرنامج على هذا الجهاز.';
       });
       return;
     }
@@ -334,27 +332,7 @@ class _ActivationPageState extends State<ActivationPage> {
                       style: TextStyle(color: Colors.black54, height: 1.5),
                     ),
                     const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (_requestId != null) ...[
-                            const SizedBox(height: 12),
-                            const Text(
-                              'رقم الطلب',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 6),
-                            SelectableText(_requestId!),
-                          ],
-                        ],
-                      ),
-                    ),
+
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.symmetric(

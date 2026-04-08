@@ -134,21 +134,22 @@ class _MainScreenState extends State<MainScreen> {
     return RefreshIndicator(
       onRefresh: _loadInitialData,
       color: const Color(0xFF7C3AED),
-      child: ListView(
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20),
-        children: [
-          // الهيدر
-          _buildHeader(),
-          const SizedBox(height: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // الهيدر
+            _buildHeader(),
+            const SizedBox(height: 24),
 
-          // بطاقة البيع السريع
-          _buildQuickSaleCard(),
-          const SizedBox(height: 24),
+            // بطاقة البيع السريع
+            _buildQuickSaleCard(),
+            const SizedBox(height: 28),
 
-          // عنوان الإحصائيات
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Text(
+            // عنوان الإحصائيات
+            Text(
               "إحصائيات اليوم",
               style: TextStyle(
                 fontSize: 20,
@@ -156,22 +157,30 @@ class _MainScreenState extends State<MainScreen> {
                 color: Colors.grey.shade800,
               ),
             ),
-          ),
+            const SizedBox(height: 16),
 
-          // إحصائيات اليوم - تصميم مضغوط مع خطوط كبيرة
-          _buildCompactStats(salesProvider, productProvider),
+            // إحصائيات اليوم - 4 جنب بعض أو 2 فوق 2 حسب المساحة
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth >= 700) {
+                  // 4 جنب بعض
+                  return _buildFourStatsRow(salesProvider, productProvider);
+                } else {
+                  // 2 فوق 2
+                  return _buildTwoByTwoStats(salesProvider, productProvider);
+                }
+              },
+            ),
 
-          // إشعارات المنتجات
-          if (_expiredBatches > 0 || _expiringIn7DaysBatches > 0) ...[
-            const SizedBox(height: 24),
-            _buildBatchAlertsSection(),
-          ],
+            // إشعارات المنتجات
+            if (_expiredBatches > 0 || _expiringIn7DaysBatches > 0) ...[
+              const SizedBox(height: 28),
+              _buildBatchAlertsSection(),
+            ],
 
-          // الإجراءات السريعة
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Text(
+            // الإجراءات السريعة
+            const SizedBox(height: 28),
+            Text(
               "التنقل السريع",
               style: TextStyle(
                 fontSize: 20,
@@ -179,11 +188,12 @@ class _MainScreenState extends State<MainScreen> {
                 color: Colors.grey.shade800,
               ),
             ),
-          ),
-          _buildQuickActions(),
+            const SizedBox(height: 16),
+            _buildQuickActions(),
 
-          const SizedBox(height: 24),
-        ],
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }
@@ -195,35 +205,65 @@ class _MainScreenState extends State<MainScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              "مرحباً، $_userName",
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-                color: Colors.black,
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "مرحباً، $_userName",
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _getCurrentDate(),
+                  style: TextStyle(fontSize: 15, color: Colors.grey.shade500),
+                ),
+              ],
             ),
-            CircleAvatar(
-              radius: 24,
-              // ignore: deprecated_member_use
-              backgroundColor: const Color(0xFF7C3AED).withOpacity(0.1),
-              child: Icon(
-                Icons.person,
-                size: 24,
-                color: const Color(0xFF7C3AED),
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF7C3AED).withOpacity(0.2),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: CircleAvatar(
+                radius: 28,
+                backgroundColor: const Color(0xFF7C3AED),
+                child: const Icon(Icons.person, size: 28, color: Colors.white),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          _getCurrentDate(),
-          style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "لوحة تحكم نظام المتميز",
-          style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF7C3AED).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.store, size: 16, color: const Color(0xFF7C3AED)),
+              const SizedBox(width: 6),
+              Text(
+                "نظام المتميز لنقاط البيع",
+                style: TextStyle(
+                  fontSize: 13,
+                  color: const Color(0xFF7C3AED),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -237,137 +277,221 @@ class _MainScreenState extends State<MainScreen> {
           begin: Alignment.centerRight,
           end: Alignment.centerLeft,
         ),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF7C3AED).withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                // ignore: deprecated_member_use
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.add_shopping_cart,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "بدء عملية بيع جديدة",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => Navigator.pushNamed(context, '/pos'),
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    "أنشئ فاتورة جديدة بسرعة وسهولة",
-                    style: TextStyle(
-                      // ignore: deprecated_member_use
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 16,
-                    ),
+                  child: const Icon(
+                    Icons.qr_code_scanner,
+                    color: Colors.white,
+                    size: 32,
                   ),
-                  const SizedBox(height: 14),
-                  GestureDetector(
-                    onTap: () => Navigator.pushNamed(context, '/pos'),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 10,
-                        horizontal: 20,
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "بدء عملية بيع جديدة",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
+                      const SizedBox(height: 6),
+                      Text(
+                        "امسح الباركود أو ابحث عن المنتج",
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.85),
+                          fontSize: 14,
+                        ),
                       ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            "ابدأ الآن",
-                            style: TextStyle(
-                              color: Color(0xFF7C3AED),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 16,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              "ابدأ البيع",
+                              style: TextStyle(
+                                color: Color(0xFF7C3AED),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
-                          SizedBox(width: 8),
-                          Icon(
-                            Icons.arrow_back_ios,
-                            size: 16,
-                            color: Color(0xFF7C3AED),
-                          ),
-                        ],
+                            SizedBox(width: 8),
+                            Icon(
+                              Icons.arrow_forward_ios,
+                              size: 14,
+                              color: Color(0xFF7C3AED),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildCompactStats(
+  // 4 جنب بعض في صف واحد
+  Widget _buildFourStatsRow(
     SalesProvider salesProvider,
     ProductProvider productProvider,
   ) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade100,
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            _buildStatCard(
+              title: "المبيعات اليوم",
+              value: salesProvider.todaySalesCount.toString(),
+              icon: Icons.receipt_long,
+              color: const Color(0xFF10B981),
+              subtitle: "فاتورة",
+            ),
+            _buildDivider(),
+            _buildStatCard(
+              title: "إجمالي المنتجات",
+              value: productProvider.totalProducts.toString(),
+              icon: Icons.inventory_2,
+              color: const Color(0xFF3B82F6),
+              subtitle: "منتج",
+            ),
+            _buildDivider(),
+            _buildStatCard(
+              title: "منخفضة المخزون",
+              value: productProvider.lowStockCount.toString(),
+              icon: Icons.warning_amber,
+              color: const Color(0xFFF59E0B),
+              subtitle: "منتج",
+            ),
+            _buildDivider(),
+            _buildStatCard(
+              title: "غير متوفرة",
+              value: productProvider.outOfStockCount.toString(),
+              icon: Icons.cancel,
+              color: const Color(0xFFEF4444),
+              subtitle: "منتج",
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 2 فوق 2
+  Widget _buildTwoByTwoStats(
+    SalesProvider salesProvider,
+    ProductProvider productProvider,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade100,
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // الصف الأول
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildCompactStatItem(
-                  title: "المبيعات اليوم",
-                  value: salesProvider.todaySalesCount.toString(),
-                  icon: Icons.receipt,
-                  color: const Color(0xFF10B981),
+                Expanded(
+                  child: _buildStatCardVertical(
+                    title: "المبيعات اليوم",
+                    value: salesProvider.todaySalesCount.toString(),
+                    icon: Icons.receipt_long,
+                    color: const Color(0xFF10B981),
+                    subtitle: "فاتورة",
+                  ),
                 ),
-                _buildCompactStatItem(
-                  title: "إجمالي المنتجات",
-                  value: productProvider.totalProducts.toString(),
-                  icon: Icons.inventory,
-                  color: const Color(0xFF3B82F6),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildStatCardVertical(
+                    title: "إجمالي المنتجات",
+                    value: productProvider.totalProducts.toString(),
+                    icon: Icons.inventory_2,
+                    color: const Color(0xFF3B82F6),
+                    subtitle: "منتج",
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-            // الصف الثاني
+            const SizedBox(height: 20),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildCompactStatItem(
-                  title: "منخفضة المخزون",
-                  value: productProvider.lowStockCount.toString(),
-                  icon: Icons.warning,
-                  color: const Color(0xFFF59E0B),
+                Expanded(
+                  child: _buildStatCardVertical(
+                    title: "منخفضة المخزون",
+                    value: productProvider.lowStockCount.toString(),
+                    icon: Icons.warning_amber,
+                    color: const Color(0xFFF59E0B),
+                    subtitle: "منتج",
+                  ),
                 ),
-                _buildCompactStatItem(
-                  title: "غير متوفرة",
-                  value: productProvider.outOfStockCount.toString(),
-                  icon: Icons.close,
-                  color: const Color(0xFFEF4444),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildStatCardVertical(
+                    title: "غير متوفرة",
+                    value: productProvider.outOfStockCount.toString(),
+                    icon: Icons.cancel,
+                    color: const Color(0xFFEF4444),
+                    subtitle: "منتج",
+                  ),
                 ),
               ],
             ),
@@ -377,51 +501,56 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildCompactStatItem({
+  Widget _buildStatCard({
     required String title,
     required String value,
     required IconData icon,
     required Color color,
+    required String subtitle,
   }) {
     return Expanded(
       child: GestureDetector(
         onTap: () => Navigator.pushNamed(context, '/products'),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.start,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  // ignore: deprecated_member_use
                   color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, color: color, size: 24),
+                child: Icon(icon, color: color, size: 28),
               ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 12),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: color.withOpacity(0.7),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -430,39 +559,119 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  Widget _buildStatCardVertical({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    required String subtitle,
+  }) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/products'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.15)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w800,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 11,
+                color: color.withOpacity(0.7),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDivider() {
+    return Container(width: 1, height: 80, color: Colors.grey.shade200);
+  }
+
   Widget _buildBatchAlertsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: Text(
-            "إشعارات المنتجات",
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade800,
-            ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEF4444).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.notifications_active,
+                size: 18,
+                color: const Color(0xFFEF4444),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                "تنبيهات",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFFEF4444),
+                ),
+              ),
+            ],
           ),
         ),
+        const SizedBox(height: 16),
         if (_expiredBatches > 0)
-          _buildCompactAlertCard(
+          _buildAlertCard(
             title: "منتجات منتهية الصلاحية",
             count: _expiredBatches,
             description: "يوجد $_expiredBatches منتج منتهي الصلاحية",
             color: Colors.red,
-            icon: Icons.error,
+            icon: Icons.error_outline,
             onTap: () => _goToBatchesWithFilter('expired'),
           ),
         if (_expiringIn7DaysBatches > 0) ...[
           const SizedBox(height: 12),
-          _buildCompactAlertCard(
+          _buildAlertCard(
             title: "منتجات قريبة من الانتهاء",
             count: _expiringIn7DaysBatches,
             description:
                 "سيتم انتهاء $_expiringIn7DaysBatches منتج خلال 7 أيام",
             color: Colors.orange,
-            icon: Icons.warning,
+            icon: Icons.watch_later_outlined,
             onTap: () => _goToBatchesWithFilter('expiring_7_days'),
           ),
         ],
@@ -470,7 +679,7 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildCompactAlertCard({
+  Widget _buildAlertCard({
     required String title,
     required int count,
     required String description,
@@ -482,11 +691,16 @@ class _MainScreenState extends State<MainScreen> {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          // ignore: deprecated_member_use
-          color: color.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          // ignore: deprecated_member_use
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: color.withOpacity(0.2)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -495,62 +709,55 @@ class _MainScreenState extends State<MainScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  // ignore: deprecated_member_use
                   color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, color: color, size: 28),
+                child: Icon(icon, color: color, size: 26),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            count.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: color,
-                              fontSize: 18,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                        fontSize: 16,
+                      ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     Text(
                       description,
                       style: TextStyle(
                         color: Colors.grey.shade600,
-                        fontSize: 16,
+                        fontSize: 13,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.arrow_back_ios, color: color, size: 20),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  count.toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Icon(Icons.arrow_forward_ios, color: color, size: 18),
             ],
           ),
         ),
@@ -562,34 +769,40 @@ class _MainScreenState extends State<MainScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade100,
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildCompactActionItem(
-              icon: Icons.bar_chart,
+            _buildActionItem(
+              icon: Icons.bar_chart_rounded,
               label: "التقارير",
               color: const Color(0xFF7C3AED),
               onTap: () => Navigator.pushNamed(context, '/report'),
             ),
-            _buildCompactActionItem(
-              icon: Icons.people,
+            _buildActionItem(
+              icon: Icons.people_alt,
               label: "العملاء",
               color: const Color(0xFF3B82F6),
               onTap: () => Navigator.pushNamed(context, '/customer'),
             ),
-            _buildCompactActionItem(
+            _buildActionItem(
               icon: Icons.settings,
               label: "الإعدادات",
               color: const Color(0xFFF59E0B),
               onTap: () => Navigator.pushNamed(context, '/settings'),
             ),
-            _buildCompactActionItem(
-              icon: Icons.layers,
+            _buildActionItem(
+              icon: Icons.inventory,
               label: "الدُفعات",
               color: const Color(0xFF10B981),
               onTap: () => Navigator.pushNamed(context, '/batches'),
@@ -600,7 +813,7 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildCompactActionItem({
+  Widget _buildActionItem({
     required IconData icon,
     required String label,
     required Color color,
@@ -611,20 +824,19 @@ class _MainScreenState extends State<MainScreen> {
       child: Column(
         children: [
           Container(
-            width: 60,
-            height: 60,
+            width: 64,
+            height: 64,
             decoration: BoxDecoration(
-              // ignore: deprecated_member_use
               color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(18),
             ),
             child: Icon(icon, color: color, size: 32),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             label,
             style: TextStyle(
-              fontSize: 16,
+              fontSize: 14,
               color: Colors.grey.shade700,
               fontWeight: FontWeight.w600,
             ),
