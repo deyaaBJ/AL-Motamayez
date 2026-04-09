@@ -97,15 +97,21 @@ class ActivationService {
   }
 
   Future<String?> _getWindowsDeviceFingerlog() async {
-    final machineGuid = await _runPowerShellValue(
-      r"(Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography').MachineGuid",
-    );
-    final biosSerial = await _runPowerShellValue(
-      r"(Get-CimInstance Win32_BIOS).SerialNumber",
-    );
-    final boardSerial = await _runPowerShellValue(
-      r"(Get-CimInstance Win32_BaseBoard).SerialNumber",
-    );
+    final values = await Future.wait([
+      _runPowerShellValue(
+        r"(Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography').MachineGuid",
+      ),
+      _runPowerShellValue(
+        r"(Get-CimInstance Win32_BIOS).SerialNumber",
+      ),
+      _runPowerShellValue(
+        r"(Get-CimInstance Win32_BaseBoard).SerialNumber",
+      ),
+    ]);
+
+    final machineGuid = values[0];
+    final biosSerial = values[1];
+    final boardSerial = values[2];
 
     final parts =
         [

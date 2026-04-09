@@ -90,6 +90,9 @@ class SalesProvider extends ChangeNotifier {
   List<int> selectedSaleIds = [];
   bool isBatchEditing = false;
   int todaySalesCount = 0;
+  double todaySalesAmount = 0.0;
+  List<Map<String, dynamic>> _weeklySalesChartData = [];
+  List<Map<String, dynamic>> get weeklySalesChartData => _weeklySalesChartData;
 
   // █████████████████████████████████████████████████████████████████████████
   // ████████████████████████████████ Getters جديدة ███████████████████████████████████████
@@ -1223,6 +1226,7 @@ class SalesProvider extends ChangeNotifier {
     // تحديث الواجهة
     _allSales.removeWhere((sale) => sale.id == saleId);
     _displayedSales.removeWhere((sale) => sale.id == saleId);
+    await refreshHomeDashboardStats();
     notifyListeners();
   }
 
@@ -1448,6 +1452,7 @@ class SalesProvider extends ChangeNotifier {
       _allSales.insert(0, newSale);
       _displayedSales.insert(0, newSale);
       _updateCache();
+      await refreshHomeDashboardStats();
       notifyListeners();
     } catch (e) {
       log('❌ خطأ في إضافة الفاتورة مباشرة: $e');
@@ -1461,6 +1466,7 @@ class SalesProvider extends ChangeNotifier {
         _allSales[index] = updatedSale;
         _displayedSales[index] = updatedSale;
         _updateCache();
+        await refreshHomeDashboardStats();
         notifyListeners();
       }
     } catch (e) {
@@ -1468,7 +1474,7 @@ class SalesProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadTodaySalesCount() async {
+  Future<void> loadTodaySalesCount({bool notify = true}) async {
     final db = await _dbHelper.db;
     final result = await db.rawQuery("""
       SELECT COUNT(*) as count 
@@ -1476,6 +1482,76 @@ class SalesProvider extends ChangeNotifier {
       WHERE SUBSTR(date, 1, 10) = DATE('now')
     """);
     todaySalesCount = result.first['count'] as int;
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadTodaySalesAmount({bool notify = true}) async {
+    final db = await _dbHelper.db;
+    final result = await db.rawQuery("""
+      SELECT COALESCE(SUM(total_amount), 0) as total
+      FROM sales
+      WHERE SUBSTR(date, 1, 10) = DATE('now')
+    """);
+
+    todaySalesAmount = (result.first['total'] as num?)?.toDouble() ?? 0.0;
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadWeeklySalesChartData({bool notify = true}) async {
+    try {
+      final db = await _dbHelper.db;
+      final result = await db.rawQuery('''
+        SELECT
+          date(date) as sale_date,
+          SUM(total_amount) as daily_sales
+        FROM sales
+        WHERE date(date) BETWEEN date('now', '-6 days') AND date('now')
+        GROUP BY date(date)
+        ORDER BY sale_date ASC
+      ''');
+
+      final salesByDate = <String, double>{};
+      for (final row in result) {
+        final date = row['sale_date'] as String?;
+        if (date == null) continue;
+        salesByDate[date] = (row['daily_sales'] as num?)?.toDouble() ?? 0.0;
+      }
+
+      final now = DateTime.now();
+      _weeklySalesChartData = List.generate(7, (index) {
+        final date = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).subtract(Duration(days: 6 - index));
+        final dateKey = _formatDateOnly(date);
+
+        return {
+          'date': dateKey,
+          'dayName': _getShortDayLabel(date.weekday),
+          'sales': salesByDate[dateKey] ?? 0.0,
+        };
+      });
+    } catch (e) {
+      log('Error loading weekly sales chart data: $e');
+      _weeklySalesChartData = _buildEmptyWeeklySalesChartData();
+    }
+
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshHomeDashboardStats() async {
+    await Future.wait([
+      loadTodaySalesCount(notify: false),
+      loadTodaySalesAmount(notify: false),
+      loadWeeklySalesChartData(notify: false),
+    ]);
     notifyListeners();
   }
 
@@ -1541,6 +1617,7 @@ class SalesProvider extends ChangeNotifier {
     _hasMore = true;
     _selectedTaxFilter = 'الكل';
     _tempSelectedTaxFilter = 'الكل';
+    refreshHomeDashboardStats();
     _fetchSalesWithFilters(forceRefresh: true);
   }
 
@@ -1550,5 +1627,48 @@ class SalesProvider extends ChangeNotifier {
 
   void disableTaxMode() {
     _taxUserMode = false;
+  }
+
+  String _formatDateOnly(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
+  String _getShortDayLabel(int weekday) {
+    switch (weekday) {
+      case DateTime.saturday:
+        return 'سبت';
+      case DateTime.sunday:
+        return 'أحد';
+      case DateTime.monday:
+        return 'اثنين';
+      case DateTime.tuesday:
+        return 'ثلاثاء';
+      case DateTime.wednesday:
+        return 'أربعاء';
+      case DateTime.thursday:
+        return 'خميس';
+      case DateTime.friday:
+        return 'جمعة';
+      default:
+        return '-';
+    }
+  }
+
+  List<Map<String, dynamic>> _buildEmptyWeeklySalesChartData() {
+    final now = DateTime.now();
+    return List.generate(7, (index) {
+      final date = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: 6 - index));
+      return {
+        'date': _formatDateOnly(date),
+        'dayName': _getShortDayLabel(date.weekday),
+        'sales': 0.0,
+      };
+    });
   }
 }

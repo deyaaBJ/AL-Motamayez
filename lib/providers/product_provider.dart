@@ -43,6 +43,9 @@ AND date(offer_end_date) < date('now', 'localtime')
   int _totalProducts = 0;
   int get totalProducts => _totalProducts;
 
+  int _productsOnOfferCount = 0;
+  int get productsOnOfferCount => _productsOnOfferCount;
+
   bool get hasMore => _hasMore;
   int get currentPage => _page;
 
@@ -78,6 +81,37 @@ AND date(offer_end_date) < date('now', 'localtime')
     lowStockCount = await loadLowStockProductsCount(threshold);
     outOfStockCount = await loadOutOfStockProductsCount();
     notifyListeners();
+  }
+
+  Future<void> loadProductsOnOfferCount() async {
+    try {
+      await _clearExpiredOffers();
+
+      final db = await _dbHelper.db;
+      final result = await db.rawQuery(
+        '''
+        SELECT COUNT(*) as count
+        FROM products p
+        WHERE p.active = 1
+          AND (
+            $_activeOfferDateSql
+            OR EXISTS(
+              SELECT 1
+              FROM product_units pu
+              WHERE pu.product_id = p.id
+                AND $_activeOfferDateSql
+            )
+          )
+        ''',
+      );
+
+      _productsOnOfferCount = Sqflite.firstIntValue(result) ?? 0;
+      notifyListeners();
+    } catch (e) {
+      log('Error loading products on offer count: $e');
+      _productsOnOfferCount = 0;
+      notifyListeners();
+    }
   }
 
   Future<int> loadLowStockProductsCount(int lowStockThreshold) async {
@@ -417,6 +451,8 @@ AND date(offer_end_date) < date('now', 'localtime')
           _products[index].active = newActive;
           notifyListeners();
         }
+
+        await loadProductsOnOfferCount();
       }
     } catch (e) {
       log('❌ خطأ في تغيير حالة المنتج: $e');
@@ -479,6 +515,7 @@ AND date(offer_end_date) < date('now', 'localtime')
   Future<void> addProductUnit(ProductUnit unit) async {
     final db = await _dbHelper.db;
     await db.insert('product_units', unit.toMap());
+    await loadProductsOnOfferCount();
   }
 
   Future<List<ProductUnit>> getProductUnits(int productId) async {
@@ -517,11 +554,13 @@ AND date(offer_end_date) < date('now', 'localtime')
       where: 'id = ?',
       whereArgs: [unit.id],
     );
+    await loadProductsOnOfferCount();
   }
 
   Future<void> deleteProductUnit(int unitId) async {
     final db = await _dbHelper.db;
     await db.delete('product_units', where: 'id = ?', whereArgs: [unitId]);
+    await loadProductsOnOfferCount();
   }
 
   Future<void> addProduct(Product product) async {
@@ -575,6 +614,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         );
 
         await loadProducts(reset: true);
+        await loadProductsOnOfferCount();
         notifyListeners();
         return;
       }
@@ -598,6 +638,7 @@ AND date(offer_end_date) < date('now', 'localtime')
 
     await db.insert('products', productMap);
     await loadProducts(reset: true);
+    await loadProductsOnOfferCount();
     notifyListeners();
   }
 
@@ -638,11 +679,13 @@ AND date(offer_end_date) < date('now', 'localtime')
     }
 
     await loadTotalProducts();
+    await loadProductsOnOfferCount();
   }
 
   Future<void> deleteProduct(String idProduct) async {
     final db = await _dbHelper.db;
     await db.delete('products', where: 'id = ?', whereArgs: [idProduct]);
+    await loadProductsOnOfferCount();
   }
 
   Future<Product?> getProductById(int id) async {
