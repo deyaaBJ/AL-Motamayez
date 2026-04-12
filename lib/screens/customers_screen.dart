@@ -101,7 +101,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     // مسح الديون القديمة
     _customerDebts.clear();
 
-    // تحميل ديون جميع العملاء
+    // تحميل ديون جميع الزبائن
     for (final customer in customers) {
       if (customer.id != null) {
         await _loadSingleCustomerDebt(customer.id!, debtProvider);
@@ -145,7 +145,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         _isStatsLoading = false;
       });
     } catch (e) {
-      log('خطأ في تحميل إحصائيات العملاء: $e');
+      log('خطأ في تحميل إحصائيات الزبائن: $e');
       if (!mounted) return;
       setState(() => _isStatsLoading = false);
     }
@@ -159,7 +159,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       final debt = await debtProvider.getTotalDebtByCustomerId(customerId);
       _customerDebts[customerId] = debt;
     } catch (e) {
-      log('خطأ في تحميل دين العميل $customerId: $e');
+      log('خطأ في تحميل دين الزبون $customerId: $e');
       _customerDebts[customerId] = 0.0;
     }
   }
@@ -223,11 +223,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final provider = context.read<CustomerProvider>();
 
     if (!provider.isLoading && provider.hasMore) {
-      log('تحميل المزيد من العملاء...');
+      log('تحميل المزيد من الزبائن...');
 
       await provider.loadMoreCustomers();
 
-      // تحميل ديون العملاء الجدد
+      // تحميل ديون الزبائن الجدد
       final customers = provider.displayedCustomers;
       final newCustomers =
           customers
@@ -309,7 +309,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   showAppToast(
                     // ignore: use_build_context_synchronously
                     context,
-                    'تم إضافة العميل ${newCustomer.name}',
+                    'تم إضافة الزبون ${newCustomer.name}',
                     ToastType.success,
                   );
                 }
@@ -334,7 +334,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     });
   }
 
-  // دالة لترتيب العملاء
+  // دالة لترتيب الزبائن
   List<Customer> _getSortedCustomers(List<Customer> customers) {
     List<Customer> sorted = List.from(customers);
 
@@ -522,7 +522,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               _buildStatItem(
                 icon: Icons.group,
                 color: const Color(0xFF6A3093),
-                label: 'إجمالي العملاء',
+                label: 'إجمالي الزبائن',
                 value:
                     _isStatsLoading ? '...' : _totalCustomersOverall.toString(),
               ),
@@ -632,7 +632,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 child: Row(
                   children: [
                     _buildTableHeader(
-                      label: 'العميل',
+                      label: 'الزبون',
                       column: 'name',
                       width: 3,
                     ),
@@ -774,7 +774,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           Text(
             isSearching
                 ? 'لم يتم العثور على نتائج للبحث'
-                : 'ابدأ بإضافة عميل جديد',
+                : 'ابدأ بإضافة زبون جديد',
             style: TextStyle(fontSize: 14, color: Colors.grey[600]),
           ),
         ],
@@ -981,7 +981,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     _buildActionButton(
                       icon: Icons.edit,
                       color: Colors.orange,
-                      tooltip: 'تعديل العميل',
+                      tooltip: 'تعديل الزبون',
                       onPressed: () => _editCustomer(customer),
                     ),
                     const SizedBox(width: 4),
@@ -1008,15 +1008,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       _buildActionButton(
                         icon: Icons.delete,
                         color: Colors.red,
-                        tooltip: 'حذف العميل',
+                        tooltip: 'حذف الزبون',
                         onPressed: () => _deleteCustomer(customer),
                       )
                     else
                       Tooltip(
                         message:
                             debt > 0
-                                ? 'لا يمكن الحذف - العميل مدين'
-                                : 'لا يمكن الحذف - العميل لديه رصيد',
+                                ? 'لا يمكن الحذف - الزبون مدين'
+                                : 'لا يمكن الحذف - الزبون لديه رصيد',
                         child: Container(
                           width: 32,
                           height: 32,
@@ -1105,7 +1105,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         await _loadDashboardStats();
       }
     } catch (e) {
-      log('خطأ في تحديث دين العميل $customerId: $e');
+      log('خطأ في تحديث دين الزبون $customerId: $e');
     }
   }
 
@@ -1128,7 +1128,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   showAppToast(
                     // ignore: use_build_context_synchronously
                     context,
-                    'تم تحديث العميل ${updatedCustomer.name}',
+                    'تم تحديث الزبون ${updatedCustomer.name}',
                     ToastType.success,
                   );
                   setState(() {});
@@ -1169,7 +1169,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         if (mounted) {
           showAppToast(
             context,
-            '❌ لا يمكن حذف العميل ${customer.name}\nلأنه لديه $balanceType بقيمة $balanceText $currencyName',
+            '❌ لا يمكن حذف الزبون ${customer.name}\nلأنه لديه $balanceType بقيمة $balanceText $currencyName',
             ToastType.error,
           );
         }
@@ -1184,7 +1184,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         builder:
             (context) => AlertDialog(
               title: const Text('تأكيد الحذف'),
-              content: Text('هل أنت متأكد من حذف العميل ${customer.name}؟'),
+              content: Text('هل أنت متأكد من حذف الزبون ${customer.name}؟'),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
@@ -1208,7 +1208,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         if (mounted) {
           showAppToast(
             context,
-            '✅ تم حذف العميل ${customer.name}',
+            '✅ تم حذف الزبون ${customer.name}',
             ToastType.success,
           );
           setState(() {});
@@ -1271,7 +1271,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           (context) => AlertDialog(
             title: const Text('نوع التسديد'),
             content: Text(
-              'يوجد $openInvoicesCount فاتورة آجلة مفتوحة لهذا العميل. هل تريد تسجيل السداد على الحساب أم ربطه بفواتير محددة؟',
+              'يوجد $openInvoicesCount فاتورة آجلة مفتوحة لهذا الزبون. هل تريد تسجيل السداد على الحساب أم ربطه بفواتير محددة؟',
             ),
             actions: [
               TextButton(
@@ -1470,7 +1470,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: BaseLayout(
-        currentPage: 'العملاء',
+        currentPage: 'الزبائن',
         floatingActionButton: FloatingActionButton(
           heroTag: 'add_customer_fab', // علامة فريدة للزر العائم
           onPressed: _addNewCustomer,
@@ -1489,7 +1489,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             Consumer<CustomerProvider>(
               builder: (context, provider, child) {
                 return Text(
-                  provider.isSearching ? 'نتائج البحث' : 'قائمة العملاء',
+                  provider.isSearching ? 'نتائج البحث' : 'قائمة الزبائن',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

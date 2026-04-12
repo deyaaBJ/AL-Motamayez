@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 class DBHelper {
   static Database? _db;
-  static const int _version = 7;
+  static const int _version = 9;
 
   Future<Database> get db async {
     if (_db != null) return _db!;
@@ -69,6 +69,14 @@ class DBHelper {
 
     if (oldVersion < 7) {
       await _upgradeToVersion7(db);
+    }
+
+    if (oldVersion < 8) {
+      await _upgradeToVersion8(db);
+    }
+
+    if (oldVersion < 9) {
+      await _upgradeToVersion9(db);
     }
   }
 
@@ -202,6 +210,90 @@ class DBHelper {
     await _createIndexes(db);
   }
 
+  Future<void> _upgradeToVersion8(Database db) async {
+    final existingTable = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'supplier_transactions'",
+    );
+
+    if (existingTable.isEmpty) {
+      return;
+    }
+
+    await db.transaction((txn) async {
+      await txn.execute(
+        'ALTER TABLE supplier_transactions RENAME TO supplier_transactions_old',
+      );
+
+      await txn.execute('''
+        CREATE TABLE supplier_transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          supplier_id INTEGER NOT NULL,
+          purchase_invoice_id INTEGER,
+          amount REAL NOT NULL,
+          type TEXT NOT NULL CHECK (type IN ('purchase', 'payment', 'return', 'collection')),
+          date TEXT NOT NULL,
+          note TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE,
+          FOREIGN KEY (purchase_invoice_id) REFERENCES purchase_invoices (id) ON DELETE SET NULL
+        );
+      ''');
+
+      await txn.execute('''
+        INSERT INTO supplier_transactions (
+          id, supplier_id, purchase_invoice_id, amount, type, date, note, created_at
+        )
+        SELECT
+          id, supplier_id, purchase_invoice_id, amount, type, date, note, created_at
+        FROM supplier_transactions_old
+      ''');
+
+      await txn.execute('DROP TABLE supplier_transactions_old');
+    });
+
+    await _createIndexes(db);
+  }
+
+  Future<void> _upgradeToVersion9(Database db) async {
+    try {
+      log('⬆️ بدء الترقية للنسخة 9...');
+
+      // إضافة حقل debt_added_in_period في جدول sales
+      final salesColumns = await db.rawQuery('PRAGMA table_info(sales)');
+      final hasDebtAdded = salesColumns.any(
+        (col) => col['name'] == 'debt_added_in_period',
+      );
+
+      if (!hasDebtAdded) {
+        await db.execute(
+          'ALTER TABLE sales ADD COLUMN debt_added_in_period REAL NOT NULL DEFAULT 0',
+        );
+        log('✅ تم إضافة عمود debt_added_in_period في جدول sales');
+      }
+
+      // إضافة حقل debt_added_in_period في جدول sales_archive
+      final archiveColumns = await db.rawQuery(
+        'PRAGMA table_info(sales_archive)',
+      );
+      final hasDebtAddedArchive = archiveColumns.any(
+        (col) => col['name'] == 'debt_added_in_period',
+      );
+
+      if (!hasDebtAddedArchive) {
+        await db.execute(
+          'ALTER TABLE sales_archive ADD COLUMN debt_added_in_period REAL NOT NULL DEFAULT 0',
+        );
+        log('✅ تم إضافة عمود debt_added_in_period في جدول sales_archive');
+      }
+
+      await _createIndexes(db);
+      log('✅ تمت ترقية إلى النسخة 9 بنجاح');
+    } catch (e) {
+      log('❌ خطأ في الترقية للنسخة 9: $e');
+      rethrow;
+    }
+  }
+
   Future _onCreate(Database db, int version) async {
     // ========== جدول المنتجات ==========
     await db.execute('''
@@ -241,7 +333,7 @@ class DBHelper {
       );
     ''');
 
-    // ========== جدول الدفعات (Batches) ==========
+    // ========== جدول الواردات (Batches) ==========
     await db.execute('''
       CREATE TABLE product_batches (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -292,7 +384,7 @@ class DBHelper {
       );
     ''');
 
-    // ========== جدول الدفعات (المدفوعات) ==========
+    // ========== جدول الواردات (المدفوعات) ==========
     await db.execute('''
       CREATE TABLE IF NOT EXISTS transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -317,6 +409,7 @@ class DBHelper {
         payment_type TEXT NOT NULL DEFAULT 'cash', 
         paid_amount REAL NOT NULL DEFAULT 0,
         remaining_amount REAL NOT NULL DEFAULT 0,
+        debt_added_in_period REAL NOT NULL DEFAULT 0,
         show_for_tax INTEGER DEFAULT 0,
         user_id INTEGER,
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL,
@@ -358,7 +451,7 @@ class DBHelper {
       );
     ''');
 
-    // ========== ⬅️ جدول سجل خصم الدفعات (الجديد) ==========
+    // ========== ⬅️ جدول سجل خصم الواردات (الجديد) ==========
     await db.execute('''
       CREATE TABLE sale_batch_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -386,6 +479,7 @@ class DBHelper {
         payment_type TEXT NOT NULL DEFAULT 'cash', 
         paid_amount REAL NOT NULL DEFAULT 0,
         remaining_amount REAL NOT NULL DEFAULT 0,
+        debt_added_in_period REAL NOT NULL DEFAULT 0,
         show_for_tax INTEGER,
         user_id INTEGER,
         archived_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -489,7 +583,7 @@ class DBHelper {
         supplier_id INTEGER NOT NULL,
         purchase_invoice_id INTEGER,
         amount REAL NOT NULL,
-        type TEXT NOT NULL CHECK (type IN ('purchase', 'payment','return')),
+        type TEXT NOT NULL CHECK (type IN ('purchase', 'payment', 'return', 'collection')),
         date TEXT NOT NULL,
         note TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,

@@ -494,8 +494,8 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
           const Divider(height: 20),
           _buildInfoRow(
             icon: Icons.person,
-            label: 'العميل',
-            value: sale.customerName ?? 'بدون عميل',
+            label: 'الزبون',
+            value: sale.customerName ?? 'بدون زبون',
             valueColor: Colors.blue,
           ),
           if (role != 'tax') ...[

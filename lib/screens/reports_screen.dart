@@ -918,7 +918,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               provider.netProfit >= 0 ? Colors.green : Colors.red,
             ),
             _buildStatRow(
-              'عدد العملاء',
+              'عدد الزبائن',
               provider.totalCustomers.toString(),
               Colors.blue,
             ),
@@ -1247,7 +1247,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'العملاء الأكثر شراءً',
+              'الزبائن الأكثر شراءً',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),

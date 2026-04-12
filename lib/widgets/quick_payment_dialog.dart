@@ -127,7 +127,7 @@ class QuickPaymentDialog {
               if (mode == PaymentMode.payment) {
                 if (currentBalance <= 0) {
                   setState(() {
-                    errorMessage = 'لا يوجد دين على العميل لتسديده';
+                    errorMessage = 'لا يوجد دين على الزبون لتسديده';
                     showError = true;
                   });
                   return;
@@ -147,7 +147,7 @@ class QuickPaymentDialog {
               if (mode == PaymentMode.withdrawal) {
                 if (currentBalance >= 0) {
                   setState(() {
-                    errorMessage = 'لا يوجد رصيد متاح للعميل ليتم صرفه';
+                    errorMessage = 'لا يوجد رصيد متاح للزبون ليتم صرفه';
                     showError = true;
                   });
                   return;

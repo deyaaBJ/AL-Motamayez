@@ -650,7 +650,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                 ),
                 SizedBox(width: isMobile ? 3 : 4),
                 Text(
-                  'العميل',
+                  'الزبون',
                   style: TextStyle(
                     fontSize: isMobile ? 11 : 12,
                     color: Colors.purple.shade700,
@@ -678,7 +678,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                       if (name == 'الكل') {
                         icon = Icons.people_alt_rounded;
                         color = Colors.purple.shade600;
-                      } else if (name == 'بدون عميل') {
+                      } else if (name == 'بدون زبون') {
                         icon = Icons.person_off_rounded;
                         color = Colors.grey;
                       }
@@ -1513,7 +1513,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      sale.customerName ?? "بدون عميل",
+                      sale.customerName ?? "بدون زبون",
                       style: const TextStyle(fontSize: 14),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1841,7 +1841,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
     if (showCustomerColumn) {
       columns.add(
         DataColumn(
-          label: Text('العميل', style: TextStyle(fontWeight: FontWeight.bold)),
+          label: Text('الزبون', style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       );
     }
@@ -1962,7 +1962,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen>
       cells.add(
         DataCell(
           Text(
-            sale.customerName ?? "بدون عميل",
+            sale.customerName ?? "بدون زبون",
             style: TextStyle(
               fontSize: 14,
               color:

@@ -49,10 +49,10 @@ class _SidebarState extends State<Sidebar> {
           'page': 'المنتجات',
         },
         {
-          'title': 'العملاء',
+          'title': 'الزبائن',
           'icon': Icons.people,
           'color': Color(0xFF8B5FBF),
-          'page': 'العملاء',
+          'page': 'الزبائن',
         },
         {
           'title': 'الموردين',

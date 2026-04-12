@@ -60,7 +60,7 @@ class BatchProvider with ChangeNotifier {
 
       final db = await _dbHelper.db;
 
-      // ✅ استعلام يجلب جميع الدفعات (مع وبدون صلاحية)
+      // ✅ استعلام يجلب جميع الواردات (مع وبدون صلاحية)
       String query = '''
       SELECT 
         pb.*,
@@ -195,8 +195,8 @@ class BatchProvider with ChangeNotifier {
     }
   }
 
-  // البحث عن دفعات
-  // البحث عن دفعات مع اسم المورد
+  // البحث عن واردات
+  // البحث عن واردات مع اسم المورد
   Future<List<Batch>> searchBatches(String query) async {
     try {
       final db = await _dbHelper.db;
@@ -245,7 +245,7 @@ class BatchProvider with ChangeNotifier {
       final db = await _dbHelper.db;
       final id = await db.insert('product_batches', batch.toMap());
 
-      // إعادة تحميل الدفعات
+      // إعادة تحميل الواردات
       await loadBatches(reset: true, filter: _currentFilter);
 
       log('✅ تم إضافة دفعة جديدة ID: $id');
@@ -544,7 +544,7 @@ class BatchProvider with ChangeNotifier {
 
   // ========== الدوال القديمة (تبقى كما هي) ==========
 
-  // دالة للحصول على الدفعات المتاحة لمنتج
+  // دالة للحصول على الواردات المتاحة لمنتج
   Future<List<Map<String, dynamic>>> getProductBatches(int productId) async {
     try {
       final db = await _dbHelper.db;
@@ -558,7 +558,7 @@ class BatchProvider with ChangeNotifier {
 
       return batches;
     } catch (e) {
-      log('خطأ في جلب الدفعات: $e');
+      log('خطأ في جلب الواردات: $e');
       return [];
     }
   }
@@ -673,7 +673,7 @@ class BatchProvider with ChangeNotifier {
     try {
       final db = await _dbHelper.db;
 
-      // جلب الدفعات الأقدم أولاً (Order by oldest)
+      // جلب الواردات الأقدم أولاً (Order by oldest)
       final batches = await db.rawQuery(
         '''
         SELECT * FROM product_batches 
@@ -688,7 +688,7 @@ class BatchProvider with ChangeNotifier {
       );
 
       if (batches.isEmpty) {
-        throw Exception('لا توجد دفعات متاحة للمنتج ID: $productId');
+        throw Exception('لا توجد واردات متاحة للمنتج ID: $productId');
       }
 
       double remainingToDeduct = requiredQuantity;
@@ -743,7 +743,7 @@ class BatchProvider with ChangeNotifier {
     }
   }
 
-  // دالة لإرجاع الكمية إلى الدفعات (عند حذف فاتورة أو إرجاع)
+  // دالة لإرجاع الكمية إلى الواردات (عند حذف فاتورة أو إرجاع)
   Future<void> returnToBatches(
     int productId,
     List<Map<String, dynamic>> returnDetails,
@@ -820,12 +820,12 @@ class BatchProvider with ChangeNotifier {
 
       return result.first['count'] as int? ?? 0;
     } catch (e) {
-      log('❌ خطأ في جلب عدد الدفعات المنتهية: $e');
+      log('❌ خطأ في جلب عدد الواردات المنتهية: $e');
       return 0;
     }
   }
 
-  // 🔴 دالة لجلب عدد الدفعات المتبقي لها 7 أيام أو أقل
+  // 🔴 دالة لجلب عدد الواردات المتبقي لها 7 أيام أو أقل
   Future<int> getBatchesExpiringIn7DaysOrLess() async {
     try {
       final db = await _dbHelper.db;
@@ -842,7 +842,7 @@ class BatchProvider with ChangeNotifier {
 
       return result.first['count'] as int? ?? 0;
     } catch (e) {
-      log('❌ خطأ في جلب عدد الدفعات القريبة: $e');
+      log('❌ خطأ في جلب عدد الواردات القريبة: $e');
       return 0;
     }
   }
@@ -855,12 +855,12 @@ class BatchProvider with ChangeNotifier {
 
       return {'expired': expiredCount, 'expiring_7_days': expiringSoonCount};
     } catch (e) {
-      log('❌ خطأ في جلب إشعارات الدفعات: $e');
+      log('❌ خطأ في جلب إشعارات الواردات: $e');
       return {'expired': 0, 'expiring_7_days': 0};
     }
   }
 
-  // 🔴 دالة لتحميل الدفعات مع فلتر بسيط
+  // 🔴 دالة لتحميل الواردات مع فلتر بسيط
   Future<void> loadBatchesWithFilter(String filterType) async {
     try {
       final db = await _dbHelper.db;
@@ -929,7 +929,7 @@ class BatchProvider with ChangeNotifier {
       notifyListeners();
       log('✅ تم تحميل ${_batches.length} دفعة مع فلتر: $filterType');
     } catch (e) {
-      log('❌ خطأ في تحميل الدفعات مع الفلتر: $e');
+      log('❌ خطأ في تحميل الواردات مع الفلتر: $e');
     }
   }
 

@@ -50,11 +50,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   void _onTransactionScroll() {
-    if (_transactionScrollController.position.pixels ==
-        _transactionScrollController.position.maxScrollExtent) {
-      if (_hasMoreTransactions && !_isLoadingTransactions) {
-        _loadMoreTransactions();
-      }
+    if (_transactionScrollController.position.pixels >=
+            _transactionScrollController.position.maxScrollExtent - 100 &&
+        _hasMoreTransactions &&
+        !_isLoadingTransactions) {
+      _loadMoreTransactions();
     }
   }
 
@@ -255,7 +255,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           (context) => AlertDialog(
             title: const Text('نوع التسديد'),
             content: Text(
-              'يوجد $openInvoicesCount فاتورة آجلة مفتوحة لهذا العميل. هل تريد تسجيل السداد على الحساب أم ربطه بفواتير محددة؟',
+              'يوجد $openInvoicesCount فاتورة آجلة مفتوحة لهذا الزبون. هل تريد تسجيل السداد على الحساب أم ربطه بفواتير محددة؟',
             ),
             actions: [
               TextButton(
@@ -412,7 +412,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
 
         if (!mounted) return;
 
-        // ✅ تحديث المبيعات + بيانات العميل
+        // ✅ تحديث المبيعات + بيانات الزبون
         context.read<SalesProvider>().invalidateAndRefresh();
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -897,6 +897,22 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       }
     }
 
+    if (_hasMoreTransactions &&
+        !_isLoadingTransactions &&
+        _transactions.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final position =
+            _transactionScrollController.hasClients
+                ? _transactionScrollController.position
+                : null;
+        if (position != null &&
+            position.pixels >= position.maxScrollExtent - 100) {
+          _loadMoreTransactions();
+        }
+      });
+    }
+
     if (_hasMoreTransactions) {
       widgets.add(
         Padding(
@@ -948,7 +964,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'لم يتم تسجيل أي معاملات لهذا العميل',
+              'لم يتم تسجيل أي معاملات لهذا الزبون',
               style: TextStyle(fontSize: 13, color: Colors.grey[500]),
               textAlign: TextAlign.center,
             ),
@@ -969,7 +985,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: BaseLayout(
-        currentPage: 'تفاصيل العميل',
+        currentPage: 'تفاصيل الزبون',
         title: widget.customer.name,
         actions: [
           IconButton(

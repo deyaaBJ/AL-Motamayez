@@ -1622,7 +1622,7 @@ class _PosScreenState extends State<PosScreen>
                     ),
                     const SizedBox(width: 12),
                     const Text(
-                      'اختر عميل',
+                      'اختر زبون',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -1774,7 +1774,7 @@ class _PosScreenState extends State<PosScreen>
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
-                        child: const Text('إضافة عميل جديد'),
+                        child: const Text('إضافة زبون جديد'),
                       ),
                     ),
                   ],
@@ -1802,7 +1802,7 @@ class _PosScreenState extends State<PosScreen>
                   showAppToast(
                     // ignore: use_build_context_synchronously
                     context,
-                    'خطأ في إضافة العميل: $e',
+                    'خطأ في إضافة الزبون: $e',
                     ToastType.error,
                   );
                 }
@@ -1853,6 +1853,7 @@ class _PosScreenState extends State<PosScreen>
         customerId: customer.id,
         paidAmount: appliedFromBalance > 0 ? appliedFromBalance : 0.0,
         remainingAmount: remainingDebt,
+        debtAddedInPeriod: remainingDebt,
         userRole: auth.role ?? 'user',
         userId: user?["id"],
       );
@@ -1873,7 +1874,7 @@ class _PosScreenState extends State<PosScreen>
 
         showAppToast(
           context,
-          'تم تسجيل بيع مؤجل للعميل ${customer.name} بنجاح',
+          'تم تسجيل بيع مؤجل للزبون ${customer.name} بنجاح',
           ToastType.success,
         );
 

@@ -88,8 +88,7 @@ AND date(offer_end_date) < date('now', 'localtime')
       await _clearExpiredOffers();
 
       final db = await _dbHelper.db;
-      final result = await db.rawQuery(
-        '''
+      final result = await db.rawQuery('''
         SELECT COUNT(*) as count
         FROM products p
         WHERE p.active = 1
@@ -102,8 +101,7 @@ AND date(offer_end_date) < date('now', 'localtime')
                 AND $_activeOfferDateSql
             )
           )
-        ''',
-      );
+        ''');
 
       _productsOnOfferCount = Sqflite.firstIntValue(result) ?? 0;
       notifyListeners();
@@ -320,14 +318,11 @@ AND date(offer_end_date) < date('now', 'localtime')
           break;
       }
 
-      final res = await db.rawQuery(
-        '''
+      final res = await db.rawQuery('''
         SELECT COUNT(*) as count
         FROM products p
         ${whereClause.isNotEmpty ? 'WHERE $whereClause' : ''}
-        ''',
-        whereArgs,
-      );
+        ''', whereArgs);
 
       if (res.isNotEmpty) {
         _totalProducts = (res.first['count'] as int?) ?? 0;
@@ -383,8 +378,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         whereArgs.add(active ? 1 : 0);
       }
 
-      final result = await db.rawQuery(
-        '''
+      final result = await db.rawQuery('''
         SELECT
           p.*,
           EXISTS(
@@ -396,9 +390,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         FROM products p
         WHERE $whereClause
         ORDER BY p.name ASC
-        ''',
-        whereArgs,
-      );
+        ''', whereArgs);
 
       return result.map(Product.fromMap).toList();
     } catch (e) {
@@ -604,7 +596,8 @@ AND date(offer_end_date) < date('now', 'localtime')
             'offer_price': product.offerEnabled ? product.offerPrice : null,
             'offer_start_date':
                 product.offerEnabled ? product.offerStartDate : null,
-            'offer_end_date': product.offerEnabled ? product.offerEndDate : null,
+            'offer_end_date':
+                product.offerEnabled ? product.offerEndDate : null,
             'offer_enabled': product.offerEnabled ? 1 : 0,
             'active': product.active ? 1 : 0,
             'has_expiry_date': product.hasExpiryDate ? 1 : 0,
@@ -653,7 +646,8 @@ AND date(offer_end_date) < date('now', 'localtime')
       'barcode': updatedProduct.barcode,
       'base_unit': updatedProduct.baseUnit,
       'price': updatedProduct.price,
-      'offer_price': updatedProduct.offerEnabled ? updatedProduct.offerPrice : null,
+      'offer_price':
+          updatedProduct.offerEnabled ? updatedProduct.offerPrice : null,
       'offer_start_date':
           updatedProduct.offerEnabled ? updatedProduct.offerStartDate : null,
       'offer_end_date':
@@ -724,6 +718,79 @@ AND date(offer_end_date) < date('now', 'localtime')
     }
   }
 
+  Future<Map<String, dynamic>> getProductCostSummary(int productId) async {
+    try {
+      final db = await _dbHelper.db;
+
+      final productResult = await db.query(
+        'products',
+        columns: ['cost_price'],
+        where: 'id = ?',
+        whereArgs: [productId],
+        limit: 1,
+      );
+
+      if (productResult.isEmpty) {
+        return {
+          'average_cost': 0.0,
+          'latest_purchase_cost': 0.0,
+          'latest_purchase_date': null,
+          'open_batches_count': 0,
+        };
+      }
+
+      final latestPurchaseResult = await db.rawQuery(
+        '''
+        SELECT
+          pi.cost_price,
+          inv.date
+        FROM purchase_items pi
+        INNER JOIN purchase_invoices inv ON inv.id = pi.purchase_id
+        WHERE pi.product_id = ?
+        ORDER BY datetime(inv.date) DESC, pi.id DESC
+        LIMIT 1
+        ''',
+        [productId],
+      );
+
+      final openBatchesResult = await db.rawQuery(
+        '''
+        SELECT COUNT(*) AS count
+        FROM product_batches
+        WHERE product_id = ?
+          AND active = 1
+          AND remaining_quantity > 0
+        ''',
+        [productId],
+      );
+
+      return {
+        'average_cost':
+            (productResult.first['cost_price'] as num?)?.toDouble() ?? 0.0,
+        'latest_purchase_cost':
+            latestPurchaseResult.isNotEmpty
+                ? (latestPurchaseResult.first['cost_price'] as num?)
+                        ?.toDouble() ??
+                    0.0
+                : 0.0,
+        'latest_purchase_date':
+            latestPurchaseResult.isNotEmpty
+                ? latestPurchaseResult.first['date'] as String?
+                : null,
+        'open_batches_count':
+            (openBatchesResult.first['count'] as num?)?.toInt() ?? 0,
+      };
+    } catch (e) {
+      log('Error getting product cost summary: $e');
+      return {
+        'average_cost': 0.0,
+        'latest_purchase_cost': 0.0,
+        'latest_purchase_date': null,
+        'open_batches_count': 0,
+      };
+    }
+  }
+
   Future<List<Product>> searchProductsByName(String name) async {
     try {
       final db = await _dbHelper.db;
@@ -778,6 +845,7 @@ AND date(offer_end_date) < date('now', 'localtime')
     int? customerId,
     double? paidAmount,
     double? remainingAmount,
+    double? debtAddedInPeriod,
     required String userRole,
     required int userId, // ⬅️ جديد: معرف المستخدم
   }) async {
@@ -811,6 +879,8 @@ AND date(offer_end_date) < date('now', 'localtime')
           paidAmount ?? (paymentType == 'cash' ? totalAmount : 0.0);
       final double resolvedRemainingAmount =
           remainingAmount ?? (paymentType == 'credit' ? totalAmount : 0.0);
+      final double resolvedDebtAddedInPeriod =
+          debtAddedInPeriod ?? (paymentType == 'credit' ? totalAmount : 0.0);
 
       final saleId = await txn.insert('sales', {
         'date': DateTime.now().toIso8601String(),
@@ -820,6 +890,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         'payment_type': paymentType,
         'paid_amount': resolvedPaidAmount,
         'remaining_amount': resolvedRemainingAmount,
+        'debt_added_in_period': resolvedDebtAddedInPeriod,
         'show_for_tax': showForTax,
         'user_id': userId, // ⬅️ جديد: حفظ معرف المستخدم
       });
@@ -863,7 +934,7 @@ AND date(offer_end_date) < date('now', 'localtime')
           requiredQtyInBaseUnit = item.quantity * item.selectedUnit!.containQty;
         }
 
-        // 🔹 خصم من الدفعات الأقدم أولاً (FIFO) - إذا كانت موجودة فقط
+        // 🔹 خصم من الواردات الأقدم أولاً (FIFO) - إذا كانت موجودة فقط
         final batches = await txn.rawQuery(
           '''
         SELECT * FROM product_batches 
@@ -885,7 +956,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         double itemTotalCost = 0.0;
         double itemProfit = 0.0;
 
-        // إذا في دفعات، نخصم منها
+        // إذا في واردات، نخصم منها
         if (batches.isNotEmpty) {
           double remainingToDeduct = requiredQtyInBaseUnit;
 
@@ -937,9 +1008,9 @@ AND date(offer_end_date) < date('now', 'localtime')
             remainingToDeduct -= toDeduct;
           }
 
-          log('📦 تم خصم من الدفعات للمنتج ${product.name}');
+          log('📦 تم خصم من الواردات للمنتج ${product.name}');
         } else {
-          // إذا ما في دفعات، نحسب التكلفة من السعر الأساسي للمنتج
+          // إذا ما في واردات، نحسب التكلفة من السعر الأساسي للمنتج
           itemTotalCost = requiredQtyInBaseUnit * product.costPrice;
 
           final double unitPrice = item.unitPrice;
@@ -952,7 +1023,7 @@ AND date(offer_end_date) < date('now', 'localtime')
           itemProfit = revenue - itemTotalCost;
 
           log(
-            '⚠️ لا توجد دفعات للمنتج ${product.name} - تم البيع بدون خصم من الدفعات',
+            '⚠️ لا توجد واردات للمنتج ${product.name} - تم البيع بدون خصم من الواردات',
           );
         }
 
@@ -1066,7 +1137,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         whereArgs: [saleId],
       );
 
-      // 🔹 حفظ سجل الدفعات (اختياري)
+      // 🔹 حفظ سجل الواردات (اختياري)
       try {
         await txn.execute('''
         CREATE TABLE IF NOT EXISTS sale_batch_log (
@@ -1092,7 +1163,7 @@ AND date(offer_end_date) < date('now', 'localtime')
           });
         }
       } catch (e) {
-        log('⚠️ ملاحظة: لم يتم حفظ سجل الدفعات - $e');
+        log('⚠️ ملاحظة: لم يتم حفظ سجل الواردات - $e');
       }
 
       // 🔹 تحديث رصيد الزبون إذا كانت فاتورة آجلة
@@ -1214,7 +1285,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         whereArgs: [originalSale.id],
       );
 
-      // 🔹 5️⃣ إرجاع الكميات القديمة من الدفعات أولاً
+      // 🔹 5️⃣ إرجاع الكميات القديمة من الواردات أولاً
       for (var oldItem in oldItems) {
         final int? productId = oldItem['product_id'] as int?;
         if (productId == null) continue;
@@ -1239,7 +1310,7 @@ AND date(offer_end_date) < date('now', 'localtime')
           }
         }
 
-        // محاولة إرجاع الكمية للدفعات القديمة
+        // محاولة إرجاع الكمية للواردات القديمة
         if (oldItem['batch_details'] != null &&
             oldItem['batch_details'].toString().isNotEmpty) {
           try {
@@ -1271,7 +1342,7 @@ AND date(offer_end_date) < date('now', 'localtime')
               }
             }
           } catch (e) {
-            log('⚠️ خطأ في إرجاع تفاصيل الدفعات القديمة: $e');
+            log('⚠️ خطأ في إرجاع تفاصيل الواردات القديمة: $e');
           }
         }
 
@@ -1289,7 +1360,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         whereArgs: [originalSale.id],
       );
 
-      // 🔹 7️⃣ حذف سجل الدفعات القديم
+      // 🔹 7️⃣ حذف سجل الواردات القديم
       try {
         await txn.delete(
           'sale_batch_log',
@@ -1300,7 +1371,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         // تجاهل الخطأ إذا الجدول غير موجود
       }
 
-      // 🔹 8️⃣ إضافة العناصر الجديدة مع خصم من الدفعات
+      // 🔹 8️⃣ إضافة العناصر الجديدة مع خصم من الواردات
       double totalProfit = 0.0;
       List<Map<String, dynamic>> allBatchDeductions = [];
       final double grossInvoiceSubtotal = cartItems.fold(
@@ -1339,7 +1410,7 @@ AND date(offer_end_date) < date('now', 'localtime')
           requiredQtyInBaseUnit = item.quantity * item.selectedUnit!.containQty;
         }
 
-        // خصم من الدفعات الأقدم أولاً
+        // خصم من الواردات الأقدم أولاً
         final batches = await txn.rawQuery(
           '''
           SELECT * FROM product_batches 
@@ -1358,7 +1429,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         );
 
         if (batches.isEmpty && requiredQtyInBaseUnit > 0) {
-          throw Exception('لا توجد دفعات متاحة للمنتج ${product.name}');
+          throw Exception('لا توجد واردات متاحة للمنتج ${product.name}');
         }
 
         double remainingToDeduct = requiredQtyInBaseUnit;
@@ -1525,7 +1596,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         whereArgs: [originalSale.id],
       );
 
-      // 🔹 🔟 حفظ سجل الدفعات الجديد
+      // 🔹 🔟 حفظ سجل الواردات الجديد
       try {
         await txn.execute('''
           CREATE TABLE IF NOT EXISTS sale_batch_log (
@@ -1551,7 +1622,7 @@ AND date(offer_end_date) < date('now', 'localtime')
           });
         }
       } catch (e) {
-        log('⚠️ ملاحظة: لم يتم حفظ سجل الدفعات - $e');
+        log('⚠️ ملاحظة: لم يتم حفظ سجل الواردات - $e');
       }
 
       // 🔹 1️⃣1️⃣ تحديث رصيد الزبون إذا تغير المبلغ
@@ -1602,7 +1673,7 @@ AND date(offer_end_date) < date('now', 'localtime')
       final String paymentType = saleData['payment_type'] as String;
       final int? customerId = saleData['customer_id'] as int?;
 
-      // 2️⃣ جلب تفاصيل خصم الدفعات
+      // 2️⃣ جلب تفاصيل خصم الواردات
       List<Map<String, dynamic>> batchReturns = [];
 
       try {
@@ -1645,10 +1716,10 @@ AND date(offer_end_date) < date('now', 'localtime')
           }
         }
       } catch (e) {
-        log('⚠️ لم يتم العثور على سجل الدفعات: $e');
+        log('⚠️ لم يتم العثور على سجل الواردات: $e');
       }
 
-      // 3️⃣ إرجاع الكميات للدفعات
+      // 3️⃣ إرجاع الكميات للواردات
       for (var returnItem in batchReturns) {
         final batchId = returnItem['batchId'] as int;
         final double quantity = (returnItem['quantity'] as num).toDouble();
@@ -1690,7 +1761,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         );
       }
 
-      // 4️⃣ إذا لم تكن هناك تفاصيل دفعات، نرجع الكميات العادية
+      // 4️⃣ إذا لم تكن هناك تفاصيل واردات، نرجع الكميات العادية
       if (batchReturns.isEmpty) {
         final saleItems = await txn.query(
           'sale_items',

@@ -15,6 +15,10 @@ class CashierActivityScreen extends StatefulWidget {
 }
 
 class _CashierActivityScreenState extends State<CashierActivityScreen> {
+  // ⬅️ جديد: تتبع عدد الفواتير المعروضة لكل كاشير
+  final Map<int, int> _displayedInvoicesCount = {};
+  static const int _invoicesPerPage = 20;
+
   @override
   void initState() {
     super.initState();
@@ -245,7 +249,12 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
       itemCount: provider.cashierActivities.length,
       itemBuilder: (context, index) {
         final activity = provider.cashierActivities[index];
-        return _buildCashierCard(activity, currencyName); // ⬅️ تمرير العملة
+        // ⬅️ تأكد من أن هناك entry في map لكل كاشير
+        _displayedInvoicesCount.putIfAbsent(
+          activity.userId,
+          () => _invoicesPerPage,
+        );
+        return _buildCashierCard(activity, currencyName);
       },
     );
   }
@@ -261,11 +270,22 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
     final roleLabel = _getRoleLabel(activity.userRole);
     final roleIcon = _getRoleIcon(activity.userRole);
 
+    final provider = context.watch<CashierActivityProvider>();
+    final invoices = provider.invoicesForUser(activity.userId);
+    final isInvoicesLoading = provider.isInvoicesLoading(activity.userId);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ExpansionTile(
+        onExpansionChanged: (expanded) {
+          if (expanded) {
+            context.read<CashierActivityProvider>().loadInvoicesForUser(
+              activity.userId,
+            );
+          }
+        },
         tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         childrenPadding: const EdgeInsets.all(16),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
@@ -381,7 +401,7 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
               ),
               const Spacer(),
               Text(
-                '${activity.invoices.length} فاتورة',
+                '${activity.totalInvoices} فاتورة',
                 style: TextStyle(
                   color: Colors.grey[700],
                   fontSize: 15,
@@ -391,10 +411,13 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          _buildInvoicesGrid(
-            activity.invoices,
-            currencyName,
-          ), // ⬅️ تمرير العملة
+          if (isInvoicesLoading)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            _buildInvoicesGrid(invoices, currencyName, activity.userId),
         ],
       ),
     );
@@ -404,26 +427,33 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
   Widget _buildInvoicesGrid(
     List<InvoiceSummary> invoices,
     String currencyName,
+    int userId,
   ) {
     if (invoices.isEmpty) return const SizedBox.shrink();
 
-    final displayCount = invoices.length > 8 ? 8 : invoices.length;
+    // ⬅️ جديد: الحصول على عدد الفواتير المعروضة لهذا الكاشير
+    int displayedCount = _displayedInvoicesCount[userId] ?? _invoicesPerPage;
+    displayedCount = displayedCount.clamp(0, invoices.length);
 
     return Column(
       children: [
         ...invoices
-            .take(displayCount)
-            .map(
-              (invoice) => _buildCompactInvoiceItem(invoice, currencyName),
-            ), // ⬅️
-        if (invoices.length > 8) ...[
+            .take(displayedCount)
+            .map((invoice) => _buildCompactInvoiceItem(invoice, currencyName)),
+        // ⬅️ تعديل: زر "حمل المزيد" بدل "اعرض الكل"
+        if (displayedCount < invoices.length) ...[
           const SizedBox(height: 10),
           ElevatedButton.icon(
-            onPressed:
-                () => _showAllInvoicesDialog(invoices, currencyName), // ⬅️
-            icon: const Icon(Icons.expand_more, size: 22),
+            onPressed: () {
+              setState(() {
+                _displayedInvoicesCount[userId] = (displayedCount +
+                        _invoicesPerPage)
+                    .clamp(0, invoices.length);
+              });
+            },
+            icon: const Icon(Icons.download, size: 22),
             label: Text(
-              'عرض ${invoices.length - 8} فاتورة إضافية',
+              'حمل ${(invoices.length - displayedCount).clamp(0, _invoicesPerPage)} فاتورة إضافية',
               style: const TextStyle(fontSize: 15),
             ),
             style: ElevatedButton.styleFrom(
@@ -578,72 +608,6 @@ class _CashierActivityScreenState extends State<CashierActivityScreen> {
   }
 
   // ⬅️ تعديل: إضافة currencyName
-  void _showAllInvoicesDialog(
-    List<InvoiceSummary> invoices,
-    String currencyName,
-  ) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Container(
-              width: 700,
-              height: 600,
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.receipt_long,
-                        color: Colors.indigo,
-                        size: 28,
-                      ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'جميع الفواتير',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        '${invoices.length} فاتورة',
-                        style: TextStyle(
-                          color: Colors.grey[700],
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close, size: 28),
-                      ),
-                    ],
-                  ),
-                  const Divider(thickness: 1),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: invoices.length,
-                      itemBuilder: (context, index) {
-                        return _buildCompactInvoiceItem(
-                          invoices[index],
-                          currencyName,
-                        ); // ⬅️
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
 
   Widget _buildErrorWidget(String error) {
     return Center(

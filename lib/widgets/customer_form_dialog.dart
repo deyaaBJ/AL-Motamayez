@@ -173,7 +173,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
         const SizedBox(width: 12),
 
         Text(
-          widget.customer == null ? 'إضافة عميل جديد' : 'تعديل العميل',
+          widget.customer == null ? 'إضافة زبون جديد' : 'تعديل الزبون',
           style: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
@@ -195,7 +195,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
             textDirection: TextDirection.rtl,
             textAlign: TextAlign.right,
             decoration: InputDecoration(
-              labelText: 'اسم العميل',
+              labelText: 'اسم الزبون',
               prefixIcon: const Icon(Icons.person, color: Color(0xFF8B5FBF)),
               suffixIcon:
                   _isCheckingName
@@ -223,7 +223,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
             onChanged: (value) => _checkNameAvailability(),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
-                return 'يرجى إدخال اسم العميل';
+                return 'يرجى إدخال اسم الزبون';
               }
               return null;
             },

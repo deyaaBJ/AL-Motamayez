@@ -37,7 +37,7 @@ class ReportsProvider extends ChangeNotifier {
   double _periodDebtCollected = 0; // المحصل من الديون خلال الفترة
   double _debtNetChange = 0; // صافي تغير الذمم
 
-  // قوائم المنتجات والعملاء
+  // قوائم المنتجات والزبائن
   List<Map<String, dynamic>> _topProducts = [];
   List<Map<String, dynamic>> _topCustomers = [];
   List<Map<String, dynamic>> _weeklySalesData = [];
@@ -248,7 +248,7 @@ class ReportsProvider extends ChangeNotifier {
       // 6. حساب فواتير الشراء مع نفس الفلتر
       await _calculatePurchaseInvoicesWithFilter(whereClause, whereArgs);
 
-      // 7. تحميل أفضل المنتجات والعملاء
+      // 7. تحميل أفضل المنتجات والزبائن
       await _loadFilteredTopProducts(whereClause, whereArgs);
       await _loadFilteredTopCustomers(whereClause, whereArgs);
 
@@ -326,7 +326,7 @@ class ReportsProvider extends ChangeNotifier {
     _totalCashProfit = 0;
 
     Map<String, double> dailySales = {};
-    Set<dynamic> uniqueCustomers = {}; // تتبع العملاء الفريدين
+    Set<dynamic> uniqueCustomers = {}; // تتبع الزبائن الفريدين
 
     for (var sale in sales) {
       final amount = (sale['total_amount'] as num?)?.toDouble() ?? 0;
@@ -345,7 +345,7 @@ class ReportsProvider extends ChangeNotifier {
         _creditSalesAmount += amount;
       }
 
-      // تسجيل العملاء الفريدين فقط
+      // تسجيل الزبائن الفريدين فقط
       if (customerId != null) {
         uniqueCustomers.add(customerId);
       }
@@ -355,7 +355,7 @@ class ReportsProvider extends ChangeNotifier {
       }
     }
 
-    // عد العملاء الفريدين فقط
+    // عد الزبائن الفريدين فقط
     _totalCustomers = uniqueCustomers.length;
 
     _profitPercentage =
@@ -455,12 +455,12 @@ class ReportsProvider extends ChangeNotifier {
 
       final creditAddedResult = await db.rawQuery(
         '''
-        SELECT COALESCE(SUM(remaining_amount), 0) as total_credit_added
+        SELECT COALESCE(SUM(debt_added_in_period), 0) as total_credit_added
         FROM (
-          SELECT remaining_amount, payment_type, date FROM sales
+          SELECT debt_added_in_period, payment_type, date FROM sales
           WHERE $whereClause
           UNION ALL
-          SELECT remaining_amount, payment_type, date FROM sales_archive
+          SELECT debt_added_in_period, payment_type, date FROM sales_archive
           WHERE $whereClause
         )
         WHERE payment_type = 'credit'
@@ -697,7 +697,7 @@ class ReportsProvider extends ChangeNotifier {
       _topCustomers =
           result.map((row) {
             return {
-              'name': row['name'] as String? ?? 'عميل نقدي',
+              'name': row['name'] as String? ?? 'زبون نقدي',
               'purchase_count': row['purchase_count'] as int? ?? 0,
               'total_amount': (row['total_amount'] as num?)?.toDouble() ?? 0,
               'total_profit': (row['total_profit'] as num?)?.toDouble() ?? 0,
@@ -847,12 +847,12 @@ class ReportsProvider extends ChangeNotifier {
 
       final creditAddedResult = await db.rawQuery(
         '''
-        SELECT COALESCE(SUM(remaining_amount), 0) as total_credit_added
+        SELECT COALESCE(SUM(debt_added_in_period), 0) as total_credit_added
         FROM (
-          SELECT remaining_amount, payment_type, date FROM sales
+          SELECT debt_added_in_period, payment_type, date FROM sales
           WHERE date(date) BETWEEN ? AND ?
           UNION ALL
-          SELECT remaining_amount, payment_type, date FROM sales_archive
+          SELECT debt_added_in_period, payment_type, date FROM sales_archive
           WHERE date(date) BETWEEN ? AND ?
         )
         WHERE payment_type = 'credit'
@@ -968,7 +968,7 @@ class ReportsProvider extends ChangeNotifier {
       _topCustomers =
           result.map((row) {
             return {
-              'name': row['name'] as String? ?? 'عميل نقدي',
+              'name': row['name'] as String? ?? 'زبون نقدي',
               'purchase_count': row['purchase_count'] as int? ?? 0,
               'total_amount': (row['total_amount'] as num?)?.toDouble() ?? 0,
               'total_profit': (row['total_profit'] as num?)?.toDouble() ?? 0,
@@ -1052,7 +1052,7 @@ class ReportsProvider extends ChangeNotifier {
       _topCustomers =
           result.map((row) {
             return {
-              'name': row['name'] as String? ?? 'عميل نقدي',
+              'name': row['name'] as String? ?? 'زبون نقدي',
               'purchase_count': row['purchase_count'] as int? ?? 0,
               'total_amount': (row['total_amount'] as num?)?.toDouble() ?? 0,
               'total_profit': (row['total_profit'] as num?)?.toDouble() ?? 0,

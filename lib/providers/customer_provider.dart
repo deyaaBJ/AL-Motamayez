@@ -93,7 +93,7 @@ class CustomerProvider extends ChangeNotifier {
             }
           }
         } catch (e) {
-          log('خطأ في تحويل بيانات العميل: $e');
+          log('خطأ في تحويل بيانات الزبون: $e');
         }
       }
 
@@ -111,7 +111,7 @@ class CustomerProvider extends ChangeNotifier {
     }
   }
 
-  // الحصول على العملاء للعرض (بناءً على حالة البحث)
+  // الحصول على الزبائن للعرض (بناءً على حالة البحث)
   List<Customer> get displayedCustomers {
     return _isSearching ? _filteredCustomers : _customers;
   }
@@ -122,7 +122,7 @@ class CustomerProvider extends ChangeNotifier {
       final db = await _dbHelper.db;
 
       if (excludeId != null) {
-        // للتحقق عند التعديل (استبعاد العميل الحالي)
+        // للتحقق عند التعديل (استبعاد الزبون الحالي)
         final result = await db.rawQuery(
           'SELECT COUNT(*) as count FROM customers WHERE name = ? AND id != ?',
           [name, excludeId],
@@ -147,10 +147,10 @@ class CustomerProvider extends ChangeNotifier {
   // ثم عدل دالة addCustomer لتحتوي على التحقق:
   Future<Customer> addCustomer(Customer customer) async {
     try {
-      // التحقق من وجود عميل بنفس الاسم
+      // التحقق من وجود زبون بنفس الاسم
       final nameExists = await isCustomerNameExists(customer.name);
       if (nameExists) {
-        throw Exception('اسم العميل "${customer.name}" موجود مسبقاً');
+        throw Exception('اسم الزبون "${customer.name}" موجود مسبقاً');
       }
 
       final db = await _dbHelper.db;
@@ -161,7 +161,7 @@ class CustomerProvider extends ChangeNotifier {
       // إضافة في البداية من القوائم
       _customers.insert(0, newCustomer);
 
-      // إذا كان البحث نشطًا والعميل الجديد يتطابق مع البحث، أضفه للنتائج
+      // إذا كان البحث نشطًا والزبون الجديد يتطابق مع البحث، أضفه للنتائج
       if (_isSearching && _searchQuery.isNotEmpty) {
         final lowerQuery = _searchQuery.toLowerCase();
         final nameMatch = newCustomer.name.toLowerCase().contains(lowerQuery);
@@ -179,7 +179,7 @@ class CustomerProvider extends ChangeNotifier {
       _hasMore = _customers.length < totalCount;
 
       log(
-        '✅ تم إضافة عميل جديد. الإجمالي: $totalCount, المحملين: ${_customers.length}, _hasMore: $_hasMore',
+        '✅ تم إضافة زبون جديد. الإجمالي: $totalCount, المحملين: ${_customers.length}, _hasMore: $_hasMore',
       );
 
       notifyListeners();
@@ -193,13 +193,13 @@ class CustomerProvider extends ChangeNotifier {
   // وأيضاً عدل دالة updateCustomer للتحقق عند التعديل:
   Future<void> updateCustomer(Customer customer) async {
     try {
-      // التحقق من وجود عميل آخر بنفس الاسم (غير العميل الحالي)
+      // التحقق من وجود زبون آخر بنفس الاسم (غير الزبون الحالي)
       final nameExists = await isCustomerNameExists(
         customer.name,
         excludeId: customer.id,
       );
       if (nameExists) {
-        throw Exception('اسم العميل "${customer.name}" موجود مسبقاً');
+        throw Exception('اسم الزبون "${customer.name}" موجود مسبقاً');
       }
 
       final db = await _dbHelper.db;
@@ -239,9 +239,9 @@ class CustomerProvider extends ChangeNotifier {
     }
   }
 
-  // 🔄 إضافة عميل جديد
+  // 🔄 إضافة زبون جديد
 
-  // 🔍 البحث في العملاء
+  // 🔍 البحث في الزبائن
   Future<void> searchCustomers(String query) async {
     final trimmedQuery = query.trim();
 
@@ -275,7 +275,7 @@ class CustomerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 📥 تحميل المزيد من العملاء (يعمل مع البحث والتحميل العادي)
+  // 📥 تحميل المزيد من الزبائن (يعمل مع البحث والتحميل العادي)
   Future<void> loadMoreCustomers() async {
     if (_isLoading || !_hasMore) return;
 
@@ -318,7 +318,7 @@ class CustomerProvider extends ChangeNotifier {
             _filteredCustomers.add(customer);
           }
         } catch (e) {
-          log('خطأ في تحويل بيانات العميل: $e');
+          log('خطأ في تحويل بيانات الزبون: $e');
         }
       }
 
@@ -344,7 +344,7 @@ class CustomerProvider extends ChangeNotifier {
     try {
       final db = await _dbHelper.db;
 
-      // التحقق مما إذا كان للعميل فواتير مرتبطة
+      // التحقق مما إذا كان للزبون فواتير مرتبطة
       final sales = await db.query(
         'sales',
         where: 'customer_id = ?',
@@ -352,7 +352,7 @@ class CustomerProvider extends ChangeNotifier {
       );
 
       if (sales.isNotEmpty) {
-        throw Exception('لا يمكن حذف العميل لأنه لديه فواتير مرتبطة');
+        throw Exception('لا يمكن حذف الزبون لأنه لديه فواتير مرتبطة');
       }
 
       await db.delete('customers', where: 'id = ?', whereArgs: [id]);
@@ -396,7 +396,7 @@ class CustomerProvider extends ChangeNotifier {
     }
   }
 
-  // 🔢 الحصول على إجمالي عدد العملاء في قاعدة البيانات
+  // 🔢 الحصول على إجمالي عدد الزبائن في قاعدة البيانات
   Future<int> getTotalCustomersCount() async {
     try {
       final db = await _dbHelper.db;
@@ -410,7 +410,7 @@ class CustomerProvider extends ChangeNotifier {
     }
   }
 
-  // 👤 الحصول على عميل بالـ ID
+  // 👤 الحصول على زبون بالـ ID
   Customer? getCustomerById(int id) {
     try {
       return _customers.firstWhere((customer) => customer.id == id);

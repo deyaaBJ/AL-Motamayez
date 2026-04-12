@@ -82,7 +82,7 @@ class _MainScreenState extends State<MainScreen> {
         });
       }
     } catch (e) {
-      appLog('⚠️ خطأ في تحميل إشعارات الدفعات: $e', name: 'MainScreen');
+      appLog('⚠️ خطأ في تحميل إشعارات الواردات: $e', name: 'MainScreen');
     }
   }
 
@@ -185,6 +185,7 @@ class _MainScreenState extends State<MainScreen> {
           flex: 5,
           child: Column(
             children: [
+              const SizedBox(height: 50),
               OffersSection(
                 productsOnSale: productProvider.productsOnOfferCount,
                 totalProducts: productProvider.totalProducts,
@@ -192,10 +193,12 @@ class _MainScreenState extends State<MainScreen> {
               ),
               const SizedBox(height: 16),
               Expanded(
+                // هذا الـ Expanded يجعل NotificationsSection يأخذ المساحة المتبقية حتى الأسفل
                 child: NotificationsSection(
                   expiredBatches: _expiredBatches,
                   expiringIn7DaysBatches: _expiringIn7DaysBatches,
                   onTapFilter: _goToBatchesWithFilter,
+                  expandToFill: true, // ✅ يمدد الحاوية لآخر الشاشة
                 ),
               ),
             ],

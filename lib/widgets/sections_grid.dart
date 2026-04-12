@@ -130,8 +130,8 @@ class _SectionCard extends StatelessWidget {
         return 'تقارير المبيعات والأداء';
       case 'الإعدادات':
         return 'إعدادات النظام';
-      case 'العملاء':
-        return 'إدارة معلومات العملاء';
+      case 'الزبائن':
+        return 'إدارة معلومات الزبائن';
       default:
         return '';
     }

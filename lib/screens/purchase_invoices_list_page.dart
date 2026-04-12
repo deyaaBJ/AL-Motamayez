@@ -221,7 +221,7 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
 
   Widget _buildHeader(PurchaseInvoiceProvider provider) {
     final invoices = provider.invoices;
-    final totalAmount = invoices.fold<double>(
+    invoices.fold<double>(
       0,
       (sum, invoice) => sum + (invoice['total_cost'] ?? 0.0),
     );
@@ -266,14 +266,6 @@ class _PurchaseInvoicesListPageState extends State<PurchaseInvoicesListPage> {
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${invoices.length} فاتورة - ${_formatCurrency(totalAmount)}',
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 14,
                       ),
                     ),
                   ],

@@ -62,7 +62,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
     try {
       await _provider.loadBatches(reset: true, filter: _currentFilter);
     } catch (e) {
-      _showErrorSnackbar('حدث خطأ في تحميل الدفعات: $e');
+      _showErrorSnackbar('حدث خطأ في تحميل الواردات: $e');
     } finally {
       if (mounted) {
         setState(() => _isInitialLoading = false);
@@ -279,7 +279,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
         children: [
           CircularProgressIndicator(color: Color(0xFF6A3093), strokeWidth: 2),
           SizedBox(height: 16),
-          Text('جاري تحميل الدفعات...', style: TextStyle(color: Colors.grey)),
+          Text('جاري تحميل الواردات...', style: TextStyle(color: Colors.grey)),
         ],
       ),
     );
@@ -335,7 +335,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
                     Text(
                       _searchQuery.isNotEmpty
                           ? 'لا توجد نتائج للبحث "$_searchQuery"'
-                          : 'لا توجد دفعات',
+                          : 'لا توجد واردات',
                       style: TextStyle(
                         fontSize: 18,
                         color: Colors.grey.shade600,
@@ -347,7 +347,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
                     Text(
                       _searchQuery.isNotEmpty
                           ? 'حاول البحث بكلمات أخرى'
-                          : 'يمكنك إضافة دفعات جديدة من شاشة المنتجات',
+                          : 'يمكنك إضافة واردات جديدة من شاشة فاتورة الشراء',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey.shade500,
@@ -406,7 +406,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: BaseLayout(
-        currentPage: 'الدفعات',
+        currentPage: 'الواردات',
         title: 'إدارة الدُفعات',
         child: Column(
           children: [
@@ -423,7 +423,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
 
             BatchTableHeader(),
 
-            // الجزء الرئيسي (قائمة الدفعات) يأخذ أكبر مساحة
+            // الجزء الرئيسي (قائمة الواردات) يأخذ أكبر مساحة
             Expanded(
               flex: 10, // إعطاء وزن أكبر للجدول
               child: _buildBatchesList(),

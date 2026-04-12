@@ -62,7 +62,7 @@ class _BaseLayoutState extends State<BaseLayout> {
       case 'التقارير':
         Navigator.pushReplacementNamed(context, '/report');
         break;
-      case 'العملاء':
+      case 'الزبائن':
         Navigator.pushReplacementNamed(context, '/customer');
         break;
       case 'فاتورة شراء':
@@ -77,7 +77,7 @@ class _BaseLayoutState extends State<BaseLayout> {
       case 'المصاريف':
         Navigator.pushReplacementNamed(context, '/expenses');
         break;
-      case 'الدفعات':
+      case 'الواردات':
         Navigator.pushReplacementNamed(context, '/batches');
         break;
       case 'cashier':
@@ -98,7 +98,7 @@ class _BaseLayoutState extends State<BaseLayout> {
 
   final List<Map<String, dynamic>> _rightSidebarItems = [
     {'icon': Icons.home_filled, 'label': 'الرئيسية', 'page': 'home'},
-    {'icon': Icons.people_alt_rounded, 'label': 'العملاء', 'page': 'العملاء'},
+    {'icon': Icons.people_alt_rounded, 'label': 'الزبائن', 'page': 'الزبائن'},
     {
       'icon': Icons.local_shipping_rounded,
       'label': 'الموردين',
@@ -109,7 +109,11 @@ class _BaseLayoutState extends State<BaseLayout> {
       'label': 'المصاريف',
       'page': 'المصاريف',
     },
-    {'icon': Icons.inventory_2_rounded, 'label': 'الدفعات', 'page': 'الدفعات'},
+    {
+      'icon': Icons.inventory_2_rounded,
+      'label': 'الواردات',
+      'page': 'الواردات',
+    },
     {
       'icon': Icons.receipt_long_rounded,
       'label': 'نشاط الكاشير',
@@ -599,7 +603,7 @@ class _BaseLayoutState extends State<BaseLayout> {
     // Admin يرى كل شيء
     if (role == 'admin') return true;
 
-    // Cashier - يُسمح له فقط بـ: نقاط البيع، العملاء
+    // Cashier - يُسمح له فقط بـ: نقاط البيع، الزبائن
     if (role == 'cashier') {
       final blockedPages = [
         'التقارير', // التقارير

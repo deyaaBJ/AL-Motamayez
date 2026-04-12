@@ -23,12 +23,21 @@ class SupplierAccountStatementPage extends StatefulWidget {
 class _SupplierAccountStatementPageState
     extends State<SupplierAccountStatementPage> {
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _collectAmountController =
+      TextEditingController();
+  final TextEditingController _collectNoteController = TextEditingController();
   bool _isLoading = true;
   double _currentBalance = 0.0;
   bool _isLoadingMore = false;
   late List<Map<String, dynamic>> _transactions = [];
   bool _hasMore = true;
+  int _totalTransactionsCount = 0;
   int? _hoveredRowIndex;
+  Map<String, dynamic> _summary = const {
+    'total_invoices': 0.0,
+    'total_payments': 0.0,
+    'total_collections': 0.0,
+  };
 
   @override
   void initState() {
@@ -41,6 +50,8 @@ class _SupplierAccountStatementPageState
 
   @override
   void dispose() {
+    _collectAmountController.dispose();
+    _collectNoteController.dispose();
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     super.dispose();
@@ -49,18 +60,28 @@ class _SupplierAccountStatementPageState
   Future<void> _loadInitialData() async {
     try {
       final provider = Provider.of<SupplierProvider>(context, listen: false);
+      final totalCount = await provider.getTotalTransactionsCount(
+        widget.supplierId,
+      );
+
       final results = await Future.wait([
         provider.getSupplierBalance(widget.supplierId),
-        provider.getSupplierTransactions(widget.supplierId),
-        provider.getTotalTransactionsCount(widget.supplierId),
+        provider.getSupplierTransactionsPage(
+          widget.supplierId,
+          limit: 20,
+          offset: 0,
+        ),
+        provider.getSupplierSummary(widget.supplierId),
       ]);
 
       if (mounted) {
         setState(() {
           _currentBalance = results[0] as double;
           _transactions = results[1] as List<Map<String, dynamic>>;
+          _summary = results[2] as Map<String, dynamic>;
+          _totalTransactionsCount = totalCount;
           _isLoading = false;
-          _hasMore = provider.hasMoreTransactions(widget.supplierId);
+          _hasMore = _transactions.length < _totalTransactionsCount;
         });
       }
     } catch (e) {
@@ -70,21 +91,28 @@ class _SupplierAccountStatementPageState
   }
 
   Future<void> _loadMoreTransactions() async {
-    if (_isLoadingMore || !_hasMore) return;
+    if (_isLoadingMore ||
+        !_hasMore ||
+        _transactions.length >= _totalTransactionsCount) {
+      return;
+    }
     setState(() => _isLoadingMore = true);
 
     try {
       final provider = Provider.of<SupplierProvider>(context, listen: false);
-      final moreTransactions = await provider.getSupplierTransactions(
+      final moreTransactions = await provider.getSupplierTransactionsPage(
         widget.supplierId,
-        loadMore: true,
+        limit: 20,
+        offset: _transactions.length,
       );
 
       if (mounted) {
         setState(() {
-          _transactions.addAll(moreTransactions);
+          if (moreTransactions.isNotEmpty) {
+            _transactions.addAll(moreTransactions);
+          }
           _isLoadingMore = false;
-          _hasMore = provider.hasMoreTransactions(widget.supplierId);
+          _hasMore = _transactions.length < _totalTransactionsCount;
         });
       }
     } catch (e) {
@@ -103,8 +131,6 @@ class _SupplierAccountStatementPageState
   }
 
   Future<void> _refreshData() async {
-    final provider = Provider.of<SupplierProvider>(context, listen: false);
-    provider.resetTransactionsPagination(widget.supplierId);
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -112,6 +138,38 @@ class _SupplierAccountStatementPageState
       });
     }
     await _loadInitialData();
+  }
+
+  Future<void> _refreshStatementAfterMutation() async {
+    final provider = Provider.of<SupplierProvider>(context, listen: false);
+
+    try {
+      final totalCount = await provider.getTotalTransactionsCount(
+        widget.supplierId,
+      );
+
+      final results = await Future.wait([
+        provider.getSupplierBalance(widget.supplierId),
+        provider.getSupplierTransactionsPage(
+          widget.supplierId,
+          limit: 20,
+          offset: 0,
+        ),
+        provider.getSupplierSummary(widget.supplierId),
+      ]);
+
+      if (!mounted) return;
+
+      setState(() {
+        _currentBalance = results[0] as double;
+        _transactions = results[1] as List<Map<String, dynamic>>;
+        _totalTransactionsCount = totalCount;
+        _summary = results[2] as Map<String, dynamic>;
+        _hasMore = _transactions.length < _totalTransactionsCount;
+      });
+    } catch (e) {
+      log('خطأ في تحديث كشف المورد بعد العملية: $e');
+    }
   }
 
   String _translatePaymentType(String? type) {
@@ -196,6 +254,10 @@ class _SupplierAccountStatementPageState
       child: Column(
         children: [
           _buildCompactHeader(),
+          if (_currentBalance < 0) ...[
+            const SizedBox(height: 12),
+            _buildCollectCreditAction(),
+          ],
           const SizedBox(height: 16),
           _buildSummaryBar(),
           const SizedBox(height: 16),
@@ -283,17 +345,12 @@ class _SupplierAccountStatementPageState
   }
 
   Widget _buildSummaryBar() {
-    double totalInvoices = 0;
-    double totalPayments = 0;
-
-    for (var t in _transactions) {
-      final amount = (t['amount'] as num).toDouble();
-      if (t['type'] == 'payment') {
-        totalPayments += amount;
-      } else {
-        totalInvoices += amount;
-      }
-    }
+    final totalInvoices =
+        (_summary['total_invoices'] as num?)?.toDouble() ?? 0.0;
+    final totalPayments =
+        (_summary['total_payments'] as num?)?.toDouble() ?? 0.0;
+    final totalCollections =
+        (_summary['total_collections'] as num?)?.toDouble() ?? 0.0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -316,6 +373,15 @@ class _SupplierAccountStatementPageState
               Icons.payments_outlined,
             ),
           ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildSummaryItem(
+              'Ø§Ù„Ù…Ø³ØªØ±Ø¬Ø¹',
+              totalCollections,
+              Colors.teal.shade700,
+              Icons.download_done_outlined,
+            ),
+          ),
         ],
       ),
     );
@@ -327,6 +393,9 @@ class _SupplierAccountStatementPageState
     Color color,
     IconData icon,
   ) {
+    final resolvedTitle =
+        icon == Icons.download_done_outlined ? 'المسترجع' : title;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -345,7 +414,7 @@ class _SupplierAccountStatementPageState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  resolvedTitle,
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                 ),
                 const SizedBox(height: 2),
@@ -362,6 +431,192 @@ class _SupplierAccountStatementPageState
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCollectCreditAction() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.teal.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.teal.shade100),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.account_balance_wallet_outlined,
+            color: Colors.teal.shade700,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'يوجد لنا رصيد عند المورد. يمكنك تسجيل استرجاعه كحركة مستقلة.',
+              style: TextStyle(
+                color: Colors.teal.shade900,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton.icon(
+            onPressed: _showCollectCreditDialog,
+            icon: const Icon(Icons.download_done_outlined),
+            label: const Text('استرجاع الرصيد'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal.shade700,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCollectCreditDialog() async {
+    _collectAmountController.clear();
+    _collectNoteController.text = 'استرجاع رصيد من المورد';
+    bool isSubmitting = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Directionality(
+              textDirection: TextDirection.rtl,
+              child: AlertDialog(
+                title: const Text('استرجاع رصيد من المورد'),
+                content: SizedBox(
+                  width: 420,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'الرصيد المتاح للاسترجاع: ${Formatters.formatCurrency(_currentBalance.abs())}',
+                        style: TextStyle(
+                          color: Colors.teal.shade800,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _collectAmountController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'المبلغ',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _collectNoteController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'ملاحظات',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed:
+                        isSubmitting
+                            ? null
+                            : () => Navigator.pop(dialogContext),
+                    child: const Text('إلغاء'),
+                  ),
+                  ElevatedButton(
+                    onPressed:
+                        isSubmitting
+                            ? null
+                            : () async {
+                              final amount = double.tryParse(
+                                _collectAmountController.text.trim(),
+                              );
+
+                              if (amount == null || amount <= 0) {
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('يرجى إدخال مبلغ صحيح'),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              if (amount > _currentBalance.abs()) {
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'المبلغ أكبر من الرصيد المتاح',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              setDialogState(() => isSubmitting = true);
+
+                              try {
+                                final provider = Provider.of<SupplierProvider>(
+                                  this.context,
+                                  listen: false,
+                                );
+                                await provider.collectSupplierCredit(
+                                  supplierId: widget.supplierId,
+                                  amount: amount,
+                                  note:
+                                      _collectNoteController.text.trim().isEmpty
+                                          ? null
+                                          : _collectNoteController.text.trim(),
+                                );
+
+                                if (!mounted) return;
+                                // ignore: use_build_context_synchronously
+                                Navigator.of(dialogContext).pop();
+                                await _refreshStatementAfterMutation();
+                                // ignore: use_build_context_synchronously
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'تم تسجيل استرجاع الرصيد بنجاح',
+                                    ),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                setDialogState(() => isSubmitting = false);
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'تعذر استرجاع الرصيد: ${e.toString()}',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                    child:
+                        isSubmitting
+                            ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : const Text('تسجيل الحركة'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -474,6 +729,19 @@ class _SupplierAccountStatementPageState
                               itemCount:
                                   _transactions.length + (_hasMore ? 1 : 0),
                               itemBuilder: (context, index) {
+                                if (_hasMore &&
+                                    !_isLoadingMore &&
+                                    index >= _transactions.length - 3 &&
+                                    index < _transactions.length) {
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (mounted) {
+                                      _loadMoreTransactions();
+                                    }
+                                  });
+                                }
+
                                 if (index == _transactions.length) {
                                   return _buildLoadMoreIndicator();
                                 }
@@ -500,7 +768,8 @@ class _SupplierAccountStatementPageState
     double maxWidth,
   ) {
     final type =
-        transaction['type'] as String; // 'purchase', 'payment', 'return'
+        transaction['type']
+            as String; // 'purchase', 'payment', 'return', 'collection'
     final amount = (transaction['amount'] as num).toDouble();
     final date =
         transaction['date'] as String? ??
@@ -555,7 +824,7 @@ class _SupplierAccountStatementPageState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      type == 'return'
+                      type == 'return' || type == 'collection'
                           ? '$typeText ${invoiceId != null ? '#$invoiceId' : ''}'
                           : type == 'purchase'
                           ? '$typeText ${invoiceId != null ? '#$invoiceId' : ''}'
@@ -613,6 +882,8 @@ class _SupplierAccountStatementPageState
                 child: Text(
                   (type == 'payment'
                           ? '+ '
+                          : type == 'collection'
+                          ? '+ '
                           : type == 'return'
                           ? '- '
                           : '') +
@@ -624,6 +895,8 @@ class _SupplierAccountStatementPageState
                     color:
                         type == 'payment'
                             ? Colors.green.shade700
+                            : type == 'collection'
+                            ? Colors.teal.shade700
                             : type == 'return'
                             ? Colors.blue.shade700
                             : Colors.red.shade700,
@@ -722,7 +995,8 @@ class _SupplierAccountStatementPageState
 
   void _showTransactionDetails(Map<String, dynamic> transaction) {
     final type =
-        transaction['type'] as String; // 'purchase', 'payment', 'return'
+        transaction['type']
+            as String; // 'purchase', 'payment', 'return', 'collection'
     final typeColor = _getTransactionTypeColor(type);
     final typeBgColor = _getTransactionTypeBackgroundColor(type);
     final typeText = _getTransactionTypeText(type);
@@ -786,6 +1060,8 @@ class _SupplierAccountStatementPageState
                     Text(
                       (type == 'payment'
                               ? '+ '
+                              : type == 'collection'
+                              ? '+ '
                               : type == 'return'
                               ? '- '
                               : '') +
@@ -840,6 +1116,9 @@ class _SupplierAccountStatementPageState
   }
 
   Color _getTransactionTypeColor(String type) {
+    if (type == 'collection') {
+      return Colors.teal.shade700;
+    }
     switch (type) {
       case 'purchase':
         return Colors.red.shade700; // مشتريات - أحمر
@@ -853,6 +1132,9 @@ class _SupplierAccountStatementPageState
   }
 
   Color _getTransactionTypeBackgroundColor(String type) {
+    if (type == 'collection') {
+      return Colors.teal.shade50;
+    }
     switch (type) {
       case 'purchase':
         return Colors.red.shade50;
@@ -866,6 +1148,9 @@ class _SupplierAccountStatementPageState
   }
 
   String _getTransactionTypeText(String type) {
+    if (type == 'collection') {
+      return 'استرجاع رصيد';
+    }
     switch (type) {
       case 'purchase':
         return 'فاتورة شراء';
@@ -879,6 +1164,9 @@ class _SupplierAccountStatementPageState
   }
 
   IconData _getTransactionTypeIcon(String type) {
+    if (type == 'collection') {
+      return Icons.download_done_outlined;
+    }
     switch (type) {
       case 'purchase':
         return Icons.shopping_cart_outlined;
@@ -931,7 +1219,14 @@ class _SupplierAccountStatementPageState
                 strokeWidth: 2,
                 color: Colors.blue.shade700,
               )
-              : Icon(Icons.expand_more, color: Colors.grey.shade400),
+              : InkWell(
+                onTap: _loadMoreTransactions,
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(Icons.expand_more, color: Colors.grey.shade400),
+                ),
+              ),
     );
   }
 

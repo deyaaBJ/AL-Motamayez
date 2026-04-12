@@ -28,7 +28,7 @@ class CustomerItem extends StatelessWidget {
 
             const SizedBox(width: 16),
 
-            // معلومات العميل
+            // معلومات الزبون
             Expanded(child: _buildCustomerInfo()),
 
             // أزرار الإجراءات

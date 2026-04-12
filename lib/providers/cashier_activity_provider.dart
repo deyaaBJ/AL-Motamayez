@@ -11,6 +11,8 @@ class CashierActivityProvider with ChangeNotifier {
   DateTime? _customDay; // ⬅️ جديد: يوم واحد مخصص
   bool _isLoading = false;
   String? _error;
+  final Map<int, List<InvoiceSummary>> _invoicesByUser = {};
+  final Map<int, bool> _isLoadingInvoicesByUser = {};
 
   // ========== Getters ==========
   List<CashierActivityModel> get cashierActivities => _cashierActivities;
@@ -18,6 +20,8 @@ class CashierActivityProvider with ChangeNotifier {
   DateTime? get customDay => _customDay; // ⬅️ جديد
   bool get isLoading => _isLoading;
   String? get error => _error;
+  List<InvoiceSummary> invoicesForUser(int userId) => _invoicesByUser[userId] ?? [];
+  bool isInvoicesLoading(int userId) => _isLoadingInvoicesByUser[userId] ?? false;
 
   // ========== الفلاتر الزمنية ==========
   Map<String, dynamic> _getDateRange() {
@@ -99,6 +103,8 @@ class CashierActivityProvider with ChangeNotifier {
         [dateRange['start'], dateRange['end'], 'cashier', 'admin', 'tax'],
       );
 
+      _invoicesByUser.clear();
+      _isLoadingInvoicesByUser.clear();
       List<CashierActivityModel> activities = [];
 
       for (var row in results) {
@@ -110,36 +116,6 @@ class CashierActivityProvider with ChangeNotifier {
         // ⬅️ تخطي الفواتير اللي ما فيها user_id (البيانات القديمة)
         if (userId == null) continue;
 
-        final saleIdsStr = row['sale_ids'] as String?;
-        final saleIds =
-            saleIdsStr == null || saleIdsStr.trim().isEmpty
-                ? <int>[]
-                : saleIdsStr.split(',').map(int.parse).toList();
-
-        // جلب تفاصيل الفواتير
-        final invoicesData =
-            saleIds.isEmpty
-                ? <Map<String, Object?>>[]
-                : await db.rawQuery(
-                  '''
-          SELECT 
-            s.id,
-            s.date,
-            s.total_amount,
-            s.total_profit,
-            s.payment_type,
-            c.name as customer_name
-          FROM sales s
-          LEFT JOIN customers c ON s.customer_id = c.id
-          WHERE s.id IN (${saleIds.map((_) => '?').join(',')})
-          ORDER BY s.date DESC
-        ''',
-                  saleIds,
-                );
-
-        final invoices =
-            invoicesData.map((e) => InvoiceSummary.fromMap(e)).toList();
-
         activities.add(
           CashierActivityModel.fromMap({
             'user_id': userId,
@@ -148,7 +124,7 @@ class CashierActivityProvider with ChangeNotifier {
             'user_role': userRole,
             'total_invoices': row['total_invoices'],
             'total_sales': row['total_sales'],
-          }, invoices),
+          }, const []),
         );
       }
 
@@ -183,6 +159,45 @@ class CashierActivityProvider with ChangeNotifier {
   // ========== تحديث ==========
   Future<void> refresh() async {
     await loadCashierActivities();
+  }
+
+  Future<void> loadInvoicesForUser(int userId) async {
+    if (_isLoadingInvoicesByUser[userId] == true) return;
+    if ((_invoicesByUser[userId] ?? []).isNotEmpty) return;
+
+    try {
+      _isLoadingInvoicesByUser[userId] = true;
+      notifyListeners();
+
+      final db = await _dbHelper.db;
+      final dateRange = _getDateRange();
+      final invoicesData = await db.rawQuery(
+        '''
+        SELECT 
+          s.id,
+          s.date,
+          s.total_amount,
+          s.total_profit,
+          s.payment_type,
+          c.name as customer_name
+        FROM sales s
+        LEFT JOIN customers c ON s.customer_id = c.id
+        WHERE s.user_id = ?
+          AND s.date >= ?
+          AND s.date < ?
+        ORDER BY s.date DESC, s.id DESC
+        ''',
+        [userId, dateRange['start'], dateRange['end']],
+      );
+
+      _invoicesByUser[userId] =
+          invoicesData.map((e) => InvoiceSummary.fromMap(e)).toList();
+    } catch (e) {
+      _error = 'حدث خطأ أثناء تحميل فواتير الكاشير: $e';
+    } finally {
+      _isLoadingInvoicesByUser[userId] = false;
+      notifyListeners();
+    }
   }
 
   // ========== مسح البيانات ==========

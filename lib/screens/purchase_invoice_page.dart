@@ -86,6 +86,10 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         _searchResults = [];
         _isSearching = false;
         _resetUnitData();
+        _selectedProductId = null;
+        _selectedProduct = null;
+        _qtyController.clear();
+        _costController.clear();
       });
       return;
     }
@@ -137,20 +141,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
               );
 
               results.add(modifiedProduct);
-
-              // عرض رسالة إعلامية للمستخدم
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'سعر تكلفة الوحدة المقترح: ${Formatters.formatCurrency(suggestedUnitCost)} '
-                      '(${Formatters.formatCurrency(product.costPrice)} × ${_selectedUnitContainQty.toInt()})',
-                    ),
-                    backgroundColor: Colors.blue,
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-              });
 
               log('💰 حساب سعر تكلفة الوحدة:');
               log('   - المنتج: ${product.name}');
@@ -1676,7 +1666,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
+        duration: const Duration(milliseconds: 1200),
         behavior: SnackBarBehavior.floating,
       ),
     );

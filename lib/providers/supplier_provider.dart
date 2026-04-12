@@ -125,15 +125,18 @@ class SupplierProvider with ChangeNotifier {
         '''
       SELECT 
         COUNT(*) as total_count,
-        COALESCE(SUM(CASE WHEN type = 'invoice' THEN amount ELSE 0 END), 0) as total_invoices,
+        COALESCE(SUM(CASE WHEN type = 'purchase' THEN amount ELSE 0 END), 0) as total_invoices,
         COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as total_payments,
+        COALESCE(SUM(CASE WHEN type = 'collection' THEN amount ELSE 0 END), 0) as total_collections,
         COALESCE(SUM(CASE 
-          WHEN type = 'invoice' THEN amount 
+          WHEN type = 'purchase' THEN amount 
           WHEN type = 'payment' THEN -amount 
+          WHEN type = 'return' THEN -amount
+          WHEN type = 'collection' THEN amount
           ELSE 0 
         END), 0) as net_balance,
         COALESCE(SUM(CASE 
-          WHEN type = 'invoice' 
+          WHEN type = 'purchase' 
           AND EXISTS (
             SELECT 1 FROM purchase_invoices pi 
             WHERE pi.id = purchase_invoice_id AND pi.remaining_amount > 0
@@ -150,6 +153,8 @@ class SupplierProvider with ChangeNotifier {
         final row = result.first;
         final totalInvoices = (row['total_invoices'] as num?)?.toDouble() ?? 0;
         final totalPayments = (row['total_payments'] as num?)?.toDouble() ?? 0;
+        final totalCollections =
+            (row['total_collections'] as num?)?.toDouble() ?? 0;
         final netBalance = (row['net_balance'] as num?)?.toDouble() ?? 0;
         final unpaidInvoices =
             (row['unpaid_invoices_total'] as num?)?.toDouble() ?? 0;
@@ -179,6 +184,7 @@ class SupplierProvider with ChangeNotifier {
         return {
           'total_invoices': totalInvoices,
           'total_payments': totalPayments,
+          'total_collections': totalCollections,
           'net_balance': netBalance,
           'total_count': row['total_count'] as int? ?? 0,
           'unpaid_invoices_total': unpaidInvoices,
@@ -193,6 +199,7 @@ class SupplierProvider with ChangeNotifier {
       return {
         'total_invoices': 0,
         'total_payments': 0,
+        'total_collections': 0,
         'net_balance': 0,
         'total_count': 0,
         'unpaid_invoices_total': 0,
@@ -207,6 +214,7 @@ class SupplierProvider with ChangeNotifier {
       return {
         'total_invoices': 0,
         'total_payments': 0,
+        'total_collections': 0,
         'net_balance': 0,
         'total_count': 0,
         'unpaid_invoices_total': 0,
@@ -229,7 +237,7 @@ class SupplierProvider with ChangeNotifier {
     List<dynamic> params = [supplierId];
 
     if (transactionType != null && transactionType != 'الكل') {
-      if (transactionType == 'دفعات') {
+      if (transactionType == 'واردات') {
         typeCondition = "AND type = ?";
         params.add('payment');
       } else if (transactionType == 'فواتير') {
@@ -256,9 +264,10 @@ class SupplierProvider with ChangeNotifier {
   Future<List<Map<String, dynamic>>> getSupplierTransactions(
     int supplierId, {
     bool loadMore = false,
+    int? limitOverride,
   }) async {
     if (_isLoadingTransactions[supplierId] == true) {
-      return _transactionsCache[supplierId] ?? [];
+      return loadMore ? [] : (_transactionsCache[supplierId] ?? []);
     }
 
     _isLoadingTransactions[supplierId] = true;
@@ -273,10 +282,12 @@ class SupplierProvider with ChangeNotifier {
         _transactionsCache[supplierId] = [];
       }
 
-      final currentPage = _transactionPage[supplierId] ?? 0;
-      final offset = currentPage * _transactionsPageSize;
+      final currentCache = _transactionsCache[supplierId] ?? [];
+      final offset = loadMore ? currentCache.length : 0;
 
       // الاستعلام المعدل - إضافة payment_type
+      final pageSize = limitOverride ?? _transactionsPageSize;
+
       final results = await db.rawQuery(
         '''
       SELECT 
@@ -293,20 +304,20 @@ class SupplierProvider with ChangeNotifier {
       ORDER BY st.date DESC, st.created_at DESC, st.id DESC
       LIMIT ? OFFSET ?
       ''',
-        [supplierId, _transactionsPageSize, offset],
+        [supplierId, pageSize, offset],
       );
 
       if (loadMore) {
-        final currentList = _transactionsCache[supplierId] ?? [];
-        currentList.addAll(results);
+        final currentList = List<Map<String, dynamic>>.from(currentCache);
+        currentList.addAll(List<Map<String, dynamic>>.from(results));
         _transactionsCache[supplierId] = currentList;
       } else {
         _transactionsCache[supplierId] = List.from(results);
       }
 
-      _transactionPage[supplierId] = currentPage + 1;
-      _hasMoreTransactions[supplierId] =
-          results.length == _transactionsPageSize;
+      _transactionPage[supplierId] =
+          ((_transactionsCache[supplierId]?.length ?? 0) / pageSize).ceil();
+      _hasMoreTransactions[supplierId] = results.length == pageSize;
 
       return results;
     } catch (e) {
@@ -315,6 +326,40 @@ class SupplierProvider with ChangeNotifier {
     } finally {
       _isLoadingTransactions[supplierId] = false;
       _safeNotifyListeners();
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getSupplierTransactionsPage(
+    int supplierId, {
+    required int limit,
+    required int offset,
+  }) async {
+    final db = await _dbHelper.db;
+
+    try {
+      final results = await db.rawQuery(
+        '''
+        SELECT 
+          st.*, 
+          pi.id as purchase_invoice_id,
+          pi.date as invoice_date,
+          pi.total_cost,
+          pi.paid_amount,
+          pi.remaining_amount,
+          pi.payment_type
+        FROM supplier_transactions st
+        LEFT JOIN purchase_invoices pi ON st.purchase_invoice_id = pi.id
+        WHERE st.supplier_id = ?
+        ORDER BY st.date DESC, st.created_at DESC, st.id DESC
+        LIMIT ? OFFSET ?
+        ''',
+        [supplierId, limit, offset],
+      );
+
+      return List<Map<String, dynamic>>.from(results);
+    } catch (e) {
+      log('❌ خطأ في جلب صفحة حركات المورد: $e');
+      return [];
     }
   }
 
@@ -563,6 +608,70 @@ class SupplierProvider with ChangeNotifier {
       await loadSuppliers(searchQuery: _lastSearchQuery);
     } catch (e) {
       log('❌ خطأ في إضافة دفعة: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> collectSupplierCredit({
+    required int supplierId,
+    required double amount,
+    String? note,
+  }) async {
+    final db = await _dbHelper.db;
+
+    try {
+      await db.transaction((txn) async {
+        final balanceResult = await txn.query(
+          'supplier_balance',
+          columns: ['balance'],
+          where: 'supplier_id = ?',
+          whereArgs: [supplierId],
+          limit: 1,
+        );
+
+        final currentBalance =
+            balanceResult.isNotEmpty
+                ? _toDouble(balanceResult.first['balance'])
+                : 0.0;
+
+        if (currentBalance >= 0) {
+          throw Exception('لا يوجد رصيد مستحق لنا عند المورد');
+        }
+
+        final availableCredit = currentBalance.abs();
+        if (amount > availableCredit) {
+          throw Exception('المبلغ أكبر من الرصيد المتاح للاسترداد');
+        }
+
+        await txn.insert('supplier_transactions', {
+          'supplier_id': supplierId,
+          'amount': amount,
+          'type': 'collection',
+          'date': DateTime.now().toIso8601String(),
+          'note': note ?? 'استرجاع رصيد من المورد',
+        });
+
+        await txn.rawUpdate(
+          '''
+          UPDATE supplier_balance
+          SET balance = balance + ?, last_updated = ?
+          WHERE supplier_id = ?
+          ''',
+          [amount, DateTime.now().toIso8601String(), supplierId],
+        );
+      });
+
+      final currentBalance = _balanceCache[supplierId] ?? 0;
+      _balanceCache[supplierId] = currentBalance + amount;
+      _safeNotifyListeners();
+    } catch (e) {
+      log('❌ خطأ في استرجاع رصيد المورد: $e');
+      if (e.toString().contains('CHECK constraint failed') ||
+          e.toString().contains('collection')) {
+        throw Exception(
+          'تعذر تسجيل نوع حركة الاسترجاع. أغلق التطبيق وافتحه مرة واحدة ثم أعد المحاولة.',
+        );
+      }
       rethrow;
     }
   }

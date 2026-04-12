@@ -64,7 +64,7 @@ class _CustomerSelectionDialogState extends State<CustomerSelectionDialog> {
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('جاري تحميل العملاء...'),
+            Text('جاري تحميل الزبائن...'),
           ],
         ),
       ),

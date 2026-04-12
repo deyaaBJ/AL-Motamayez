@@ -89,7 +89,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // معلومات العميل
+              // معلومات الزبون
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(

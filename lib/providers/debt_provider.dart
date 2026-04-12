@@ -80,10 +80,10 @@ class DebtProvider extends ChangeNotifier {
 
     // 2️⃣ عدل الرصيد بناءً على نوع المعاملة
     if (type == TransactionType.payment) {
-      // تسديد دفعة: يقلل ما على العميل.
+      // تسديد دفعة: يقلل ما على الزبون.
       await _applyBalanceDelta(customerId: customerId, delta: -amount);
     } else if (type == TransactionType.withdrawal) {
-      // صرف رصيد: يقلل ما للعميل عندنا، لذلك يرفع الرصيد باتجاه الصفر.
+      // صرف رصيد: يقلل ما للزبون عندنا، لذلك يرفع الرصيد باتجاه الصفر.
       await _applyBalanceDelta(customerId: customerId, delta: amount);
     }
 
@@ -153,7 +153,7 @@ class DebtProvider extends ChangeNotifier {
             throw Exception('يمكن ربط السداد بالفواتير الآجلة فقط.');
           }
           if (sale['customer_id'] != customerId) {
-            throw Exception('تم اختيار فواتير لا تخص هذا العميل.');
+            throw Exception('تم اختيار فواتير لا تخص هذا الزبون.');
           }
         }
 
@@ -435,8 +435,8 @@ class DebtProvider extends ChangeNotifier {
       }
 
       // 3. الحساب النهائي
-      // الرصيد = فواتير آجلة - دفعات + صرف رصيد
-      // الرصيد السالب يعني أن المحل مدين للعميل.
+      // الرصيد = فواتير آجلة - واردات + صرف رصيد
+      // الرصيد السالب يعني أن المحل مدين للزبون.
       final totalDebt = totalCreditSales - totalPayments + totalWithdrawals;
       log('Calculated total debt: $totalDebt');
 
@@ -571,7 +571,7 @@ class DebtProvider extends ChangeNotifier {
   Future<void> debugCustomerData(int customerId) async {
     final db = await _dbHelper.db;
 
-    log('=== بدء فحص بيانات العميل $customerId ===');
+    log('=== بدء فحص بيانات الزبون $customerId ===');
 
     try {
       // 1. الفواتير الآجلة من جدول sales
@@ -621,10 +621,10 @@ class DebtProvider extends ChangeNotifier {
   }
 
   // ==============================
-  // 1️⃣1️⃣ تصحيح بيانات العميل
+  // 1️⃣1️⃣ تصحيح بيانات الزبون
   // ==============================
   Future<void> fixCustomerData(int customerId) async {
-    log('بدأ تصحيح بيانات العميل $customerId');
+    log('بدأ تصحيح بيانات الزبون $customerId');
 
     // 1. أعد حساب الرصيد من الصفر
     await recalculateAndUpdateBalance(customerId);
@@ -633,7 +633,7 @@ class DebtProvider extends ChangeNotifier {
     await loadCustomerBalance(customerId);
     await loadTransactionsPage(customerId);
 
-    log('تم تصحيح بيانات العميل $customerId');
+    log('تم تصحيح بيانات الزبون $customerId');
   }
 
   // ==============================
@@ -665,7 +665,7 @@ class DebtProvider extends ChangeNotifier {
     await recordCustomerPayment(
       customerId: customerId,
       amount: amount,
-      note: note ?? 'إيداع رصيد في حساب العميل',
+      note: note ?? 'إيداع رصيد في حساب الزبون',
     );
   }
 

@@ -1,10 +1,10 @@
-// lib/screens/product_details_screen.dart
 import 'dart:developer' show log;
 
 import 'package:flutter/material.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/product.dart';
 import 'package:motamayez/providers/product_provider.dart';
+import 'package:motamayez/screens/add_product_screen.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final int productId;
@@ -18,6 +18,7 @@ class ProductDetailsScreen extends StatefulWidget {
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   final ProductProvider _provider = ProductProvider();
   Product? _product;
+  Map<String, dynamic>? _costSummary;
   bool _isLoading = false;
 
   @override
@@ -31,8 +32,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
     try {
       final product = await _provider.getProductById(widget.productId);
+      final costSummary = await _provider.getProductCostSummary(
+        widget.productId,
+      );
+
       setState(() {
         _product = product;
+        _costSummary = costSummary;
         _isLoading = false;
       });
     } catch (e) {
@@ -41,7 +47,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     }
   }
 
-  /// تحويل الوحدة إلى نص مناسب
   String _getUnitText(String unit) {
     switch (unit.toLowerCase()) {
       case 'kg':
@@ -68,6 +73,36 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       default:
         return unit;
     }
+  }
+
+  double get _averageCost {
+    return (_costSummary?['average_cost'] as num?)?.toDouble() ??
+        _product?.costPrice ??
+        0.0;
+  }
+
+  double get _latestPurchaseCost {
+    return (_costSummary?['latest_purchase_cost'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  int get _openBatchesCount {
+    return (_costSummary?['open_batches_count'] as num?)?.toInt() ?? 0;
+  }
+
+  String get _latestPurchaseDateText {
+    final value = _costSummary?['latest_purchase_date'] as String?;
+    if (value == null || value.trim().isEmpty) {
+      return 'لا يوجد';
+    }
+
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) {
+      return value;
+    }
+
+    final month = parsed.month.toString().padLeft(2, '0');
+    final day = parsed.day.toString().padLeft(2, '0');
+    return '${parsed.year}-$month-$day';
   }
 
   @override
@@ -119,7 +154,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'قد يكون المنتج محذوفاً أو غير متوفر',
+                        'قد يكون المنتج محذوفا أو غير متوفر',
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey.shade600,
@@ -138,7 +173,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // رأس الصفحة - اسم المنتج الرئيسي
                               Container(
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(16),
@@ -160,80 +194,69 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     ),
                                   ],
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                child: Row(
                                   children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            // ignore: deprecated_member_use
-                                            color: Colors.white.withOpacity(
-                                              0.15,
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        // ignore: deprecated_member_use
+                                        color: Colors.white.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(
+                                        Icons.inventory_2,
+                                        color: Colors.white,
+                                        size: 36,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _product!.name,
+                                            style: const TextStyle(
+                                              fontSize: 26,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                              height: 1.2,
                                             ),
-                                            borderRadius: BorderRadius.circular(
-                                              12,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              // ignore: deprecated_member_use
+                                              color: Colors.white.withOpacity(
+                                                0.2,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                            ),
+                                            child: Text(
+                                              'كود: ${_product!.barcode ?? 'غير محدد'}',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                // ignore: deprecated_member_use
+                                                color: Colors.white.withOpacity(
+                                                  0.95,
+                                                ),
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                             ),
                                           ),
-                                          child: const Icon(
-                                            Icons.inventory_2,
-                                            color: Colors.white,
-                                            size: 36,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                _product!.name,
-                                                style: const TextStyle(
-                                                  fontSize: 26,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.white,
-                                                  height: 1.2,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 4,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white
-                                                  // ignore: deprecated_member_use
-                                                  .withOpacity(0.2),
-                                                  borderRadius:
-                                                      BorderRadius.circular(20),
-                                                ),
-                                                child: Text(
-                                                  'كود: ${_product!.barcode ?? 'غير محدد'}',
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    color: Colors.white
-                                                    // ignore: deprecated_member_use
-                                                    .withOpacity(0.95),
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
-
                               const SizedBox(height: 16),
-
-                              // صف المعلومات الأساسية - عمودين
                               Row(
                                 children: [
                                   Expanded(
@@ -266,10 +289,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   ),
                                 ],
                               ),
-
                               const SizedBox(height: 12),
-
-                              // صف الصلاحية والكمية
                               Row(
                                 children: [
                                   Expanded(
@@ -303,10 +323,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   ),
                                 ],
                               ),
-
                               const SizedBox(height: 16),
-
-                              // بطاقة الأسعار
                               Container(
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(16),
@@ -351,8 +368,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                       children: [
                                         Expanded(
                                           child: _buildPriceBox(
-                                            label: 'سعر الشراء',
-                                            value: _product!.costPrice,
+                                            label: 'متوسط التكلفة',
+                                            value: _averageCost,
                                             color: Colors.orange.shade700,
                                             unit: _getUnitText(
                                               _product!.baseUnit,
@@ -371,6 +388,41 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           ),
                                         ),
                                       ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildPriceBox(
+                                            label: 'آخر سعر شراء',
+                                            value: _latestPurchaseCost,
+                                            color: Colors.blueGrey.shade700,
+                                            unit: _getUnitText(
+                                              _product!.baseUnit,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: _buildInfoBox(
+                                            icon: Icons.layers_outlined,
+                                            label: 'الواردات المتوفرة',
+                                            value: _openBatchesCount.toString(),
+                                            color: Colors.indigo.shade700,
+                                            backgroundColor:
+                                                Colors.indigo.shade50,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _buildInfoBox(
+                                      icon: Icons.event_note_outlined,
+                                      label: 'تاريخ آخر شراء',
+                                      value: _latestPurchaseDateText,
+                                      color: Colors.teal.shade700,
+                                      backgroundColor: Colors.teal.shade50,
+                                      valueFontSize: 16,
                                     ),
                                     const SizedBox(height: 16),
                                     Container(
@@ -401,7 +453,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                               ),
                                               const SizedBox(width: 12),
                                               Text(
-                                                'الربح لل${_getUnitText(_product!.baseUnit)}',
+                                                'الربح التقريبي لل${_getUnitText(_product!.baseUnit)}',
                                                 style: TextStyle(
                                                   fontSize: 16,
                                                   fontWeight: FontWeight.bold,
@@ -411,7 +463,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             ],
                                           ),
                                           Text(
-                                            '${(_product!.price - _product!.costPrice).toStringAsFixed(2)} شيكل',
+                                            '${(_product!.price - _averageCost).toStringAsFixed(2)} شيكل',
                                             style: TextStyle(
                                               fontSize: 24,
                                               fontWeight: FontWeight.bold,
@@ -422,17 +474,23 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                         ],
                                       ),
                                     ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'الربح الفعلي في البيع يُحسب من الواردات المصروفة، أما هنا فنعرض متوسط التكلفة الحالي وآخر سعر شراء للمرجعية.',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade600,
+                                        height: 1.5,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
-
                               const SizedBox(height: 20),
                             ],
                           ),
                         ),
                       ),
-
-                      // أزرار الإجراءات السفلية
                       Container(
                         padding: const EdgeInsets.only(top: 12),
                         decoration: BoxDecoration(
@@ -465,7 +523,21 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   ),
                                   elevation: 0,
                                 ),
-                                onPressed: () {},
+                                onPressed: () async {
+                                  final result = await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder:
+                                          (context) => AddProductScreen(
+                                            productId: _product!.id,
+                                          ),
+                                    ),
+                                  );
+
+                                  if (result == true && mounted) {
+                                    await _loadProduct();
+                                  }
+                                },
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -506,7 +578,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     );
   }
 
-  /// بناء صندوق معلومات صغير
   Widget _buildInfoBox({
     required IconData icon,
     required String label,
@@ -571,7 +642,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     );
   }
 
-  /// بناء صندوق السعر
   Widget _buildPriceBox({
     required String label,
     required double value,

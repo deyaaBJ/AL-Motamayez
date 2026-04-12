@@ -113,7 +113,7 @@ class SalesProvider extends ChangeNotifier {
       if (normalizedName != null && normalizedName.isNotEmpty) {
         names.add(normalizedName);
       } else {
-        names.add('بدون عميل');
+        names.add('بدون زبون');
       }
     }
     final customerList = names.where((name) => name != 'الكل').toList()..sort();
@@ -178,7 +178,7 @@ class SalesProvider extends ChangeNotifier {
     }
 
     if (_selectedCustomer != 'الكل') {
-      filters.add('عميل: $_selectedCustomer');
+      filters.add('زبون: $_selectedCustomer');
     }
 
     if (_selectedTaxFilter != 'الكل') {
@@ -707,7 +707,7 @@ class SalesProvider extends ChangeNotifier {
       }
 
       if (_selectedCustomer != 'الكل') {
-        if (_selectedCustomer == 'بدون عميل') {
+        if (_selectedCustomer == 'بدون زبون') {
           conditions.add("s.customer_id IS NULL");
         } else {
           conditions.add("TRIM(c.name) = TRIM(?)");
@@ -911,7 +911,7 @@ class SalesProvider extends ChangeNotifier {
           paymentType == 'credit' ? (customerId ?? oldCustomerId) : null;
 
       if (paymentType == 'credit' && resolvedCustomerId == null) {
-        throw Exception('يجب اختيار عميل قبل تحويل الفاتورة إلى آجل.');
+        throw Exception('يجب اختيار زبون قبل تحويل الفاتورة إلى آجل.');
       }
 
       final newPaidAmount =
@@ -1058,7 +1058,7 @@ class SalesProvider extends ChangeNotifier {
       final String paymentType = saleData['payment_type'] as String;
       final int? customerId = saleData['customer_id'] as int?;
 
-      // 2️⃣ جلب تفاصيل خصم الدفعات من سجل الدفعات أو من sale_items
+      // 2️⃣ جلب تفاصيل خصم الواردات من سجل الواردات أو من sale_items
       List<Map<String, dynamic>> batchReturns = [];
 
       try {
@@ -1103,10 +1103,10 @@ class SalesProvider extends ChangeNotifier {
           }
         }
       } catch (e) {
-        log('⚠️ لم يتم العثور على سجل الدفعات: $e');
+        log('⚠️ لم يتم العثور على سجل الواردات: $e');
       }
 
-      // 3️⃣ إرجاع الكميات للدفعات
+      // 3️⃣ إرجاع الكميات للواردات
       for (var returnItem in batchReturns) {
         final batchId = returnItem['batchId'] as int;
         final double quantity = (returnItem['quantity'] as num).toDouble();
@@ -1384,7 +1384,7 @@ class SalesProvider extends ChangeNotifier {
 
     if (customerIds.length != 1 ||
         selectedSales.any((sale) => sale['customer_id'] == null)) {
-      throw Exception('يجب أن تكون كل الفواتير المحددة لنفس العميل.');
+      throw Exception('يجب أن تكون كل الفواتير المحددة لنفس الزبون.');
     }
 
     final totalSettled = selectedSales.fold<double>(
