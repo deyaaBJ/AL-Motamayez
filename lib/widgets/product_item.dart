@@ -121,7 +121,7 @@ class ProductItem extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _getQuantityColor(context, product.quantity),
+                  color: _getQuantityColor(context, product),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -192,12 +192,15 @@ class ProductItem extends StatelessWidget {
     );
   }
 
-  Color _getQuantityColor(BuildContext context, double quantity) {
+  Color _getQuantityColor(BuildContext context, Product product) {
     final settingsProvider = Provider.of<SettingsProvider>(
       context,
       listen: false,
     );
-    final threshold = settingsProvider.lowStockThreshold;
+    final threshold = product.resolveLowStockThreshold(
+      settingsProvider.lowStockThreshold,
+    );
+    final quantity = product.quantity;
 
     if (quantity == 0) return Colors.red;
     if (quantity <= threshold) return Colors.orange[100]!;

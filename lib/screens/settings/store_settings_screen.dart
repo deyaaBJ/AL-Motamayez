@@ -168,7 +168,14 @@ class StoreSettingsScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('الحد الأدنى: ${settings.lowStockThreshold}'),
+          Text(
+            'الحد الأدنى الافتراضي للمخزون: ${settings.lowStockThreshold}',
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'يُستخدم هذا الرقم إذا لم يتم تخصيص حد خاص داخل المنتج.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
           Slider(
             value: settings.lowStockThreshold.toDouble(),
             min: 1,

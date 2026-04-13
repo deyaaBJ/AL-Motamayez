@@ -453,7 +453,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    '${unit.unitName} (${unit.containQty.toStringAsFixed(2)} ${_getBaseUnitDisplayName(widget.item.product!.baseUnit)})',
+                    '${unit.unitName} (${unit.multiplierLabel} ${_getBaseUnitDisplayName(widget.item.product!.baseUnit)})',
                     style: const TextStyle(fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -525,7 +525,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
                             ? _getBaseUnitDisplayName(
                               widget.item.product!.baseUnit,
                             )
-                            : '${unit!.unitName} (${unit.containQty.toStringAsFixed(2)} ${_getBaseUnitDisplayName(widget.item.product!.baseUnit)})',
+                            : '${unit!.unitName} (${unit.multiplierLabel} ${_getBaseUnitDisplayName(widget.item.product!.baseUnit)})',
                         style: const TextStyle(fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ),

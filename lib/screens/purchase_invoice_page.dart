@@ -124,7 +124,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
               final productMap = productResult.first;
               final product = Product.fromMap(productMap);
 
-              // حساب سعر تكلفة الوحدة المقترح: سعر تكلفة القطعة × عدد القطع
+              // تحويل سعر شراء وحدة المورد إلى تكلفة الوحدة المرجعية
               double suggestedUnitCost =
                   product.costPrice * _selectedUnitContainQty;
 
@@ -142,11 +142,11 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
               results.add(modifiedProduct);
 
-              log('💰 حساب سعر تكلفة الوحدة:');
+              log('💰 حساب سعر شراء وحدة المورد:');
               log('   - المنتج: ${product.name}');
-              log('   - سعر تكلفة القطعة: ${product.costPrice}');
-              log('   - عدد القطع في الوحدة: $_selectedUnitContainQty');
-              log('   - سعر تكلفة الوحدة المقترح: $suggestedUnitCost');
+              log('   - تكلفة الوحدة المرجعية: ${product.costPrice}');
+              log('   - عدد الوحدات المرجعية داخل الوحدة: $_selectedUnitContainQty');
+              log('   - سعر شراء الوحدة المقترح: $suggestedUnitCost');
             }
           } catch (e) {
             log('المنتج الأصلي غير موجود: $e');
@@ -543,7 +543,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     const Icon(Icons.layers, color: Colors.blue, size: 20),
                     const SizedBox(width: 8),
                     Text(
-                      'وحدة: $_selectedUnitName (تحتوي على ${_selectedUnitContainQty.toInt()} قطعة)',
+                      'وحدة شراء: $_selectedUnitName (تحتوي على ${_selectedUnitContainQty.toStringAsFixed(_selectedUnitContainQty == _selectedUnitContainQty.toInt() ? 0 : 2)} من الوحدة المرجعية)',
                       style: const TextStyle(color: Colors.blue, fontSize: 14),
                     ),
                   ],
@@ -565,7 +565,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     ],
                     decoration: InputDecoration(
                       labelText:
-                          _selectedUnitId != null ? 'عدد الوحدات' : 'الكمية',
+                          _selectedUnitId != null
+                              ? 'عدد وحدات الشراء'
+                              : 'الكمية بالوحدة المرجعية',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -586,8 +588,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     decoration: InputDecoration(
                       labelText:
                           _selectedUnitId != null
-                              ? 'سعر الوحدة'
-                              : 'سعر التكلفة',
+                              ? 'سعر شراء الوحدة'
+                              : 'سعر شراء الوحدة المرجعية',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -1412,26 +1414,24 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         }
       }
 
-      // حساب الكمية الفعلية والعرضية
-      double displayQuantity = qty; // عدد الوحدات التي يدخلها المستخدم
-      double actualQuantity = qty; // الكمية الفعلية (القطع)
+      // الكمية الفعلية دائمًا تُحوَّل للوحدة المرجعية
+      double displayQuantity = qty;
+      double actualQuantity = qty;
       String displayName = product.name;
       bool isUnit = _selectedUnitId != null;
 
       if (isUnit) {
-        actualQuantity = qty * unitContainQty; // 2 كرتونة × 5 قطع = 10 قطع
+        actualQuantity = qty * unitContainQty;
         displayName = '${product.name} ($displayQuantity × $unitName)';
       }
 
-      // ⬅️ حساب سعر تكلفة القطعة الواحدة (لحساب المتوسط)
-      // المستخدم يدخل سعر الوحدة، نحوله لسعر القطعة الواحدة
-      double costPricePerPiece = cost;
+      // المستخدم يدخل سعر شراء وحدة المورد، والنظام يحوله لتكلفة الوحدة المرجعية
+      double costPricePerBaseUnit = cost;
 
       if (isUnit) {
-        // إذا كانت وحدة مركبة، نحسب سعر تكلفة القطعة الواحدة
-        costPricePerPiece = cost / unitContainQty;
+        costPricePerBaseUnit = cost / unitContainQty;
         log(
-          'سعر تكلفة القطعة الواحدة: $costPricePerPiece (سعر الوحدة $cost ÷ $unitContainQty)',
+          'تكلفة الوحدة المرجعية: $costPricePerBaseUnit (سعر شراء الوحدة $cost ÷ $unitContainQty)',
         );
       }
 
@@ -1452,11 +1452,11 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         final newItem = {
           'product_id': product.id!,
           'product_name': displayName,
-          'quantity': actualQuantity, // الكمية الفعلية (القطع)
-          'display_quantity': displayQuantity, // الكمية المعروضة (عدد الوحدات)
+          'quantity': actualQuantity,
+          'display_quantity': displayQuantity,
           'cost_price':
-              costPricePerPiece, // سعر تكلفة القطعة الواحدة فقط (ما نحتاج unit_cost_price)
-          'subtotal': actualQuantity * costPricePerPiece,
+              costPricePerBaseUnit,
+          'subtotal': actualQuantity * costPricePerBaseUnit,
           'has_expiry': true,
           'expiry_date': _expiryDate!.toIso8601String(),
           'expiry_date_formatted': DateFormat(
@@ -1466,7 +1466,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
           'unit_id': _selectedUnitId,
           'unit_name': unitName,
           'unit_contain_qty': unitContainQty,
-          // ⬅️ مش محتاج unit_cost_price لانو ما في سعر شراء للوحدة
         };
 
         invoiceProvider.addTempItem(newItem);
@@ -1477,8 +1476,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
           'product_name': displayName,
           'quantity': actualQuantity,
           'display_quantity': displayQuantity,
-          'cost_price': costPricePerPiece, // سعر تكلفة القطعة الواحدة
-          'subtotal': actualQuantity * costPricePerPiece,
+          'cost_price': costPricePerBaseUnit,
+          'subtotal': actualQuantity * costPricePerBaseUnit,
           'has_expiry': false,
           'is_unit': isUnit,
           'unit_id': _selectedUnitId,

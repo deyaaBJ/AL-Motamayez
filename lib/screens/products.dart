@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 
 import 'package:flutter/material.dart';
@@ -25,6 +26,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   String _searchQuery = '';
   ProductFilter _currentFilter = ProductFilter.all;
   List<Product> _searchResults = [];
+  Timer? _searchDebounce;
 
   final ScrollController _scrollController = ScrollController();
   final ProductProvider _provider = ProductProvider();
@@ -134,31 +136,34 @@ class _ProductsScreenState extends State<ProductsScreen> {
             child: TextField(
               onChanged: (value) async {
                 setState(() => _searchQuery = value.trim());
+                _searchDebounce?.cancel();
 
                 if (value.isEmpty) {
                   setState(() => _searchResults = []);
                   return;
                 }
 
-                bool? active;
-                switch (_currentFilter) {
-                  case ProductFilter.inactive:
-                    active = false;
-                    break;
-                  case ProductFilter.all:
-                    active = null;
-                    break;
-                  default:
-                    active = true;
-                }
+                _searchDebounce = Timer(const Duration(milliseconds: 300), () async {
+                  bool? active;
+                  switch (_currentFilter) {
+                    case ProductFilter.inactive:
+                      active = false;
+                      break;
+                    case ProductFilter.all:
+                      active = null;
+                      break;
+                    default:
+                      active = true;
+                  }
 
-                final results = await _provider.searchProducts(
-                  value,
-                  active: active,
-                );
+                  final results = await _provider.searchProducts(
+                    value,
+                    active: active,
+                  );
 
-                if (!mounted) return;
-                setState(() => _searchResults = results);
+                  if (!mounted || _searchQuery != value.trim()) return;
+                  setState(() => _searchResults = results);
+                });
               },
               decoration: InputDecoration(
                 hintText: 'ابحث عن منتج...',
@@ -344,6 +349,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -362,7 +368,7 @@ bool matchesFilter(
       context,
       listen: false,
     );
-    final threshold = settingsProvider.lowStockThreshold;
+    final defaultThreshold = settingsProvider.lowStockThreshold;
 
     switch (currentFilter) {
       case ProductFilter.all:
@@ -372,7 +378,7 @@ bool matchesFilter(
       case ProductFilter.unavailable:
         return product.quantity == 0;
       case ProductFilter.lowStock:
-        return product.quantity > 0 && product.quantity <= threshold;
+        return product.isLowStock(defaultThreshold);
       case ProductFilter.onOffer:
         return hasOffer;
       case ProductFilter.inactive:
@@ -380,7 +386,7 @@ bool matchesFilter(
     }
   } catch (e) {
     log('Error in matchesFilter: $e');
-    const threshold = 5;
+    const defaultThreshold = 5;
 
     switch (currentFilter) {
       case ProductFilter.all:
@@ -390,7 +396,7 @@ bool matchesFilter(
       case ProductFilter.unavailable:
         return product.quantity == 0;
       case ProductFilter.lowStock:
-        return product.quantity > 0 && product.quantity <= threshold;
+        return product.isLowStock(defaultThreshold);
       case ProductFilter.onOffer:
         return hasOffer;
       case ProductFilter.inactive:

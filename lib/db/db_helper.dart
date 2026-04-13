@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 class DBHelper {
   static Database? _db;
-  static const int _version = 9;
+  static const int _version = 12;
 
   Future<Database> get db async {
     if (_db != null) return _db!;
@@ -77,6 +77,18 @@ class DBHelper {
 
     if (oldVersion < 9) {
       await _upgradeToVersion9(db);
+    }
+
+    if (oldVersion < 10) {
+      await _upgradeToVersion10(db);
+    }
+
+    if (oldVersion < 11) {
+      await _upgradeToVersion11(db);
+    }
+
+    if (oldVersion < 12) {
+      await _upgradeToVersion12(db);
     }
   }
 
@@ -294,6 +306,91 @@ class DBHelper {
     }
   }
 
+  Future<void> _upgradeToVersion10(Database db) async {
+    try {
+      log('Starting upgrade to version 10...');
+
+      final unitColumns = await db.rawQuery('PRAGMA table_info(product_units)');
+
+      await _addColumnIfMissing(
+        db,
+        tableName: 'product_units',
+        columns: unitColumns,
+        columnName: 'multiplier_numerator',
+        statement:
+            'ALTER TABLE product_units ADD COLUMN multiplier_numerator INTEGER',
+      );
+      await _addColumnIfMissing(
+        db,
+        tableName: 'product_units',
+        columns: unitColumns,
+        columnName: 'multiplier_denominator',
+        statement:
+            'ALTER TABLE product_units ADD COLUMN multiplier_denominator INTEGER',
+      );
+
+      await db.execute('''
+        UPDATE product_units
+        SET multiplier_numerator = ROUND(contain_qty * 1000000),
+            multiplier_denominator = 1000000
+        WHERE multiplier_numerator IS NULL
+           OR multiplier_denominator IS NULL
+           OR multiplier_denominator = 0
+      ''');
+
+      await _createIndexes(db);
+      log('Completed upgrade to version 10');
+    } catch (e) {
+      log('Upgrade to version 10 failed: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _upgradeToVersion11(Database db) async {
+    try {
+      log('Starting upgrade to version 11...');
+
+      final unitColumns = await db.rawQuery('PRAGMA table_info(product_units)');
+
+      await _addColumnIfMissing(
+        db,
+        tableName: 'product_units',
+        columns: unitColumns,
+        columnName: 'parent_unit_id',
+        statement: 'ALTER TABLE product_units ADD COLUMN parent_unit_id INTEGER',
+      );
+
+      await _createIndexes(db);
+      log('Completed upgrade to version 11');
+    } catch (e) {
+      log('Upgrade to version 11 failed: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _upgradeToVersion12(Database db) async {
+    try {
+      log('Starting upgrade to version 12...');
+
+      final productColumns = await db.rawQuery('PRAGMA table_info(products)');
+
+      await _addColumnIfMissing(
+        db,
+        tableName: 'products',
+        columns: productColumns,
+        columnName: 'low_stock_threshold',
+        statement:
+            'ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER',
+      );
+
+      await _createIndexes(db);
+      log('Completed upgrade to version 12');
+    } catch (e) {
+      log('Upgrade to version 12 failed: $e');
+      rethrow;
+    }
+  }
+
   Future _onCreate(Database db, int version) async {
     // ========== جدول المنتجات ==========
     await db.execute('''
@@ -309,6 +406,7 @@ class DBHelper {
         offer_enabled INTEGER NOT NULL DEFAULT 0,
         quantity REAL NOT NULL,
         cost_price REAL NOT NULL,
+        low_stock_threshold INTEGER,
         has_expiry INTEGER DEFAULT 1,
         has_expiry_date INTEGER DEFAULT 0,
         active INTEGER DEFAULT 1,
@@ -322,14 +420,18 @@ class DBHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         product_id INTEGER NOT NULL,
         unit_name TEXT NOT NULL,
+        parent_unit_id INTEGER,
         barcode TEXT UNIQUE,
         contain_qty REAL NOT NULL,
+        multiplier_numerator INTEGER NOT NULL DEFAULT 1,
+        multiplier_denominator INTEGER NOT NULL DEFAULT 1,
         sell_price REAL NOT NULL,
         offer_price REAL,
         offer_start_date TEXT,
         offer_end_date TEXT,
         offer_enabled INTEGER NOT NULL DEFAULT 0,
-        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+        FOREIGN KEY (parent_unit_id) REFERENCES product_units (id) ON DELETE SET NULL
       );
     ''');
 

@@ -11,6 +11,8 @@ import 'package:motamayez/widgets/text_field.dart';
 import 'package:motamayez/widgets/existing_product_message.dart';
 import 'package:motamayez/widgets/qr_scan_section.dart';
 
+enum ScreenType { tablet, desktop }
+
 class AddProductScreen extends StatefulWidget {
   final int? productId;
 
@@ -30,6 +32,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final TextEditingController _barcodeController = TextEditingController();
   final TextEditingController _originalQuantityController =
       TextEditingController();
+  final TextEditingController _lowStockThresholdController =
+      TextEditingController();
   DateTime? _offerStartDate;
   DateTime? _offerEndDate;
   bool _offerEnabled = false;
@@ -37,6 +41,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   // ⬅️ جديد: متحكمات لسويتشين
   bool _isProductActive = true;
   bool _hasExpiryDate = false;
+  bool _useCustomLowStockThreshold = false;
 
   // وحدات التحكم للوحدات الإضافية
   final List<UnitController> _unitControllers = [];
@@ -107,6 +112,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
           // ⬅️ تأكد من تعبئة حالة السويتشين بشكل صحيح
           _isProductActive = _existingProduct!.active;
           _hasExpiryDate = _existingProduct!.hasExpiryDate;
+          _useCustomLowStockThreshold =
+              _existingProduct!.lowStockThreshold != null;
+          _lowStockThresholdController.text =
+              _existingProduct!.lowStockThreshold?.toString() ?? '';
 
           // تحميل الوحدات الإضافية للمنتج الموجود
           _loadExistingUnits();
@@ -168,6 +177,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
           // ⬅️ تعبئة حالة السويتشين
           _isProductActive = _existingProduct!.active;
           _hasExpiryDate = _existingProduct!.hasExpiryDate;
+          _useCustomLowStockThreshold =
+              _existingProduct!.lowStockThreshold != null;
+          _lowStockThresholdController.text =
+              _existingProduct!.lowStockThreshold?.toString() ?? '';
 
           // تحميل الوحدات الإضافية للمنتج الموجود
           _loadExistingUnits();
@@ -190,125 +203,178 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
-    final bool isDesktop = MediaQuery.of(context).size.width > 600;
-
     return Directionality(
       textDirection: TextDirection.rtl,
       child: BaseLayout(
         currentPage: 'المنتجات',
         title: _isNewProduct ? 'إضافة منتج جديد' : 'تحديث المنتج',
-        child: Padding(
-          padding:
-              isDesktop
-                  ? const EdgeInsets.fromLTRB(40, 70, 40, 0)
-                  : const EdgeInsets.all(20),
-          child: _buildBody(isDesktop),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBody(bool isDesktop) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          if (isDesktop) _buildDesktopLayout() else _buildMobileLayout(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMobileLayout() {
-    return Column(
-      children: [
-        QRScanSection(
-          qrController: _qrController,
-          onQRCodeChanged: (value) {
-            if (value.isNotEmpty) {
-              _checkProduct(value);
-            }
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // تحديد نوع الشاشة: تابلت (عرض أقل من 1200) أو ديسكتوب
+            final screenType =
+                constraints.maxWidth < 1200
+                    ? ScreenType.tablet
+                    : ScreenType.desktop;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              child: _buildBody(screenType),
+            );
           },
         ),
-        const SizedBox(height: 30),
-        _buildProductInfoSection(false),
+      ),
+    );
+  }
+
+  Widget _buildBody(ScreenType screenType) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1400),
+          child:
+              screenType == ScreenType.desktop
+                  ? _buildDesktopLayout()
+                  : _buildTabletLayout(), // تصميم خاص بالتابلت فقط
+        ),
+      ),
+    );
+  }
+
+  // تصميم الديسكتوب (شاشتان)
+  Widget _buildDesktopLayout() {
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 4,
+              child: _buildProductInfoSection(ScreenType.desktop),
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              flex: 3,
+              child: Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.qr_code_scanner,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'مسح الباركود',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).primaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      QRScanSection(
+                        qrController: _qrController,
+                        onQRCodeChanged: (value) {
+                          if (value.isNotEmpty) _checkProduct(value);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 30),
         _buildSaveButton(),
       ],
     );
   }
 
-  Widget _buildDesktopLayout() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  // تصميم التابلت (شاشة واحدة، كل العناصر عموديًا مع أقصى عرض)
+  Widget _buildTabletLayout() {
+    return Column(
       children: [
-        Expanded(
-          flex: 1,
-          child: Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Text(
-                    'مسح الباركود',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF6A3093),
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.qr_code_scanner,
+                      color: Theme.of(context).primaryColor,
                     ),
-                  ),
-                  SizedBox(height: 20),
-                  QRScanSection(
-                    qrController: _qrController,
-                    onQRCodeChanged: (value) {
-                      if (value.isNotEmpty) {
-                        _checkProduct(value);
-                      }
-                    },
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'مسح الباركود',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                QRScanSection(
+                  qrController: _qrController,
+                  onQRCodeChanged: (value) {
+                    if (value.isNotEmpty) _checkProduct(value);
+                  },
+                ),
+              ],
             ),
           ),
         ),
-        SizedBox(width: 20),
-        Expanded(
-          flex: 2,
-          child: Column(
-            children: [
-              _buildProductInfoSection(true),
-              SizedBox(height: 30),
-              _buildSaveButton(),
-            ],
-          ),
-        ),
+        const SizedBox(height: 24),
+        _buildProductInfoSection(ScreenType.tablet),
+        const SizedBox(height: 30),
+        _buildSaveButton(),
       ],
     );
   }
 
-  Widget _buildProductInfoSection(bool isDesktop) {
+  // قسم معلومات المنتج متجاوب مع التابلت والديسكتوب
+  Widget _buildProductInfoSection(ScreenType screenType) {
+    final isDesktop = screenType == ScreenType.desktop;
     return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Container(
-        padding: const EdgeInsets.all(20),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (_existingProduct != null) ...[
                 ExistingProductMessage(existingProduct: _existingProduct!),
                 const SizedBox(height: 20),
               ],
-
-              if (isDesktop) _buildDesktopForm() else _buildMobileForm(),
-
-              // ⬅️ جديد: قسم السويتشين
+              // بناء النموذج: صفوف مرنة في الديسكتوب، أعمدة في التابلت
+              if (isDesktop) _buildDesktopForm() else _buildTabletForm(),
+              const SizedBox(height: 24),
               _buildSwitchesSection(),
+              const SizedBox(height: 16),
+              _buildLowStockThresholdSection(),
             ],
           ),
         ),
@@ -316,51 +382,64 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
-  Widget _buildMobileForm() {
+  // نموذج الديسكتوب (صفوف متعددة باستخدام Wrap)
+  Widget _buildDesktopForm() {
     return Column(
       children: [
-        _buildNameField(),
-        SizedBox(height: 16),
-        _buildUnitDropdown(),
-        SizedBox(height: 16),
-        _buildPriceFields(),
-        SizedBox(height: 16),
+        Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [
+            SizedBox(width: 300, child: _buildNameField()),
+            SizedBox(width: 200, child: _buildUnitDropdown()),
+            SizedBox(width: 200, child: _buildBarcodeField()),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [
+            SizedBox(width: 250, child: _buildPriceField()),
+            SizedBox(width: 250, child: _buildCostPriceField()),
+          ],
+        ),
+        const SizedBox(height: 16),
         _buildOfferSection(),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         _buildQuantitySection(),
-        SizedBox(height: 16),
-        _buildBarcodeField(),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         _buildUnitsSection(),
       ],
     );
   }
 
-  Widget _buildDesktopForm() {
+  // نموذج التابلت (ترتيب عمودي بسيط)
+  Widget _buildTabletForm() {
     return Column(
       children: [
         _buildNameField(),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         Row(
           children: [
             Expanded(child: _buildUnitDropdown()),
-            SizedBox(width: 16),
+            const SizedBox(width: 16),
             Expanded(child: _buildBarcodeField()),
           ],
         ),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         Row(
           children: [
             Expanded(child: _buildPriceField()),
-            SizedBox(width: 16),
+            const SizedBox(width: 16),
             Expanded(child: _buildCostPriceField()),
           ],
         ),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         _buildOfferSection(),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         _buildQuantitySection(),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         _buildUnitsSection(),
       ],
     );
@@ -493,6 +572,81 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
+  Widget _buildLowStockThresholdSection() {
+    return Tooltip(
+      message: 'إذا تركته فارغًا سيتم استخدام الإعداد العام',
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.amber[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.amber.shade200),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.inventory_2_outlined, color: Colors.orange),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'تخصيص حد أدنى لهذا المنتج',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Checkbox(
+                  value: _useCustomLowStockThreshold,
+                  onChanged: (value) {
+                    setState(() {
+                      _useCustomLowStockThreshold = value ?? false;
+                      if (!_useCustomLowStockThreshold) {
+                        _lowStockThresholdController.clear();
+                      }
+                    });
+                  },
+                ),
+              ],
+            ),
+            Text(
+              _useCustomLowStockThreshold
+                  ? 'سيتم استخدام هذا الحد بدل الإعداد العام لهذا المنتج فقط.'
+                  : 'عند تعطيل هذا الخيار سيتم استخدام الحد الافتراضي من الإعدادات.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
+            if (_useCustomLowStockThreshold) ...[
+              const SizedBox(height: 12),
+              CustomTextField(
+                controller: _lowStockThresholdController,
+                label: 'الحد الأدنى للمخزون',
+                prefixIcon: Icons.warning_amber_rounded,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: (value) {
+                  if (!_useCustomLowStockThreshold) return null;
+                  if (value == null || value.trim().isEmpty) {
+                    return 'يرجى إدخال الحد الأدنى أو إلغاء التخصيص';
+                  }
+
+                  final parsed = int.tryParse(value.trim());
+                  if (parsed == null || parsed < 0) {
+                    return 'أدخل رقمًا صحيحًا يساوي صفر أو أكبر';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'إذا تركته فارغًا سيتم استخدام الإعداد العام',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   // ⬅️ تحديث دالة _saveProduct لطباعة القيم للتصحيح
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate()) {
@@ -535,6 +689,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
         endDate: _offerEndDate,
         regularPrice: double.tryParse(_priceController.text) ?? 0.0,
       );
+      final customLowStockThreshold =
+          _useCustomLowStockThreshold
+              ? int.tryParse(_lowStockThresholdController.text.trim())
+              : null;
 
       if (_isNewProduct) {
         // إنشاء كائن المنتج الجديد مع السويتشين
@@ -548,9 +706,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
           offerEndDate: productOfferData.offerEndDate,
           offerEnabled: productOfferData.offerEnabled,
           quantity: finalQuantity,
-          costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
+          costPrice: _existingProduct?.costPrice ?? 0.0,
           active: _isProductActive, // ⬅️ هذا هو المهم!
           hasExpiryDate: _hasExpiryDate, // ⬅️ هذا هو المهم!
+          lowStockThreshold: customLowStockThreshold,
         );
 
         log('كائن المنتج المرسل:');
@@ -595,10 +754,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
           offerEndDate: productOfferData.offerEndDate,
           offerEnabled: productOfferData.offerEnabled,
           quantity: finalQuantity,
-          costPrice: double.tryParse(_costPriceController.text) ?? 0.0,
+          costPrice: _existingProduct?.costPrice ?? 0.0,
           addedDate: _existingProduct?.addedDate,
           active: _isProductActive, // ⬅️ هذا هو المهم!
           hasExpiryDate: _hasExpiryDate, // ⬅️ هذا هو المهم!
+          lowStockThreshold: customLowStockThreshold,
         );
 
         log('كائن المنتج المرسل للتحديث:');
@@ -657,20 +817,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
-  Widget _buildPriceFields() {
-    return Column(
-      children: [
-        _buildPriceField(),
-        SizedBox(height: 16),
-        _buildCostPriceField(),
-      ],
-    );
-  }
-
   Widget _buildPriceField() {
     return CustomTextField(
       controller: _priceController,
-      label: _selectedUnit == 'piece' ? 'سعر القطعة' : 'سعر الكيلو',
+      label:
+          _selectedUnit == 'piece'
+              ? 'سعر بيع الوحدة المرجعية'
+              : 'سعر بيع الوحدة المرجعية',
       prefixIcon: Icons.attach_money,
       keyboardType: TextInputType.numberWithOptions(decimal: true),
       validator: (value) {
@@ -688,18 +841,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Widget _buildCostPriceField() {
     return CustomTextField(
       controller: _costPriceController,
-      label: _selectedUnit == 'piece' ? 'تكلفة القطعة' : 'تكلفة الكيلو',
+      label: 'متوسط تكلفة محسوب تلقائيًا',
       prefixIcon: Icons.money,
-      keyboardType: TextInputType.numberWithOptions(decimal: true),
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return 'يرجى إدخال سعر التكلفة';
-        }
-        if (double.tryParse(value) == null) {
-          return 'يرجى إدخال سعر تكلفة صحيح';
-        }
-        return null;
-      },
+      readOnly: true,
     );
   }
 
@@ -746,7 +890,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
               controller: _offerPriceController,
               label: 'سعر العرض',
               prefixIcon: Icons.price_change,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
             ),
             const SizedBox(height: 12),
             Row(
@@ -756,7 +902,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     label: 'تاريخ البداية',
                     value: _offerStartDate,
                     onTap: () async {
-                      final picked = await _pickDate(_offerStartDate ?? _today());
+                      final picked = await _pickDate(
+                        _offerStartDate ?? _today(),
+                      );
                       if (picked != null) {
                         setState(() {
                           _offerStartDate = picked;
@@ -1048,18 +1196,31 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
             CustomTextField(
               controller: controller.containQtyController,
-              label: 'كم تحتوي من الوحدة الأساسية',
+              label: 'كم وحدة مرجعية تحتوي هذه الوحدة',
               prefixIcon: Icons.format_list_numbered,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               validator: (value) {
                 if (_showUnitsSection && (value == null || value.isEmpty)) {
-                  return 'يرجى إدخال الكمية';
+                  return 'يرجى إدخال معامل التحويل';
                 }
-                if (_showUnitsSection && double.tryParse(value!) == null) {
-                  return 'يرجى إدخال كمية صحيحة';
+                if (_showUnitsSection && value != null) {
+                  final factor = double.tryParse(value.trim());
+                  if (factor == null || factor <= 0) {
+                    return 'أدخل رقمًا صحيحًا أو عشريًا أكبر من صفر';
+                  }
                 }
                 return null;
               },
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'مثال: إذا كانت الوحدة المرجعية حبة: حبة = 1، باكيت = 6، كرتونة = 24',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
             ),
             SizedBox(height: 12),
             CustomTextField(
@@ -1157,7 +1318,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
               controller: controller.offerPriceController,
               label: 'سعر عرض الوحدة',
               prefixIcon: Icons.sell,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
             ),
             const SizedBox(height: 12),
             Row(
@@ -1317,6 +1480,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _offerStartDate = null;
     _offerEndDate = null;
     _offerEnabled = false;
+    _useCustomLowStockThreshold = false;
+    _lowStockThresholdController.clear();
     // ⬅️ جديد: إعادة تعيين السويتشين
     _isProductActive = true; // الافتراضي نشط
     _hasExpiryDate = false; // الافتراضي بدون صلاحية
@@ -1339,10 +1504,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
       for (int i = 0; i < _unitControllers.length; i++) {
         final controller = _unitControllers[i];
         final unitId = _unitIds[i];
-
         final unitName = controller.unitNameController.text.trim();
         final barcode = controller.barcodeController.text.trim();
-        final containQtyText = controller.containQtyController.text.trim();
+        final factorText = controller.containQtyController.text.trim();
         final sellPriceText = controller.sellPriceController.text.trim();
         final sellPrice = double.tryParse(sellPriceText) ?? 0.0;
         final unitOfferData = _buildOfferData(
@@ -1358,10 +1522,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
           continue;
         }
 
-        final containQty = double.tryParse(containQtyText) ?? 0.0;
-
-        if (containQty <= 0) {
-          log('⚠️ تخطي وحدة $unitName - الكمية غير صحيحة: $containQty');
+        final factor = double.tryParse(factorText);
+        if (factor == null || factor <= 0) {
+          log('⚠️ تخطي وحدة $unitName - معامل التحويل غير صحيح: $factorText');
           continue;
         }
 
@@ -1377,7 +1540,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
           productId: productId,
           unitName: unitName,
           barcode: barcode.isNotEmpty ? barcode : null,
-          containQty: containQty,
+          containQty: factor,
           sellPrice: sellPrice,
           offerPrice: unitOfferData.offerPrice,
           offerStartDate: unitOfferData.offerStartDate,
@@ -1531,6 +1694,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _quantityController.dispose();
     _barcodeController.dispose();
     _originalQuantityController.dispose();
+    _lowStockThresholdController.dispose();
 
     for (final controller in _unitControllers) {
       controller.dispose();

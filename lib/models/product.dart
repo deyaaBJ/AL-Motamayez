@@ -14,6 +14,7 @@ class Product {
   bool hasExpiryDate;
   bool hasOfferInUnits;
   bool active;
+  int? lowStockThreshold;
 
   Product({
     this.id,
@@ -31,6 +32,7 @@ class Product {
     this.hasExpiryDate = false,
     this.hasOfferInUnits = false,
     this.active = true,
+    this.lowStockThreshold,
   });
 
   Map<String, dynamic> toMap() {
@@ -50,6 +52,7 @@ class Product {
       'has_expiry_date': hasExpiryDate ? 1 : 0,
       'has_offer_in_units': hasOfferInUnits ? 1 : 0,
       'active': active ? 1 : 0,
+      'low_stock_threshold': lowStockThreshold,
     };
   }
 
@@ -70,6 +73,7 @@ class Product {
       hasExpiryDate: map['has_expiry_date'] == 1,
       hasOfferInUnits: map['has_offer_in_units'] == 1,
       active: map['active'] == 1,
+      lowStockThreshold: (map['low_stock_threshold'] as num?)?.toInt(),
     );
   }
 
@@ -90,6 +94,15 @@ class Product {
   }
 
   double get effectivePrice => hasValidOffer ? offerPrice! : price;
+
+  int resolveLowStockThreshold(int defaultThreshold) {
+    return lowStockThreshold ?? defaultThreshold;
+  }
+
+  bool isLowStock(int defaultThreshold) {
+    if (quantity <= 0) return false;
+    return quantity <= resolveLowStockThreshold(defaultThreshold);
+  }
 
   static DateTime? _parseDateOnly(String? value) {
     if (value == null || value.trim().isEmpty) {

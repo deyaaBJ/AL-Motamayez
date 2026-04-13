@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 class CustomTextField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
-  final IconData prefixIcon;
+  final IconData? prefixIcon;
   final bool obscureText;
   final Widget? suffixIcon;
   final bool readOnly;
@@ -19,7 +19,7 @@ class CustomTextField extends StatelessWidget {
     super.key,
     required this.controller,
     required this.label,
-    required this.prefixIcon,
+    this.prefixIcon,
     this.obscureText = false,
     this.suffixIcon,
     this.readOnly = false,

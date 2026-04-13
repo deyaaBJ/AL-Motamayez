@@ -115,7 +115,12 @@ AND date(offer_end_date) < date('now', 'localtime')
   Future<int> loadLowStockProductsCount(int lowStockThreshold) async {
     final db = await _dbHelper.db;
     final res = await db.rawQuery(
-      "SELECT COUNT(*) as count FROM products WHERE quantity <= ? AND quantity > 0",
+      '''
+      SELECT COUNT(*) as count
+      FROM products
+      WHERE quantity > 0
+        AND quantity <= COALESCE(low_stock_threshold, ?)
+      ''',
       [lowStockThreshold],
     );
     return Sqflite.firstIntValue(res) ?? 0;
@@ -242,6 +247,8 @@ AND date(offer_end_date) < date('now', 'localtime')
                 hasExpiryDate: (map['has_expiry_date'] as int?) == 1,
                 hasOfferInUnits: (map['has_offer_in_units'] as int?) == 1,
                 active: (map['active'] as int?) != 0,
+                lowStockThreshold:
+                    (map['low_stock_threshold'] as num?)?.toInt(),
               );
             } catch (e) {
               log('Error parsing product: $e, map: $map');
@@ -369,12 +376,25 @@ AND date(offer_end_date) < date('now', 'localtime')
     try {
       await _clearExpiredOffers();
 
-      String whereClause =
-          '(LOWER(name) LIKE LOWER(?) OR LOWER(barcode) LIKE LOWER(?))';
-      List<Object?> whereArgs = ['%$query%', '%$query%'];
+      String whereClause = '''
+        (
+          LOWER(p.name) LIKE LOWER(?)
+          OR LOWER(COALESCE(p.barcode, '')) LIKE LOWER(?)
+          OR EXISTS (
+            SELECT 1
+            FROM product_units pu_search
+            WHERE pu_search.product_id = p.id
+              AND (
+                LOWER(pu_search.unit_name) LIKE LOWER(?)
+                OR LOWER(COALESCE(pu_search.barcode, '')) LIKE LOWER(?)
+              )
+          )
+        )
+      ''';
+      List<Object?> whereArgs = ['%$query%', '%$query%', '%$query%', '%$query%'];
 
       if (active != null) {
-        whereClause += ' AND active = ?';
+        whereClause += ' AND p.active = ?';
         whereArgs.add(active ? 1 : 0);
       }
 
@@ -479,6 +499,7 @@ AND date(offer_end_date) < date('now', 'localtime')
           addedDate: map['added_date'] as String?,
           hasExpiryDate: (map['has_expiry_date'] as int?) == 1,
           active: (map['active'] as int?) != 0,
+          lowStockThreshold: (map['low_stock_threshold'] as num?)?.toInt(),
         );
       }).toList();
     } catch (e) {
@@ -504,10 +525,11 @@ AND date(offer_end_date) < date('now', 'localtime')
     }
   }
 
-  Future<void> addProductUnit(ProductUnit unit) async {
+  Future<int> addProductUnit(ProductUnit unit) async {
     final db = await _dbHelper.db;
-    await db.insert('product_units', unit.toMap());
+    final id = await db.insert('product_units', unit.toMap());
     await loadProductsOnOfferCount();
+    return id;
   }
 
   Future<List<ProductUnit>> getProductUnits(int productId) async {
@@ -601,6 +623,7 @@ AND date(offer_end_date) < date('now', 'localtime')
             'offer_enabled': product.offerEnabled ? 1 : 0,
             'active': product.active ? 1 : 0,
             'has_expiry_date': product.hasExpiryDate ? 1 : 0,
+            'low_stock_threshold': product.lowStockThreshold,
           },
           where: 'id = ?',
           whereArgs: [oldProduct['id']],
@@ -627,6 +650,7 @@ AND date(offer_end_date) < date('now', 'localtime')
       'added_date': product.addedDate,
       'active': product.active ? 1 : 0,
       'has_expiry_date': product.hasExpiryDate ? 1 : 0,
+      'low_stock_threshold': product.lowStockThreshold,
     };
 
     await db.insert('products', productMap);
@@ -657,6 +681,7 @@ AND date(offer_end_date) < date('now', 'localtime')
       'quantity': updatedProduct.quantity,
       'active': updatedProduct.active ? 1 : 0,
       'has_expiry_date': updatedProduct.hasExpiryDate ? 1 : 0,
+      'low_stock_threshold': updatedProduct.lowStockThreshold,
     };
 
     await db.update(
@@ -711,6 +736,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         addedDate: map['added_date'] as String?,
         hasExpiryDate: (map['has_expiry_date'] as int?) == 1,
         active: (map['active'] as int?) != 0,
+        lowStockThreshold: (map['low_stock_threshold'] as num?)?.toInt(),
       );
     } catch (e) {
       log('Error getting product by ID: $e');
