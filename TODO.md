@@ -1,31 +1,14 @@
-# خطة تطوير POS Screen ✅
+# Mixed Units Display in Add Product Screen - No Approximation
 
-## الخطوات المكتملة:
+Approved plan to display quantities as mixed units (e.g., '11 كرتونة و 5 حبات') instead of decimals.
 
-### 1. ✅ popup الدفع - pos_screen.dart
+## Steps to Complete:
 
-- إضافة paidAmount input
-- حساب المطلوب/الباقي
-- دعم الملاحظة
+- [x] 1. Update `lib/utils/unit_translator.dart`: Add `mixedUnitDisplay` function.
+- [x] 2. Update `lib/screens/add_product/widgets/product_info_section.dart`: Pass `selectedUnit` as `baseUnit` to `UnitsSection`.
+- [x] 3. Update `lib/screens/add_product/widgets/units_section.dart`: Receive `baseUnit`, pass to `UnitForm`.
+- [x] 4. Update `lib/screens/add_product/widgets/unit_form.dart`: Receive `baseUnit`, replace decimal display with `mixedUnitDisplay`.
+- [ ] 5. Test implementation (add product with units, verify mixed display).
+- [ ] 6. Create git branch, commit changes, push, open PR.
 
-### 2. ✅ تحسين thermal_receipt_loger.dart
-
-- دعم paidAmount, dueAmount, changeAmount, cashierName, note
-- تحسين التنسيق
-
-### 3. ✅ product_provider.dart
-
-- دعم paid_amount + note في addSale()
-- getLastSaleId() دالة
-
-## المطلوب إصلاحه:
-
-### 4. [ ] إصلاح pos_screen.dart
-
-- استبدال logReceiptEnhanced بـ logReceipt
-- receiptNumber = DateTime.now().millisecondsSinceEpoch ~/ 1000
-- تنظيف المحتوى الخاطئ في product_provider.dart
-
-## النتيجة النهائية:
-
-✅ POS مع popup دفع متكامل + طباعة فاتورة محسنة + دعم جزئي
+**Progress:** Step 4 completed. Feature implemented, no linter errors. Next: Test and PR.

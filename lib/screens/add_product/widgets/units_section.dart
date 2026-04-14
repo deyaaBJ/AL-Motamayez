@@ -9,6 +9,8 @@ class UnitsSection extends StatelessWidget {
   final VoidCallback onToggleShow;
   final VoidCallback onAddUnit;
   final void Function(int) onRemoveUnit;
+  final double totalQuantity;
+  final String baseUnit;
 
   const UnitsSection({
     super.key,
@@ -18,6 +20,8 @@ class UnitsSection extends StatelessWidget {
     required this.onToggleShow,
     required this.onAddUnit,
     required this.onRemoveUnit,
+    required this.totalQuantity,
+    required this.baseUnit,
   });
 
   @override
@@ -84,6 +88,8 @@ class UnitsSection extends StatelessWidget {
                 controller: controller,
                 isExisting: unitIds.length > index && unitIds[index] != -1,
                 onRemove: () => onRemoveUnit(index),
+                totalQuantity: totalQuantity,
+                baseUnit: baseUnit,
               );
             }).toList(),
           const SizedBox(height: 16),

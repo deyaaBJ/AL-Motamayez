@@ -6,7 +6,6 @@ import 'product_barcode_field.dart';
 import 'price_field.dart';
 import 'cost_price_field.dart';
 import 'unit_dropdown.dart';
-import 'quantity_section.dart';
 import 'offer_section.dart';
 import 'switches_section.dart';
 import 'low_stock_threshold_section.dart';
@@ -125,12 +124,7 @@ class ProductInfoSection extends StatelessWidget {
           onClear: formData['onOfferClear'],
         ),
         const SizedBox(height: 16),
-        QuantitySection(
-          isNewProduct: formData['isNewProduct'],
-          existingQuantity: formData['existingQuantity'],
-          quantityController: formData['quantityController'],
-          selectedUnit: formData['selectedUnit'],
-        ),
+        _buildOpeningBalanceHint(),
         const SizedBox(height: 16),
         UnitsSection(
           showUnitsSection: formData['showUnitsSection'],
@@ -139,6 +133,8 @@ class ProductInfoSection extends StatelessWidget {
           onToggleShow: formData['onToggleUnits'],
           onAddUnit: formData['onAddUnit'],
           onRemoveUnit: formData['onRemoveUnit'],
+          totalQuantity: (formData['existingQuantity'] ?? 0.0),
+          baseUnit: formData['selectedUnit'],
         ),
       ],
     );
@@ -195,12 +191,7 @@ class ProductInfoSection extends StatelessWidget {
           onClear: formData['onOfferClear'],
         ),
         const SizedBox(height: 16),
-        QuantitySection(
-          isNewProduct: formData['isNewProduct'],
-          existingQuantity: formData['existingQuantity'],
-          quantityController: formData['quantityController'],
-          selectedUnit: formData['selectedUnit'],
-        ),
+        _buildOpeningBalanceHint(),
         const SizedBox(height: 16),
         UnitsSection(
           showUnitsSection: formData['showUnitsSection'],
@@ -209,8 +200,37 @@ class ProductInfoSection extends StatelessWidget {
           onToggleShow: formData['onToggleUnits'],
           onAddUnit: formData['onAddUnit'],
           onRemoveUnit: formData['onRemoveUnit'],
+          totalQuantity: (formData['existingQuantity'] ?? 0.0),
+          baseUnit: formData['selectedUnit'],
         ),
       ],
+    );
+  }
+
+  Widget _buildOpeningBalanceHint() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7E8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFD79A)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.info_outline, color: Color(0xFFB7791F)),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'إضافة الكمية لم تعد من شاشة المنتج. استخدم شاشة الرصيد الافتتاحي لتسجيل أي مخزون حالي بشكل رسمي.',
+              style: TextStyle(
+                color: Color(0xFF8A5A12),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
