@@ -138,6 +138,17 @@ class Batch {
     return difference.inDays;
   }
 
+  /// حساب الأيام المتبقية بشكل دقيق (مع الكسور العشرية)
+  double get preciseRemainingDays {
+    if (expiryDate == '2099-12-31' || expiryDate.isEmpty) {
+      return 9999; // منتج بدون صلاحية
+    }
+    final now = DateTime.now();
+    final expiry = DateTime.parse(expiryDate);
+    final difference = expiry.difference(now);
+    return difference.inHours / 24.0;
+  }
+
   String get status {
     if (expiryDate == '2099-12-31' || expiryDate.isEmpty) {
       return 'بدون صلاحية';

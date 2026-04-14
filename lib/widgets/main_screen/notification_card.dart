@@ -21,56 +21,60 @@ class NotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // جعل الخطوط قابلة للتكبير بناءً على إعدادات النظام
+    final textScaler = MediaQuery.textScalerOf(context);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16), // زيادة padding
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              // ignore: deprecated_member_use
-              colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
+              colors: [color.withOpacity(0.12), color.withOpacity(0.05)],
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
             ),
             borderRadius: BorderRadius.circular(16),
-            // ignore: deprecated_member_use
             border: Border.all(color: color.withOpacity(0.3), width: 1),
           ),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10), // زيادة حجم الأيقونة
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    // ignore: deprecated_member_use
-                    colors: [color, color.withOpacity(0.7)],
+                    colors: [color, color.withOpacity(0.8)],
                   ),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: Colors.white, size: 18),
+                child: Icon(icon, color: Colors.white, size: 22), // أكبر
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       title,
+                      textScaler: textScaler,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 15, // أكبر
                         fontWeight: FontWeight.w800,
                         color: color,
+                        letterSpacing: 0.3,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       description,
+                      textScaler: textScaler,
                       style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade600,
+                        fontSize: 13, // أكبر
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade800, // أغمق للوضوح
                       ),
                     ),
                   ],
@@ -78,24 +82,25 @@ class NotificationCard extends StatelessWidget {
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
+                  horizontal: 12,
+                  vertical: 6,
                 ),
                 decoration: BoxDecoration(
                   color: color,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
                   count.toString(),
+                  textScaler: textScaler,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 14,
+                    fontSize: 16, // أكبر
                     fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
-              Icon(Icons.arrow_forward_ios, size: 12, color: color),
+              const SizedBox(width: 8),
+              Icon(Icons.arrow_forward_ios, size: 14, color: color),
             ],
           ),
         ),

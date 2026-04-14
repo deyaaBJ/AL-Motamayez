@@ -1,4 +1,3 @@
-// screens/home.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
@@ -7,6 +6,7 @@ import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/providers/sales_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/providers/batch_provider.dart';
+import 'package:motamayez/models/batch.dart';
 import 'package:motamayez/utils/app_logger.dart';
 import 'package:motamayez/widgets/main_screen/loading_screen.dart';
 import 'package:motamayez/widgets/main_screen/main_screen_header.dart';
@@ -24,9 +24,12 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _expiredBatches = 0;
-  int _expiringIn7DaysBatches = 0;
+  int _expiringSoonBatches = 0;
+  int _nearExpiryAlertDays = 7;
   bool _isLoading = true;
   String _userName = 'المستخدم';
+  List<Batch> _expiredBatchList = [];
+  List<Batch> _expiringBatchList = [];
 
   @override
   void initState() {
@@ -74,11 +77,18 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _loadBatchAlerts() async {
     try {
       final batchProvider = Provider.of<BatchProvider>(context, listen: false);
-      final alerts = await batchProvider.getBatchesAlerts();
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final alerts = await batchProvider.getBatchesAlertsWithDetails(
+        nearExpiryDays: settings.nearExpiryAlertDays,
+      );
       if (mounted) {
         setState(() {
           _expiredBatches = alerts['expired'] ?? 0;
-          _expiringIn7DaysBatches = alerts['expiring_7_days'] ?? 0;
+          _expiringSoonBatches = alerts['expiring_soon'] ?? 0;
+          _nearExpiryAlertDays = settings.nearExpiryAlertDays;
+          _expiredBatchList = (alerts['expired_list'] as List<Batch>?) ?? [];
+          _expiringBatchList =
+              (alerts['expiring_soon_list'] as List<Batch>?) ?? [];
         });
       }
     } catch (e) {
@@ -87,10 +97,11 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _goToBatchesWithFilter(String filterType) {
-    Provider.of<BatchProvider>(
-      context,
-      listen: false,
-    ).loadBatchesWithFilter(filterType);
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    Provider.of<BatchProvider>(context, listen: false).loadBatchesWithFilter(
+      filterType,
+      nearExpiryDays: settings.nearExpiryAlertDays,
+    );
     Navigator.pushNamed(context, '/batches');
   }
 
@@ -196,9 +207,12 @@ class _MainScreenState extends State<MainScreen> {
                 // هذا الـ Expanded يجعل NotificationsSection يأخذ المساحة المتبقية حتى الأسفل
                 child: NotificationsSection(
                   expiredBatches: _expiredBatches,
-                  expiringIn7DaysBatches: _expiringIn7DaysBatches,
+                  expiringSoonBatches: _expiringSoonBatches,
+                  nearExpiryDays: _nearExpiryAlertDays,
                   onTapFilter: _goToBatchesWithFilter,
                   expandToFill: true, // ✅ يمدد الحاوية لآخر الشاشة
+                  expiredBatchList: _expiredBatchList,
+                  expiringBatchList: _expiringBatchList,
                 ),
               ),
             ],
@@ -245,8 +259,11 @@ class _MainScreenState extends State<MainScreen> {
                   Expanded(
                     child: NotificationsSection(
                       expiredBatches: _expiredBatches,
-                      expiringIn7DaysBatches: _expiringIn7DaysBatches,
+                      expiringSoonBatches: _expiringSoonBatches,
+                      nearExpiryDays: _nearExpiryAlertDays,
                       onTapFilter: _goToBatchesWithFilter,
+                      expiredBatchList: _expiredBatchList,
+                      expiringBatchList: _expiringBatchList,
                     ),
                   ),
                 ],
@@ -261,8 +278,11 @@ class _MainScreenState extends State<MainScreen> {
                   const SizedBox(height: 20),
                   NotificationsSection(
                     expiredBatches: _expiredBatches,
-                    expiringIn7DaysBatches: _expiringIn7DaysBatches,
+                    expiringSoonBatches: _expiringSoonBatches,
+                    nearExpiryDays: _nearExpiryAlertDays,
                     onTapFilter: _goToBatchesWithFilter,
+                    expiredBatchList: _expiredBatchList,
+                    expiringBatchList: _expiringBatchList,
                   ),
                 ],
               ),

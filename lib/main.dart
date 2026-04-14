@@ -26,11 +26,12 @@ import 'providers/supplier_provider.dart';
 import 'providers/expense_provider.dart';
 import 'providers/temporary_invoice_provider.dart';
 import 'providers/batch_provider.dart';
+import 'providers/opening_balance_provider.dart';
 
 import 'screens/auth/login.dart';
 import 'screens/home.dart';
 import 'screens/products.dart';
-import 'screens/pos_screen.dart';
+import 'screens/pos/pos_screen.dart';
 import 'screens/customers_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/settings/settings_screen.dart';
@@ -40,6 +41,7 @@ import 'screens/expenses_page.dart';
 import 'screens/activation_page.dart';
 import 'screens/invalid_signature_screen.dart';
 import 'screens/batches_screen.dart';
+import 'screens/opening_balance_screen.dart';
 import 'services/activation_service.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -116,6 +118,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => TemporaryInvoiceProvider()),
         ChangeNotifierProvider(create: (_) => BatchProvider()),
+        ChangeNotifierProvider(create: (_) => OpeningBalanceProvider()),
         ChangeNotifierProvider(create: (_) => CashierActivityProvider()),
       ],
       child: const MotamayezApp(),
@@ -191,6 +194,7 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
         '/activation': (_) => const ActivationPage(),
         '/invalidSignature': (_) => const InvalidSignatureScreen(),
         '/batches': (_) => const BatchesScreen(),
+        '/openingBalance': (_) => const OpeningBalanceScreen(),
         '/cashier': (_) => const CashierActivityScreen(),
       },
     );

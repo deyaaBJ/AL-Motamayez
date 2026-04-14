@@ -9,6 +9,9 @@ class SettingsProvider with ChangeNotifier {
   int _lowStockThreshold = 0;
   int get lowStockThreshold => _lowStockThreshold;
 
+  int _nearExpiryAlertDays = 7;
+  int get nearExpiryAlertDays => _nearExpiryAlertDays;
+
   // الإعداد الضريبي
   int _defaultTaxSetting = 0;
   int get defaultTaxSetting => _defaultTaxSetting;
@@ -66,6 +69,8 @@ class SettingsProvider with ChangeNotifier {
         _paperSize = result.first['paperSize'] as String? ?? '58mm';
         // تحميل numberOfCopies
         _numberOfCopies = _parseInt(result.first['numberOfCopies']) ?? 5;
+        _nearExpiryAlertDays =
+            _parseInt(result.first['nearExpiryAlertDays']) ?? 7;
       }
 
       notifyListeners();
@@ -96,6 +101,22 @@ class SettingsProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       log('Error updating lowStockThreshold: $e');
+    }
+  }
+
+  Future<void> updateNearExpiryAlertDays(int newValue) async {
+    try {
+      final db = await _dbHelper.db;
+      await db.update(
+        'settings',
+        {'nearExpiryAlertDays': newValue},
+        where: 'id = ?',
+        whereArgs: [1],
+      );
+      _nearExpiryAlertDays = newValue;
+      notifyListeners();
+    } catch (e) {
+      log('Error updating nearExpiryAlertDays: $e');
     }
   }
 

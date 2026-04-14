@@ -21,6 +21,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void initState() {
     super.initState();
     _state = AddProductState(productId: widget.productId);
+    // ⬅️ الاستماع إلى تغييرات _state
+    _state.addListener(_onStateChanged);
+  }
+
+  void _onStateChanged() {
+    setState(() {
+      // تحديث الـ UI عند تغير الـ state
+    });
+  }
+
+  @override
+  void dispose() {
+    _state.removeListener(_onStateChanged);
+    _state.dispose();
+    super.dispose();
   }
 
   @override
@@ -47,7 +62,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
               'selectedUnit': _state.selectedUnit,
               'isNewProduct': _state.isNewProduct,
               'existingProduct': _state.existingProduct,
-              'existingQuantity': _state.existingProduct?.quantity,
+              'existingQuantity':
+                  (_state.existingProduct?.quantity ??
+                      double.tryParse(_state.quantityController.text) ??
+                      0.0),
               'offerEnabled': _state.offerEnabled,
               'offerStartDate': _state.offerStartDate,
               'offerEndDate': _state.offerEndDate,
@@ -72,7 +90,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
               'onRemoveUnit': _state.removeUnit,
             };
 
-            return Padding(
+            return SingleChildScrollView(
+              // ✅ إضافة السكرول هنا
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
               child:
                   screenType == ScreenType.desktop
@@ -93,11 +112,5 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _state.dispose();
-    super.dispose();
   }
 }

@@ -50,6 +50,8 @@ class StoreSettingsScreen extends StatelessWidget {
                     const SizedBox(height: 24),
                     _buildStockSection(settings),
                     const SizedBox(height: 24),
+                    _buildAlertsSection(settings),
+                    const SizedBox(height: 24),
                     _buildBackupSection(settings),
                   ],
                 ),
@@ -219,6 +221,36 @@ class StoreSettingsScreen extends StatelessWidget {
                   DropdownMenuItem(value: i + 1, child: Text('${i + 1} نسخة')),
             ),
             onChanged: (v) => settings.updateNumberOfCopies(v!),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlertsSection(SettingsProvider settings) {
+    return SettingsSection(
+      title: 'تنبيهات الواردات',
+      icon: Icons.notifications_active,
+      color: const Color(0xFF9C27B0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'اعتبر الواردات قريبة إذا كانت تنتهي خلال ${settings.nearExpiryAlertDays} يوم',
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'هذه القيمة هي التي تعتمد عليها تنبيهات الصفحة الرئيسية.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          Slider(
+            value: settings.nearExpiryAlertDays.toDouble(),
+            min: 1,
+            max: 90,
+            divisions: 89,
+            activeColor: const Color(0xFF9C27B0),
+            label: settings.nearExpiryAlertDays.toString(),
+            onChanged: (v) => settings.updateNearExpiryAlertDays(v.round()),
           ),
         ],
       ),

@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 class DBHelper {
   static Database? _db;
-  static const int _version = 12;
+  static const int _version = 14;
 
   Future<Database> get db async {
     if (_db != null) return _db!;
@@ -89,6 +89,14 @@ class DBHelper {
 
     if (oldVersion < 12) {
       await _upgradeToVersion12(db);
+    }
+
+    if (oldVersion < 13) {
+      await _upgradeToVersion13(db);
+    }
+
+    if (oldVersion < 14) {
+      await _upgradeToVersion14(db);
     }
   }
 
@@ -387,6 +395,80 @@ class DBHelper {
       log('Completed upgrade to version 12');
     } catch (e) {
       log('Upgrade to version 12 failed: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _upgradeToVersion13(Database db) async {
+    try {
+      log('Starting upgrade to version 13...');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS opening_balances (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          movement_type TEXT NOT NULL DEFAULT 'opening_balance',
+          date TEXT NOT NULL,
+          note TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS opening_balance_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          opening_balance_id INTEGER NOT NULL,
+          product_id INTEGER NOT NULL,
+          quantity REAL NOT NULL,
+          cost_price REAL NOT NULL,
+          subtotal REAL NOT NULL,
+          FOREIGN KEY (opening_balance_id) REFERENCES opening_balances (id) ON DELETE CASCADE,
+          FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+        )
+      ''');
+
+      final openingBalanceColumns = await db.rawQuery(
+        'PRAGMA table_info(opening_balances)',
+      );
+      await _addColumnIfMissing(
+        db,
+        tableName: 'opening_balances',
+        columns: openingBalanceColumns,
+        columnName: 'movement_type',
+        statement:
+            "ALTER TABLE opening_balances ADD COLUMN movement_type TEXT NOT NULL DEFAULT 'opening_balance'",
+      );
+
+      await _createIndexes(db);
+      log('Completed upgrade to version 13');
+    } catch (e) {
+      log('Upgrade to version 13 failed: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _upgradeToVersion14(Database db) async {
+    try {
+      log('Starting upgrade to version 14...');
+
+      final settingsColumns = await db.rawQuery('PRAGMA table_info(settings)');
+
+      await _addColumnIfMissing(
+        db,
+        tableName: 'settings',
+        columns: settingsColumns,
+        columnName: 'nearExpiryAlertDays',
+        statement:
+            'ALTER TABLE settings ADD COLUMN nearExpiryAlertDays INTEGER NOT NULL DEFAULT 7',
+      );
+
+      await db.execute('''
+        UPDATE settings
+        SET nearExpiryAlertDays = COALESCE(nearExpiryAlertDays, 7)
+      ''');
+
+      log('Completed upgrade to version 14');
+    } catch (e) {
+      log('Upgrade to version 14 failed: $e');
       rethrow;
     }
   }
@@ -694,6 +776,29 @@ class DBHelper {
       );
     ''');
 
+      await db.execute('''
+        CREATE TABLE opening_balances (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          movement_type TEXT NOT NULL DEFAULT 'opening_balance',
+          date TEXT NOT NULL,
+          note TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+      ''');
+
+    await db.execute('''
+      CREATE TABLE opening_balance_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        opening_balance_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        quantity REAL NOT NULL,
+        cost_price REAL NOT NULL,
+        subtotal REAL NOT NULL,
+        FOREIGN KEY (opening_balance_id) REFERENCES opening_balances (id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+      );
+    ''');
+
     // ========== جدول الإعدادات ==========
     await db.execute('''
       CREATE TABLE settings (
@@ -705,7 +810,8 @@ class DBHelper {
         logerPort INTEGER,
         logerIp TEXT,
         paperSize TEXT,
-        numberOfCopies INTEGER DEFAULT 5
+        numberOfCopies INTEGER DEFAULT 5,
+        nearExpiryAlertDays INTEGER NOT NULL DEFAULT 7
       );
     ''');
 
@@ -719,6 +825,7 @@ class DBHelper {
       'logerIp': null,
       'paperSize': '58mm',
       'numberOfCopies': 5,
+      'nearExpiryAlertDays': 7,
     });
 
     await _createIndexes(db);
@@ -811,6 +918,15 @@ class DBHelper {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier_date ON supplier_transactions(supplier_id, date DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_opening_balances_date ON opening_balances(date DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_opening_balance_items_balance_id ON opening_balance_items(opening_balance_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_opening_balance_items_product_id ON opening_balance_items(product_id)',
     );
   }
 

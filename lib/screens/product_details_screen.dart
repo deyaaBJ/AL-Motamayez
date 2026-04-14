@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/product.dart';
 import 'package:motamayez/providers/product_provider.dart';
-import 'package:motamayez/screens/add_product_screen.dart';
+import 'package:motamayez/screens/add_product/add_product_screen.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final int productId;

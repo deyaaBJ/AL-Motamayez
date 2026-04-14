@@ -174,6 +174,7 @@ class AddProductState extends ChangeNotifier {
         controller.offerEnabled = unit.offerEnabled;
         controller.offerStartDate = parseStoredDate(unit.offerStartDate);
         controller.offerEndDate = parseStoredDate(unit.offerEndDate);
+
         unitControllers.add(controller);
         unitIds.add(unit.id!);
       }
@@ -213,15 +214,10 @@ class AddProductState extends ChangeNotifier {
       return;
     }
 
-    double finalQuantity;
-    if (isNewProduct) {
-      finalQuantity = double.tryParse(quantityController.text) ?? 0.0;
-    } else {
-      final originalQty =
-          double.tryParse(originalQuantityController.text) ?? 0.0;
-      final addedQty = double.tryParse(quantityController.text) ?? 0.0;
-      finalQuantity = originalQty + addedQty;
-    }
+    final double finalQuantity =
+        existingProduct?.quantity ??
+        double.tryParse(quantityController.text) ??
+        0.0;
 
     if (nameController.text.isEmpty) {
       showAppToast(context, 'يرجى إدخال اسم المنتج', ToastType.error);
@@ -254,8 +250,8 @@ class AddProductState extends ChangeNotifier {
           offerStartDate: offerData.offerStartDate,
           offerEndDate: offerData.offerEndDate,
           offerEnabled: offerData.offerEnabled,
-          quantity: finalQuantity,
-          costPrice: existingProduct?.costPrice ?? 0.0,
+          quantity: 0,
+          costPrice: double.tryParse(costPriceController.text) ?? 0.0,
           active: isProductActive,
           hasExpiryDate: hasExpiryDate,
           lowStockThreshold: customLowStockThreshold,
@@ -289,7 +285,7 @@ class AddProductState extends ChangeNotifier {
           offerEndDate: offerData.offerEndDate,
           offerEnabled: offerData.offerEnabled,
           quantity: finalQuantity,
-          costPrice: existingProduct?.costPrice ?? 0.0,
+          costPrice: double.tryParse(costPriceController.text) ?? 0.0,
           addedDate: existingProduct?.addedDate,
           active: isProductActive,
           hasExpiryDate: hasExpiryDate,

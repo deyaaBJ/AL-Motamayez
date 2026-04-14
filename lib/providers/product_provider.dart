@@ -1,13 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:motamayez/models/batch.dart';
 import 'package:motamayez/models/cart_item.dart';
 import 'package:motamayez/models/product.dart';
 import 'package:motamayez/models/product_filter.dart';
 import 'package:motamayez/models/product_unit.dart';
 import 'package:motamayez/models/sale.dart';
 import 'package:motamayez/models/sale_item.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite/sqflite.dart' hide Batch;
 import '../db/db_helper.dart';
 import 'dart:developer';
 
@@ -391,7 +392,12 @@ AND date(offer_end_date) < date('now', 'localtime')
           )
         )
       ''';
-      List<Object?> whereArgs = ['%$query%', '%$query%', '%$query%', '%$query%'];
+      List<Object?> whereArgs = [
+        '%$query%',
+        '%$query%',
+        '%$query%',
+        '%$query%',
+      ];
 
       if (active != null) {
         whereClause += ' AND p.active = ?';
@@ -1994,6 +2000,45 @@ AND date(offer_end_date) < date('now', 'localtime')
       }
     } catch (e) {
       log('❌ DEBUG error: $e');
+    }
+  }
+
+  /// 🔹 جلب جميع الواردات لمنتج معين
+  Future<List<dynamic>> getBatchesByProductId(int productId) async {
+    try {
+      final db = await _dbHelper.db;
+      final result = await db.rawQuery(
+        '''
+        SELECT 
+          pb.*,
+          p.name as product_name,
+          p.barcode as product_barcode,
+          s.name as supplier_name
+        FROM product_batches pb
+        LEFT JOIN products p ON pb.product_id = p.id
+        LEFT JOIN purchase_items pit ON pb.purchase_item_id = pit.id
+        LEFT JOIN purchase_invoices pi ON pit.purchase_id = pi.id
+        LEFT JOIN suppliers s ON pi.supplier_id = s.id
+        WHERE pb.product_id = ? AND pb.active = 1
+        ORDER BY pb.expiry_date ASC
+      ''',
+        [productId],
+      );
+
+      // تحويل النتائج إلى Batch objects
+      return result
+          .map(
+            (map) => Batch.fromMap(
+              map,
+              productName: map['product_name'] as String?,
+              productBarcode: map['product_barcode'] as String?,
+              supplierName: map['supplier_name'] as String?,
+            ),
+          )
+          .toList();
+    } catch (e) {
+      log('❌ خطأ في جلب الواردات: $e');
+      return [];
     }
   }
 }

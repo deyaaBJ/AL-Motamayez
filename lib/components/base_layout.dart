@@ -80,6 +80,9 @@ class _BaseLayoutState extends State<BaseLayout> {
       case 'الواردات':
         Navigator.pushReplacementNamed(context, '/batches');
         break;
+      case 'الرصيد الافتتاحي':
+        Navigator.pushReplacementNamed(context, '/openingBalance');
+        break;
       case 'cashier':
         Navigator.pushReplacementNamed(context, '/cashier');
         break;
@@ -113,6 +116,11 @@ class _BaseLayoutState extends State<BaseLayout> {
       'icon': Icons.inventory_2_rounded,
       'label': 'الواردات',
       'page': 'الواردات',
+    },
+    {
+      'icon': Icons.playlist_add_check_circle_rounded,
+      'label': 'الرصيد الافتتاحي',
+      'page': 'الرصيد الافتتاحي',
     },
     {
       'icon': Icons.receipt_long_rounded,
@@ -612,6 +620,7 @@ class _BaseLayoutState extends State<BaseLayout> {
         'فاتورة شراء', // فواتير الشراء
         'الفواتير', // الفواتير
         'الموردين', // الموردين
+        'الرصيد الافتتاحي',
       ];
       return !blockedPages.contains(page);
     }
@@ -624,6 +633,7 @@ class _BaseLayoutState extends State<BaseLayout> {
         'فاتورة شراء', // فواتير الشراء
         'الفواتير', // الفواتير
         'الموردين', // الموردين
+        'الرصيد الافتتاحي',
       ];
       return !blockedPages.contains(page);
     }

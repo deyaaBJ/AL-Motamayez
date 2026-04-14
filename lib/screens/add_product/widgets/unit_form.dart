@@ -150,12 +150,41 @@ class _UnitFormState extends State<UnitForm> {
         widget.controller.unitNameController.text.isEmpty
             ? 'الوحدة'
             : widget.controller.unitNameController.text;
-    final String mixedQty = mixedUnitDisplay(
-      widget.totalQuantity,
-      containQty,
-      unitName,
-      widget.baseUnit,
-    );
+
+    final double total = widget.totalQuantity;
+    final double factor = containQty;
+
+    final int wholeUnits = (total / factor).floor();
+    double remainder = total - (wholeUnits * factor);
+    if ((remainder - remainder.roundToDouble()).abs() < 0.001) {
+      remainder = remainder.roundToDouble();
+    }
+
+    // تحويل الوحدة الأساسية: piece/price -> قطعة، kg -> كيلو
+    String getBaseUnitName(String baseUnit) {
+      final normalized = baseUnit.trim().toLowerCase();
+      if (normalized == 'piece' || normalized == 'price') {
+        return 'قطعة';
+      } else if (normalized == 'kg') {
+        return 'كيلو';
+      } else {
+        return baseUnit; // مثل "حبة" أو "علبة"
+      }
+    }
+
+    final String baseUnitSingular = getBaseUnitName(widget.baseUnit);
+
+    String displayText;
+    if (wholeUnits > 0 && remainder > 0) {
+      displayText =
+          '$wholeUnits $unitName و ${remainder.toStringAsFixed(0)} $baseUnitSingular';
+    } else if (wholeUnits > 0) {
+      displayText = '$wholeUnits $unitName';
+    } else if (remainder > 0) {
+      displayText = '${remainder.toStringAsFixed(0)} $baseUnitSingular';
+    } else {
+      displayText = '0';
+    }
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -198,14 +227,12 @@ class _UnitFormState extends State<UnitForm> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '${widget.totalQuantity.toStringAsFixed(2)} ÷ ${containQty.toStringAsFixed(2)}',
+                      '${total.toStringAsFixed(2)} ÷ ${factor.toStringAsFixed(2)}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      widget.controller.unitNameController.text.isEmpty
-                          ? "الوحدة"
-                          : widget.controller.unitNameController.text,
+                      unitName,
                       style: const TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   ],
@@ -220,9 +247,9 @@ class _UnitFormState extends State<UnitForm> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    mixedQty,
+                    displayText,
                     style: TextStyle(
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Colors.green[700],
                     ),

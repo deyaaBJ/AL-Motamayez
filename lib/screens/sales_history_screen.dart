@@ -8,7 +8,7 @@ import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/providers/auth_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
-import 'package:motamayez/screens/pos_screen.dart';
+import 'package:motamayez/screens/pos/pos_screen.dart';
 import '../providers/sales_provider.dart';
 import '../widgets/sale_details_dialog.dart';
 import '../models/sale.dart';

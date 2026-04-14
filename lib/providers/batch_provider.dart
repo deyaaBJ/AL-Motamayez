@@ -16,6 +16,7 @@ class BatchProvider with ChangeNotifier {
   bool _hasMore = true;
   bool _isLoadingMore = false;
   BatchFilter? _currentFilter;
+  BatchFilter? get currentFilter => _currentFilter;
 
   // Lists
   List<Batch> _batches = [];
@@ -826,19 +827,24 @@ class BatchProvider with ChangeNotifier {
   }
 
   // 🔴 دالة لجلب عدد الواردات المتبقي لها 7 أيام أو أقل
-  Future<int> getBatchesExpiringIn7DaysOrLess() async {
+  Future<int> getBatchesExpiringWithinDays(int days) async {
     try {
       final db = await _dbHelper.db;
+      final safeDays = days < 0 ? 0 : days;
 
-      final result = await db.rawQuery('''
+      final result = await db.rawQuery(
+        '''
         SELECT COUNT(*) as count 
         FROM product_batches 
         WHERE active = 1 
           AND expiry_date IS NOT NULL 
           AND expiry_date != '' 
           AND expiry_date >= DATE('now') 
-          AND expiry_date <= DATE('now', '+7 days')
-      ''');
+          AND expiry_date != '2099-12-31'
+          AND expiry_date <= DATE('now', '+' || ? || ' days')
+      ''',
+        [safeDays],
+      );
 
       return result.first['count'] as int? ?? 0;
     } catch (e) {
@@ -848,22 +854,38 @@ class BatchProvider with ChangeNotifier {
   }
 
   // 🔴 دالة واحدة لجلب كلا الإحصاءين
-  Future<Map<String, int>> getBatchesAlerts() async {
+  Future<Map<String, int>> getBatchesAlerts({
+    required int nearExpiryDays,
+  }) async {
     try {
       final expiredCount = await getExpiredBatchesCount();
-      final expiringSoonCount = await getBatchesExpiringIn7DaysOrLess();
+      final expiringSoonCount = await getBatchesExpiringWithinDays(
+        nearExpiryDays,
+      );
 
-      return {'expired': expiredCount, 'expiring_7_days': expiringSoonCount};
+      return {'expired': expiredCount, 'expiring_soon': expiringSoonCount};
     } catch (e) {
       log('❌ خطأ في جلب إشعارات الواردات: $e');
-      return {'expired': 0, 'expiring_7_days': 0};
+      return {'expired': 0, 'expiring_soon': 0};
     }
   }
 
   // 🔴 دالة لتحميل الواردات مع فلتر بسيط
-  Future<void> loadBatchesWithFilter(String filterType) async {
+  Future<void> loadBatchesWithFilter(
+    String filterType, {
+    int nearExpiryDays = 7,
+  }) async {
     try {
       final db = await _dbHelper.db;
+      final safeDays = nearExpiryDays < 0 ? 0 : nearExpiryDays;
+
+      if (filterType == 'expired') {
+        _currentFilter = BatchFilter(status: 'منتهي');
+      } else if (filterType == 'expiring_soon') {
+        _currentFilter = BatchFilter(status: 'قريب');
+      } else {
+        _currentFilter = null;
+      }
 
       String whereClause = 'pb.active = 1';
 
@@ -873,12 +895,13 @@ class BatchProvider with ChangeNotifier {
           AND pb.expiry_date != '' 
           AND pb.expiry_date < DATE('now')
         ''';
-      } else if (filterType == 'expiring_7_days') {
+      } else if (filterType == 'expiring_soon') {
         whereClause += '''
           AND pb.expiry_date IS NOT NULL 
           AND pb.expiry_date != '' 
+          AND pb.expiry_date != '2099-12-31'
           AND pb.expiry_date >= DATE('now') 
-          AND pb.expiry_date <= DATE('now', '+7 days')
+          AND pb.expiry_date <= DATE('now', '+$safeDays days')
         ''';
       }
 
@@ -1102,6 +1125,118 @@ class BatchProvider with ChangeNotifier {
     } catch (e) {
       log('❌ خطأ في إرجاع الدفعة للمورد: $e');
       rethrow;
+    }
+  }
+
+  // 🔴 جلب قائمة الواردات المنتهية (الصلاحية انقضت)
+  Future<List<Batch>> getExpiredBatchesList() async {
+    try {
+      final db = await _dbHelper.db;
+      final result = await db.rawQuery('''
+        SELECT 
+          pb.*,
+          p.name as product_name,
+          p.barcode as product_barcode,
+          s.name as supplier_name
+        FROM product_batches pb
+        LEFT JOIN products p ON pb.product_id = p.id
+        LEFT JOIN purchase_items pit ON pb.purchase_item_id = pit.id
+        LEFT JOIN purchase_invoices pi ON pit.purchase_id = pi.id
+        LEFT JOIN suppliers s ON pi.supplier_id = s.id
+        WHERE pb.active = 1
+          AND pb.expiry_date IS NOT NULL
+          AND pb.expiry_date != ''
+          AND pb.expiry_date != '2099-12-31'
+          AND pb.expiry_date < DATE('now')
+        ORDER BY pb.expiry_date ASC
+        LIMIT 10
+      ''');
+
+      return result
+          .map(
+            (map) => Batch.fromMap(
+              map,
+              productName: map['product_name'] as String?,
+              productBarcode: map['product_barcode'] as String?,
+              supplierName: map['supplier_name'] as String?,
+            ),
+          )
+          .toList();
+    } catch (e) {
+      log('❌ خطأ في جلب الواردات المنتهية: $e');
+      return [];
+    }
+  }
+
+  // 🔴 جلب قائمة الواردات القريبة من الانتهاء
+  Future<List<Batch>> getExpiringBatchesList({
+    required int nearExpiryDays,
+  }) async {
+    try {
+      final db = await _dbHelper.db;
+      final safeDays = nearExpiryDays < 0 ? 0 : nearExpiryDays;
+
+      final result = await db.rawQuery('''
+        SELECT 
+          pb.*,
+          p.name as product_name,
+          p.barcode as product_barcode,
+          s.name as supplier_name
+        FROM product_batches pb
+        LEFT JOIN products p ON pb.product_id = p.id
+        LEFT JOIN purchase_items pit ON pb.purchase_item_id = pit.id
+        LEFT JOIN purchase_invoices pi ON pit.purchase_id = pi.id
+        LEFT JOIN suppliers s ON pi.supplier_id = s.id
+        WHERE pb.active = 1
+          AND pb.expiry_date IS NOT NULL
+          AND pb.expiry_date != ''
+          AND pb.expiry_date != '2099-12-31'
+          AND pb.expiry_date >= DATE('now')
+          AND pb.expiry_date <= DATE('now', '+$safeDays days')
+        ORDER BY pb.expiry_date ASC
+        LIMIT 10
+      ''');
+
+      return result
+          .map(
+            (map) => Batch.fromMap(
+              map,
+              productName: map['product_name'] as String?,
+              productBarcode: map['product_barcode'] as String?,
+              supplierName: map['supplier_name'] as String?,
+            ),
+          )
+          .toList();
+    } catch (e) {
+      log('❌ خطأ في جلب الواردات القريبة: $e');
+      return [];
+    }
+  }
+
+  // 🔴 جلب جميع التنبيهات (الأعداد وقوائم الواردات)
+  Future<Map<String, dynamic>> getBatchesAlertsWithDetails({
+    required int nearExpiryDays,
+  }) async {
+    try {
+      final expiredList = await getExpiredBatchesList();
+      final expiringList = await getExpiringBatchesList(
+        nearExpiryDays: nearExpiryDays,
+      );
+
+      return {
+        'expired': expiredList.length,
+        'expiring_soon': expiringList.length,
+        'expired_list': expiredList,
+        'expiring_soon_list': expiringList,
+      };
+    } catch (e) {
+      log('❌ خطأ في جلب تفاصيل التنبيهات: $e');
+      return {
+        'expired': 0,
+        'expiring_soon': 0,
+        'expired_list': <Batch>[],
+        'expiring_soon_list': <Batch>[],
+      };
     }
   }
 }

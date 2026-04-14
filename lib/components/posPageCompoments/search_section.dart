@@ -8,7 +8,8 @@ class SearchSection extends StatelessWidget {
   final bool isSearching;
 
   final Function(String) performSearch;
-  final Function(String) onEnterPressed;
+  final Function(String)
+  onEnterPressed; // هذه الدالة مسؤولة عن اختيار المنتج عند الضغط على Enter
   final VoidCallback clearSearch;
 
   final bool showSearchResults;
@@ -71,13 +72,14 @@ class SearchSection extends StatelessWidget {
                           ),
                           style: const TextStyle(fontSize: 14),
                           onChanged: (value) {
-                            if (value.isNotEmpty) {
-                              performSearch(value);
-                            } else {
+                            // لا نبحث أثناء الكتابة لتجنب البحث غير المكتمل من الباركود
+                            // فقط ننعش الواجهة إذا تم مسح النص
+                            if (value.isEmpty) {
                               refreshState();
                             }
                           },
                           onSubmitted: (value) {
+                            // ✅ هنا نستدعي onEnterPressed لاختيار المنتج مباشرة (بدلاً من البحث فقط)
                             if (value.isNotEmpty) {
                               onEnterPressed(value);
                             }
@@ -143,10 +145,6 @@ class SearchSection extends StatelessWidget {
               ),
             ],
           ),
-
-          const SizedBox(height: 8),
-
-          // _buildSearchTypeButtons(),
         ],
       ),
     );

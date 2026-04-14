@@ -8,12 +8,14 @@ class BatchItem extends StatelessWidget {
   final Batch batch;
   final BatchProvider provider;
   final VoidCallback onUpdate;
+  final int nearExpiryAlertDays;
 
   const BatchItem({
     super.key,
     required this.batch,
     required this.provider,
     required this.onUpdate,
+    this.nearExpiryAlertDays = 7,
   });
 
   @override

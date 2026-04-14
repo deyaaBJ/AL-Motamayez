@@ -19,36 +19,41 @@ class DesktopLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              flex: 4,
-              child: ProductInfoSection(
-                formKey: formKey,
-                formData: formData,
-                screenType: 'desktop',
+    return SingleChildScrollView(
+      // ✅ إضافة السكرول هنا
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 4,
+                child: ProductInfoSection(
+                  formKey: formKey,
+                  formData: formData,
+                  screenType: 'desktop',
+                ),
               ),
-            ),
-            const SizedBox(width: 24),
-            Expanded(
-              flex: 3,
-              child: QrScannerCard(
-                qrController: qrController,
-                onQRCodeChanged: onQRCodeChanged,
+              const SizedBox(width: 24),
+              Expanded(
+                flex: 3,
+                child: QrScannerCard(
+                  qrController: qrController,
+                  onQRCodeChanged: onQRCodeChanged,
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 30),
-        SaveButton(
-          isLoading: formData['isLoading'],
-          isNewProduct: formData['isNewProduct'],
-          onPressed: formData['onSave'],
-        ),
-      ],
+            ],
+          ),
+          const SizedBox(height: 30),
+          SaveButton(
+            isLoading: formData['isLoading'],
+            isNewProduct: formData['isNewProduct'],
+            onPressed: formData['onSave'],
+          ),
+          const SizedBox(height: 20), // مسافة إضافية في الأسفل
+        ],
+      ),
     );
   }
 }

@@ -521,6 +521,7 @@ class _PosScreenState extends State<PosScreen>
     }
   }
 
+  // ==================== البيع الآجل مع تأكيد ====================
   Future<void> _recordDebtSale() async {
     if (_cartItems.isEmpty) {
       showAppToast(context, 'السلة فارغة', ToastType.warning);
@@ -529,8 +530,35 @@ class _PosScreenState extends State<PosScreen>
     final customerProvider = context.read<CustomerProvider>();
     await customerProvider.fetchCustomers(reset: true);
     if (!mounted) return;
-    final selected = await showCustomerSelectionDialog(context);
-    if (selected != null) await _finalizeSaleWithCustomer(selected);
+    final selectedCustomer = await showCustomerSelectionDialog(context);
+    if (selectedCustomer == null) return; // المستخدم ألغى اختيار الزبون
+
+    // نافذة تأكيد
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('تأكيد البيع الآجل'),
+            content: Text(
+              'هل أنت متأكد من إتمام عملية البيع للزبون "${selectedCustomer.name}"؟',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                child: const Text('نعم، أكمل'),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed == true) {
+      await _finalizeSaleWithCustomer(selectedCustomer);
+    }
   }
 
   Future<void> _finalizeSaleWithCustomer(Customer customer) async {

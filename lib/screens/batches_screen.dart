@@ -7,6 +7,7 @@ import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/batch.dart';
 import 'package:motamayez/models/batch_filter.dart';
 import 'package:motamayez/providers/batch_provider.dart';
+import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/widgets/batch_filter_bar.dart';
 import 'package:motamayez/widgets/batch_item.dart';
 import 'package:motamayez/widgets/batch_table_header.dart';
@@ -24,6 +25,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
   String _searchQuery = '';
   BatchFilter _currentFilter = BatchFilter();
   List<Batch> _searchResults = [];
+  int _nearExpiryAlertDays = 7;
 
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
@@ -34,6 +36,9 @@ class _BatchesScreenState extends State<BatchesScreen> {
   void initState() {
     super.initState();
     _provider = Provider.of<BatchProvider>(context, listen: false);
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    _nearExpiryAlertDays = settings.nearExpiryAlertDays;
+    _currentFilter = _provider.currentFilter ?? BatchFilter();
     _setupScrollListener();
 
     // استخدام addPostFrameCallback بدلاً من التحميل المباشر
@@ -170,13 +175,16 @@ class _BatchesScreenState extends State<BatchesScreen> {
             allBatches
                 .where(
                   (batch) =>
-                      batch.daysRemaining <= 30 && batch.daysRemaining > 0,
+                      batch.daysRemaining <= _nearExpiryAlertDays &&
+                      batch.daysRemaining > 0,
                 )
                 .length;
         final expiredBatches =
             allBatches.where((batch) => batch.daysRemaining < 0).length;
         final goodBatches =
-            allBatches.where((batch) => batch.daysRemaining > 30).length;
+            allBatches
+                .where((batch) => batch.daysRemaining > _nearExpiryAlertDays)
+                .length;
 
         return Card(
           elevation: 1,
@@ -266,6 +274,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
             batch: batch,
             provider: _provider,
             onUpdate: _loadInitialBatches,
+            nearExpiryAlertDays: _nearExpiryAlertDays,
           );
         },
       ),

@@ -7,7 +7,7 @@ import 'package:motamayez/models/product.dart';
 import 'package:motamayez/models/product_filter.dart';
 import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
-import 'package:motamayez/screens/add_product_screen.dart'
+import 'package:motamayez/screens/add_product/add_product_screen.dart'
     show AddProductScreen;
 import 'package:motamayez/widgets/product_filter_bar.dart';
 import 'package:motamayez/widgets/product_item.dart';
@@ -143,27 +143,30 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   return;
                 }
 
-                _searchDebounce = Timer(const Duration(milliseconds: 300), () async {
-                  bool? active;
-                  switch (_currentFilter) {
-                    case ProductFilter.inactive:
-                      active = false;
-                      break;
-                    case ProductFilter.all:
-                      active = null;
-                      break;
-                    default:
-                      active = true;
-                  }
+                _searchDebounce = Timer(
+                  const Duration(milliseconds: 300),
+                  () async {
+                    bool? active;
+                    switch (_currentFilter) {
+                      case ProductFilter.inactive:
+                        active = false;
+                        break;
+                      case ProductFilter.all:
+                        active = null;
+                        break;
+                      default:
+                        active = true;
+                    }
 
-                  final results = await _provider.searchProducts(
-                    value,
-                    active: active,
-                  );
+                    final results = await _provider.searchProducts(
+                      value,
+                      active: active,
+                    );
 
-                  if (!mounted || _searchQuery != value.trim()) return;
-                  setState(() => _searchResults = results);
-                });
+                    if (!mounted || _searchQuery != value.trim()) return;
+                    setState(() => _searchResults = results);
+                  },
+                );
               },
               decoration: InputDecoration(
                 hintText: 'ابحث عن منتج...',
