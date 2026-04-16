@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:motamayez/components/posPageCompoments/search_section.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
-import 'package:motamayez/components/posPageComponents/search_section.dart';
 import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/models/cart_item.dart';
 import 'package:motamayez/models/customer.dart';
@@ -26,6 +25,7 @@ import 'package:motamayez/screens/pos/components/pos_customer_selection_dialog.d
 import 'package:motamayez/screens/pos/components/pos_add_service_dialog.dart';
 import 'package:motamayez/screens/pos/pos_helpers.dart';
 import 'dart:developer';
+import 'dart:async';
 
 // Extension to add firstWhereOrNull to Iterable
 extension FirstWhereOrNullExtension<T> on Iterable<T> {
@@ -67,6 +67,7 @@ class _PosScreenState extends State<PosScreen>
   final FocusNode _searchFocusNode = FocusNode();
   String _searchType = 'product';
   bool _isSearching = false;
+  Timer? _searchDebounce;
 
   // Sale edit mode
   Sale? _originalSale;
@@ -99,6 +100,7 @@ class _PosScreenState extends State<PosScreen>
     _searchController.dispose();
     _searchFocusNode.dispose();
     _totalEditorController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
@@ -176,58 +178,145 @@ class _PosScreenState extends State<PosScreen>
     try {
       final results = <dynamic>[];
       final trimmed = query.trim();
-      final isBarcode = double.tryParse(trimmed) != null;
-      if (isBarcode) {
+
+      if (_searchType == 'product') {
+        // 1️⃣ البحث عن الوحدات باستخدام الباركود
         final unitsByBarcode = await _productProvider
             .searchProductUnitsByBarcode(trimmed);
         for (final unit in unitsByBarcode) {
           final product = await _productProvider.getProductById(unit.productId);
           if (product != null) results.add(unit);
         }
+
+        // 2️⃣ البحث عن المنتجات باستخدام الباركود
         final productsByBarcode = await _productProvider
             .searchProductsByBarcode(trimmed);
         for (final p in productsByBarcode) {
           if (!results.any((e) => e is ProductUnit && e.productId == p.id))
             results.add(p);
         }
-      }
-      if ((!isBarcode || results.isEmpty) && _searchType == 'product') {
-        final productsByName = await _productProvider.searchProductsByName(
-          trimmed,
-        );
-        for (final p in productsByName) {
-          if (!results.any(
-            (e) =>
-                (e is Product && e.id == p.id) ||
-                (e is ProductUnit && e.productId == p.id),
-          )) {
-            results.add(p);
+
+        // 3️⃣ البحث عن المنتجات بالاسم
+        if (results.isEmpty) {
+          final productsByName = await _productProvider.searchProductsByName(
+            trimmed,
+          );
+          results.addAll(productsByName);
+
+          // 4️⃣ البحث عن الوحدات بالاسم
+          final unitsByName = await _productProvider.searchProductUnitsByName(
+            trimmed,
+          );
+          for (final unit in unitsByName) {
+            final product = await _productProvider.getProductById(
+              unit.productId,
+            );
+            if (product != null &&
+                !results.any(
+                  (e) =>
+                      (e is Product && e.id == product.id) ||
+                      (e is ProductUnit && e.productId == product.id),
+                ))
+              results.add(unit);
           }
         }
       }
-      if (mounted)
+
+      if (mounted) {
         setState(() {
           _searchResults = results;
           _showSearchResults = results.isNotEmpty;
           _isSearching = false;
         });
+      }
     } catch (e) {
+      log('Error during search: $e');
       if (mounted) setState(() => _isSearching = false);
+    }
+  }
+
+  // دالة جديدة للتعامل المباشر مع الباركود
+  Future<void> _handleBarcodeScan(String barcode) async {
+    if (_isSearching) return;
+    setState(() => _isSearching = true);
+    try {
+      final unitsByBarcode = await _productProvider.searchProductUnitsByBarcode(
+        barcode,
+      );
+      if (unitsByBarcode.isNotEmpty) {
+        final unit = unitsByBarcode.first;
+        final product = await _productProvider.getProductById(unit.productId);
+        if (product != null) {
+          await _addUnitFromSearch(unit, product);
+          setState(() => _isSearching = false);
+          return;
+        }
+      }
+
+      final productsByBarcode = await _productProvider.searchProductsByBarcode(
+        barcode,
+      );
+      if (productsByBarcode.isNotEmpty) {
+        final product = productsByBarcode.first;
+        await _addProductFromSearch(product);
+        setState(() => _isSearching = false);
+        return;
+      }
+
+      if (mounted) {
+        showAppToast(
+          context,
+          'لم يتم العثور على منتج بهذا الباركود',
+          ToastType.warning,
+        );
+        setState(() => _isSearching = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        showAppToast(context, 'خطأ في قراءة الباركود', ToastType.error);
+        setState(() => _isSearching = false);
+      }
     }
   }
 
   void _handleEnterPressed(String query) async {
     if (_isSearching) return;
-    await _performSearch(query);
-    if (_searchResults.isNotEmpty) {
-      final first = _searchResults.first;
-      if (first is ProductUnit) {
-        final product = await _productProvider.getProductById(first.productId);
-        if (product != null) _addUnitFromSearch(first, product);
-      } else if (first is Product) {
-        _addProductFromSearch(first);
+
+    final trimmed = query.trim();
+
+    // 1- تحقق هل هذا النص موجود كباركود حقيقي؟
+    final unitsByBarcode = await _productProvider.searchProductUnitsByBarcode(
+      trimmed,
+    );
+    final productsByBarcode = await _productProvider.searchProductsByBarcode(
+      trimmed,
+    );
+    final foundAsBarcode =
+        unitsByBarcode.isNotEmpty || productsByBarcode.isNotEmpty;
+
+    if (foundAsBarcode) {
+      // ✅ باركود موجود → أضف المنتج مباشرة واخفِ النتائج
+      await _handleBarcodeScan(trimmed);
+      _clearSearchAfterAction(); // يمسح النص ويخفي النتائج
+    } else {
+      // ✅ ليس باركوداً → ابحث
+      await _performSearch(query);
+
+      // إذا وجدنا نتائج، أضف أول نتيجة مباشرة
+      if (_searchResults.isNotEmpty && mounted) {
+        final first = _searchResults.first;
+        if (first is ProductUnit) {
+          final product = await _productProvider.getProductById(
+            first.productId,
+          );
+          if (product != null) {
+            await _addUnitFromSearch(first, product);
+          }
+        } else if (first is Product) {
+          await _addProductFromSearch(first);
+        }
+        _clearSearchAfterAction();
       }
-      _clearSearchAfterAction();
     }
   }
 
@@ -628,22 +717,74 @@ class _PosScreenState extends State<PosScreen>
     final auth = context.read<AuthProvider>();
     final productProvider = context.read<ProductProvider>();
     try {
+      // عند التعديل، يجب التحقق من الكميات الإضافية فقط (الفرق بين الجديد والقديم)
+      // وليس الكميات كاملة
+
+      // جلب عناصر الفاتورة القديمة
+      final oldSaleItems = await productProvider.getSaleItems(
+        _originalSale!.id,
+      );
+      final Map<int, double> oldQuantities = {};
+
+      for (final oldItem in oldSaleItems) {
+        if (oldItem.productId != null) {
+          double oldQty = oldItem.quantity;
+          if (oldItem.unitId != null) {
+            // جلب معاملل التحويل من الوحدة
+            final units = await productProvider.getProductUnits(
+              oldItem.productId!,
+            );
+            final matchingUnit = units.firstWhere(
+              (u) => u.id == oldItem.unitId,
+              orElse:
+                  () => ProductUnit(
+                    id: 0,
+                    productId: 0,
+                    unitName: '',
+                    containQty: 1,
+                    sellPrice: 0,
+                  ),
+            );
+            oldQty = oldItem.quantity * matchingUnit.containQty;
+          }
+          oldQuantities[oldItem.productId!] =
+              (oldQuantities[oldItem.productId!] ?? 0) + oldQty;
+        }
+      }
+
+      // التحقق من الكميات الإضافية فقط
       for (final item in _cartItems) {
         if (!item.isService && item.product != null) {
-          final reqQty =
+          // تحديث بيانات المنتج من قاعدة البيانات للتأكد من الكمية الحالية
+          final freshProduct = await productProvider.getProductById(
+            item.product!.id!,
+          );
+          if (freshProduct == null) continue;
+
+          final newReqQty =
               item.selectedUnit != null
                   ? item.quantity * item.selectedUnit!.containQty
                   : item.quantity;
-          if (item.product!.quantity < reqQty) {
+
+          final oldQty = oldQuantities[item.product!.id] ?? 0;
+          final additionalQty = newReqQty - oldQty;
+
+          log(
+            '🔍 التحقق: ${item.product!.name} | قديم: $oldQty، جديد: $newReqQty، إضافي: $additionalQty، متوفر: ${freshProduct.quantity}',
+          );
+
+          // تحقق فقط إذا كانت هناك كمية إضافية مطلوبة
+          if (additionalQty > 0 && freshProduct.quantity < additionalQty) {
             showAppToast(
               context,
-              'كمية غير كافية لـ ${item.product!.name}',
+              'كمية غير كافية لـ ${item.product!.name}. المتوفر: ${freshProduct.quantity.toStringAsFixed(2)}, المطلوب إضافياً: ${additionalQty.toStringAsFixed(2)}',
               ToastType.error,
             );
             return;
           }
         }
       }
+
       await productProvider.updateSale(
         originalSale: _originalSale!,
         cartItems: _cartItems,

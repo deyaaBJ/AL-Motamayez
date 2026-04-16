@@ -171,7 +171,7 @@ class PosTotalAndButtons extends StatelessWidget {
                 Icons.delete_sweep,
                 const Color(0xFFF44336),
                 onClearCart,
-                false,
+                cartIsEmpty,
               ),
             ],
           ),

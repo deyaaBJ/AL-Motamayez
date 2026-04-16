@@ -199,23 +199,28 @@ class ChartSection extends StatelessWidget {
   }
 
   double _calculateYAxisInterval(double maxSales) {
+    // 5 قيم فقط: 0, interval, 2*interval, 3*interval, 4*interval
     if (maxSales <= 0) return 25;
 
-    final rawInterval = maxSales / 4;
-    if (rawInterval <= 10) return 5;
-    if (rawInterval <= 25) return 10;
-    if (rawInterval <= 50) return 25;
-    if (rawInterval <= 100) return 50;
-    if (rawInterval <= 250) return 100;
-    if (rawInterval <= 500) return 250;
-    if (rawInterval <= 1000) return 500;
+    // interval = maxSales / 4 لنحصل على 5 قيم موزعة
+    double rawInterval = maxSales / 4;
 
-    return (rawInterval / 500).ceil() * 500.0;
+    // تقريب إلى أقرب قيمة مناسبة
+    if (rawInterval <= 10) return 10;
+    if (rawInterval <= 25) return 25;
+    if (rawInterval <= 50) return 50;
+    if (rawInterval <= 100) return 100;
+    if (rawInterval <= 250) return 250;
+    if (rawInterval <= 500) return 500;
+    if (rawInterval <= 1000) return 1000;
+
+    return (rawInterval / 1000).ceil() * 1000.0;
   }
 
   double _calculateChartMax(double maxSales, double interval) {
     if (maxSales <= 0) return 100;
-    return ((maxSales / interval).ceil() + 1) * interval;
+    // 5 قيم فقط: 0, interval, 2*interval, 3*interval, 4*interval
+    return 4 * interval;
   }
 
   String _formatAxisValue(double value) {

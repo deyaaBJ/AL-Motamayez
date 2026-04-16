@@ -1,14 +1,35 @@
-# Mixed Units Display in Add Product Screen - No Approximation
+# Fix Batches Screen - "إعادة التعيين" Filter Not Showing Batches Without Expiry
 
-Approved plan to display quantities as mixed units (e.g., '11 كرتونة و 5 حبات') instead of decimals.
+**Status:** Plan approved by user ("اه").
 
-## Steps to Complete:
+## Steps:
 
-- [x] 1. Update `lib/utils/unit_translator.dart`: Add `mixedUnitDisplay` function.
-- [x] 2. Update `lib/screens/add_product/widgets/product_info_section.dart`: Pass `selectedUnit` as `baseUnit` to `UnitsSection`.
-- [x] 3. Update `lib/screens/add_product/widgets/units_section.dart`: Receive `baseUnit`, pass to `UnitForm`.
-- [x] 4. Update `lib/screens/add_product/widgets/unit_form.dart`: Receive `baseUnit`, replace decimal display with `mixedUnitDisplay`.
-- [ ] 5. Test implementation (add product with units, verify mixed display).
-- [ ] 6. Create git branch, commit changes, push, open PR.
+### 1. Add fix method in lib/db/db_helper.dart
 
-**Progress:** Step 4 completed. Feature implemented, no linter errors. Next: Test and PR.
+- Add `Future<int> fixInactiveNoExpiryBatches()` → UPDATE active=1 for batches with no expiry AND remaining_quantity > 0, return count affected.
+
+### 2. Update lib/providers/batch_provider.dart
+
+- Add `Future<void> fixBatchData()` calling DBHelper().fixInactiveNoExpiryBatches().
+- Add `Future<Map<String, int>> getBatchStats()` → count total active, no_expiry active.
+
+### 3. Update lib/screens/batches_screen.dart
+
+- Add ElevatedButton row below BatchFilterBar:
+  - "إحصائيات" → show dialog with stats.
+  - "إصلاح البيانات" → call provider.fixBatchData() → reload + snackbar count.
+- Use showDialog for stats.
+
+### 4. Test
+
+- Create batch without expiry, set active=0.
+- Run app, check not shows on reset.
+- Press "إصلاح" → reloads, shows.
+
+### 5. Cleanup
+
+- Remove admin buttons or hide behind debug flag.
+
+**Followup:** Install dependencies if needed (`flutter pub get`), `flutter run`, test.
+
+Proceed to step 1?

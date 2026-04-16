@@ -1,4 +1,3 @@
-// lib/providers/batch_provider.dart
 import 'dart:async';
 import 'dart:developer';
 
@@ -17,7 +16,6 @@ class BatchProvider with ChangeNotifier {
   bool _isLoadingMore = false;
   BatchFilter? _currentFilter;
   BatchFilter? get currentFilter => _currentFilter;
-
   // Lists
   List<Batch> _batches = [];
   List<Batch> get batches => _batches;
@@ -37,17 +35,25 @@ class BatchProvider with ChangeNotifier {
     _batches.clear();
   }
 
+  set currentFilter(BatchFilter? filter) {
+    _currentFilter = filter;
+    notifyListeners();
+  }
+
   Future<List<Batch>> loadBatches({
     bool reset = false,
     BatchFilter? filter,
   }) async {
+    log('📥 [loadBatches] Called with reset=$reset, filter=$filter');
+    log('📥 [loadBatches] _currentFilter BEFORE: $_currentFilter');
+
     if (reset) {
       resetPagination();
     }
 
-    if (filter != null) {
-      _currentFilter = filter;
-    }
+    // تحديث الفلتر الحالي (قد يكون null)
+    _currentFilter = filter;
+    log('📥 [loadBatches] _currentFilter AFTER: $_currentFilter');
 
     if (_isLoadingMore) return [];
 
@@ -61,7 +67,6 @@ class BatchProvider with ChangeNotifier {
 
       final db = await _dbHelper.db;
 
-      // ✅ استعلام يجلب جميع الواردات (مع وبدون صلاحية)
       String query = '''
       SELECT 
         pb.*,
@@ -72,8 +77,7 @@ class BatchProvider with ChangeNotifier {
         pi.id as purchase_invoice_id,
         pit.purchase_id,
         CASE 
-          WHEN pb.expiry_date = '2099-12-31' THEN 9999
-          WHEN pb.expiry_date IS NULL THEN 9999
+          WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' OR pb.expiry_date = '2099-12-31' THEN 9999
           ELSE julianday(pb.expiry_date) - julianday('now')
         END as days_remaining
       FROM product_batches pb
@@ -85,20 +89,26 @@ class BatchProvider with ChangeNotifier {
     ''';
 
       final List<Object?> args = [];
+      log(
+        '📥 [loadBatches] _currentFilter: $_currentFilter, hasActiveFilters: ${_currentFilter?.hasActiveFilters}',
+      );
 
-      if (_currentFilter != null) {
+      // إضافة شروط الفلتر فقط إذا كان _currentFilter != null وله شروط فعالة
+      if (_currentFilter != null && _currentFilter!.hasActiveFilters) {
         final filterClause = _currentFilter!.buildWhereClause(args);
+        log('📥 [loadBatches] Adding filter clause: $filterClause');
         if (filterClause.isNotEmpty) {
           query += ' AND $filterClause';
         }
+      } else {
+        log('📥 [loadBatches] NO FILTER APPLIED - showing all batches');
       }
 
       query += '''
       ORDER BY 
         CASE 
-          WHEN pb.expiry_date = '2099-12-31' THEN 1
-          WHEN pb.expiry_date IS NULL THEN 1
-          ELSE 0
+          WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' OR pb.expiry_date = '2099-12-31' THEN 0
+          ELSE 1
         END,
         pb.expiry_date ASC
       LIMIT ? OFFSET ?
@@ -107,6 +117,18 @@ class BatchProvider with ChangeNotifier {
       args.addAll([_limit, _page * _limit]);
 
       final result = await db.rawQuery(query, args);
+      log('📥 [loadBatches] Query result count: ${result.length}');
+
+      // طباعة تفاصيل كل واردة
+      for (var i = 0; i < result.length; i++) {
+        final map = result[i];
+        final productName = map['product_name'] as String?;
+        final expiryDate = map['expiry_date'] as String?;
+        final remainingQty = map['remaining_quantity'] as num?;
+        log(
+          '📥 [loadBatches] Batch $i: $productName, expiry_date=$expiryDate, remaining_qty=$remainingQty',
+        );
+      }
 
       if (result.isEmpty) {
         _hasMore = false;
@@ -116,19 +138,10 @@ class BatchProvider with ChangeNotifier {
       } else {
         final newBatches =
             result.map((map) {
-              // ✅ معالجة اسم المورد
               String? supplierName = map['supplier_name'] as String?;
               if (supplierName == null || supplierName.isEmpty) {
                 supplierName = 'غير محدد';
               }
-
-              // ✅ معالجة الأيام المتبقية
-              final expiryDate = map['expiry_date'] as String?;
-              if (expiryDate == '2099-12-31' ||
-                  expiryDate == null ||
-                  expiryDate.isEmpty) {
-                // عدد كبير يعني بدون صلاحية
-              } else {}
 
               return Batch.fromMap(
                 map,
@@ -152,6 +165,14 @@ class BatchProvider with ChangeNotifier {
         }
       }
 
+      log('📥 [loadBatches] Total _batches after update: ${_batches.length}');
+      for (var i = 0; i < _batches.length; i++) {
+        final batch = _batches[i];
+        log(
+          '📥 [_batches] Batch $i: ${batch.productName}, expiry_date=${batch.expiryDate}, qty=${batch.remainingQuantity}',
+        );
+      }
+
       await _loadTotalBatches();
       return _batches;
     } catch (e) {
@@ -163,20 +184,19 @@ class BatchProvider with ChangeNotifier {
     }
   }
 
-  // تحميل العدد الإجمالي
   Future<void> _loadTotalBatches() async {
     try {
       final db = await _dbHelper.db;
 
       String query = '''
-        SELECT COUNT(*) as count
-        FROM product_batches pb
-        WHERE pb.active = 1
-      ''';
+      SELECT COUNT(*) as count
+      FROM product_batches pb
+      WHERE pb.active = 1
+    ''';
 
       final List<Object?> args = [];
 
-      if (_currentFilter != null) {
+      if (_currentFilter != null && _currentFilter!.hasActiveFilters) {
         final filterClause = _currentFilter!.buildWhereClause(args);
         if (filterClause.isNotEmpty) {
           query += ' AND $filterClause';
@@ -196,31 +216,35 @@ class BatchProvider with ChangeNotifier {
     }
   }
 
-  // البحث عن واردات
-  // البحث عن واردات مع اسم المورد
   Future<List<Batch>> searchBatches(String query) async {
     try {
       final db = await _dbHelper.db;
 
       final result = await db.rawQuery(
         '''
-      SELECT 
-        pb.*,
-        p.name as product_name,
-        p.barcode as product_barcode,
-        s.name as supplier_name,
-        pi.id as purchase_invoice_id,
-        CASE 
-          WHEN pb.expiry_date IS NULL THEN 9999
-          ELSE julianday(pb.expiry_date) - julianday('now')
-        END as days_remaining
-      FROM product_batches pb
-      LEFT JOIN products p ON pb.product_id = p.id
-      LEFT JOIN purchase_items pit ON pb.purchase_item_id = pit.id
-      LEFT JOIN purchase_invoices pi ON pit.purchase_id = pi.id
-      LEFT JOIN suppliers s ON pi.supplier_id = s.id
-      WHERE pb.active = 1 AND (p.name LIKE ? OR p.barcode LIKE ? OR s.name LIKE ?)
-      ORDER BY pb.expiry_date ASC
+    SELECT 
+      pb.*,
+      p.name as product_name,
+      p.barcode as product_barcode,
+      s.name as supplier_name,
+      pi.id as purchase_invoice_id,
+      CASE 
+        WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' OR pb.expiry_date = '2099-12-31' THEN 9999
+        ELSE julianday(pb.expiry_date) - julianday('now')
+      END as days_remaining
+    FROM product_batches pb
+    LEFT JOIN products p ON pb.product_id = p.id
+    LEFT JOIN purchase_items pit ON pb.purchase_item_id = pit.id
+    LEFT JOIN purchase_invoices pi ON pit.purchase_id = pi.id
+    LEFT JOIN suppliers s ON pi.supplier_id = s.id
+    WHERE pb.active = 1 
+      AND (p.name LIKE ? OR p.barcode LIKE ? OR s.name LIKE ?)
+    ORDER BY 
+      CASE 
+        WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' OR pb.expiry_date = '2099-12-31' THEN 0
+        ELSE 1
+      END,
+      pb.expiry_date ASC
     ''',
         ['%$query%', '%$query%', '%$query%'],
       );
@@ -571,14 +595,15 @@ class BatchProvider with ChangeNotifier {
     required double quantity,
     required double remainingQuantity,
     required double costPrice,
-    String? expiryDate, // ✅ صار اختياري (nullable)
+    String? expiryDate,
     String? productionDate,
   }) async {
     try {
       final db = await _dbHelper.db;
-
-      // ✅ إذا كان expiryDate = null، استخدم تاريخ بعيد (مثلاً 31-12-2099)
-      final finalExpiryDate = expiryDate ?? '2099-12-31';
+      final finalExpiryDate =
+          (expiryDate == null || expiryDate.isEmpty)
+              ? '2099-12-31'
+              : expiryDate;
 
       final batchId = await db.insert('product_batches', {
         'product_id': productId,
@@ -586,7 +611,7 @@ class BatchProvider with ChangeNotifier {
         'quantity': quantity,
         'remaining_quantity': remainingQuantity,
         'cost_price': costPrice,
-        'expiry_date': finalExpiryDate, // ✅ دائماً له تاريخ
+        'expiry_date': finalExpiryDate,
         'production_date': productionDate,
         'active': 1,
         'created_at': DateTime.now().toIso8601String(),
@@ -617,7 +642,14 @@ class BatchProvider with ChangeNotifier {
       LEFT JOIN purchase_items pit ON pb.purchase_item_id = pit.id
       LEFT JOIN purchase_invoices pi ON pit.purchase_id = pi.id
       LEFT JOIN suppliers s ON pi.supplier_id = s.id
-      WHERE pb.product_id = ? AND pb.remaining_quantity > 0
+      WHERE pb.product_id = ? 
+        AND pb.remaining_quantity > 0
+        AND (
+          pb.expiry_date IS NULL 
+          OR pb.expiry_date = '' 
+          OR pb.expiry_date = '2099-12-31'
+          OR DATE(pb.expiry_date) >= DATE('now')
+        )
       ORDER BY pb.expiry_date ASC
     ''',
         [productId],
@@ -674,14 +706,21 @@ class BatchProvider with ChangeNotifier {
     try {
       final db = await _dbHelper.db;
 
-      // جلب الواردات الأقدم أولاً (Order by oldest)
+      // جلب الواردات الصالحة فقط (غير منتهية الصلاحية)
       final batches = await db.rawQuery(
         '''
         SELECT * FROM product_batches 
         WHERE product_id = ? 
           AND remaining_quantity > 0 
           AND active = 1
+          AND (
+            expiry_date IS NULL 
+            OR expiry_date = '' 
+            OR expiry_date = '2099-12-31'
+            OR DATE(expiry_date) >= DATE('now')
+          )
         ORDER BY 
+          CASE WHEN expiry_date IS NULL OR expiry_date = '' OR expiry_date = '2099-12-31' THEN 0 ELSE 1 END,
           CASE WHEN expiry_date IS NOT NULL THEN expiry_date ELSE '9999-12-31' END ASC,
           created_at ASC
       ''',
@@ -689,7 +728,7 @@ class BatchProvider with ChangeNotifier {
       );
 
       if (batches.isEmpty) {
-        throw Exception('لا توجد واردات متاحة للمنتج ID: $productId');
+        throw Exception('نفاذ الكمية - لا توجد واردات متاحة للمنتج');
       }
 
       double remainingToDeduct = requiredQuantity;
@@ -733,7 +772,7 @@ class BatchProvider with ChangeNotifier {
 
       if (remainingToDeduct > 0) {
         throw Exception(
-          'الكمية غير كافية. المطلوب: $requiredQuantity، المتبقي بعد الخصم: $remainingToDeduct',
+          'نفاذ الكمية - الكمية غير كافية. المطلوب: $requiredQuantity، المتبقي بعد الخصم: $remainingToDeduct',
         );
       }
 
@@ -922,7 +961,11 @@ class BatchProvider with ChangeNotifier {
         WHERE $whereClause
         ORDER BY 
           CASE 
-            WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' THEN '9999-12-31'
+            WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' OR pb.expiry_date = '2099-12-31' THEN 0
+            ELSE 1
+          END,
+          CASE 
+            WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' OR pb.expiry_date = '2099-12-31' THEN '9999-12-31'
             ELSE pb.expiry_date
           END ASC
         LIMIT $_limit OFFSET ${_page * _limit}
@@ -1236,6 +1279,35 @@ class BatchProvider with ChangeNotifier {
         'expiring_soon': 0,
         'expired_list': <Batch>[],
         'expiring_soon_list': <Batch>[],
+      };
+    }
+  }
+
+  /// 🔧 إصلاح بيانات الواردات
+  Future<void> fixBatchData() async {
+    try {
+      final fixedCount = await _dbHelper.fixInactiveNoExpiryBatches();
+      log('✅ تم إصلاح $fixedCount دفعة');
+
+      // إعادة تحميل البيانات بعد الإصلاح
+      resetPagination();
+      await loadBatches(reset: true, filter: null);
+    } catch (e) {
+      log('❌ خطأ في إصلاح البيانات: $e');
+      rethrow;
+    }
+  }
+
+  /// 📊 الحصول على إحصائيات الواردات
+  Future<Map<String, int>> getBatchStats() async {
+    try {
+      return await _dbHelper.getBatchStats();
+    } catch (e) {
+      log('❌ خطأ في جلب إحصائيات الواردات: $e');
+      return {
+        'total_active': 0,
+        'no_expiry_active': 0,
+        'no_expiry_inactive': 0,
       };
     }
   }

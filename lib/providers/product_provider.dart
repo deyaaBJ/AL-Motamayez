@@ -1276,48 +1276,14 @@ AND date(offer_end_date) < date('now', 'localtime')
         }
       }
 
-      // 🔹 3️⃣ التحقق من توفر الكميات الجديدة
-      for (var item in cartItems) {
-        if (item.isService) continue;
-
-        final product = item.product!;
-        double requiredQty = item.quantity;
-
-        if (item.selectedUnit != null) {
-          requiredQty = item.quantity * item.selectedUnit!.containQty;
-        }
-
-        if (requiredQty <= 0) continue;
-
-        final batchResult = await txn.rawQuery(
-          '''
-          SELECT SUM(remaining_quantity) as total_available
-          FROM product_batches 
-          WHERE product_id = ? AND remaining_quantity > 0 AND active = 1
-        ''',
-          [product.id],
-        );
-
-        final double totalAvailable =
-            (batchResult.first['total_available'] as num?)?.toDouble() ?? 0;
-
-        if (requiredQty > totalAvailable) {
-          throw Exception(
-            'المنتج "${product.name}" لا يوجد به كمية كافية. '
-            'المتاح: ${totalAvailable.toStringAsFixed(2)}، '
-            'المطلوب: ${requiredQty.toStringAsFixed(2)}',
-          );
-        }
-      }
-
-      // 🔹 4️⃣ جلب عناصر الفاتورة القديمة
+      // 🔹 3️⃣ جلب عناصر الفاتورة القديمة أولاً وإرجاع الكميات
       final oldItems = await txn.query(
         'sale_items',
         where: 'sale_id = ?',
         whereArgs: [originalSale.id],
       );
 
-      // 🔹 5️⃣ إرجاع الكميات القديمة من الواردات أولاً
+      // 🔹 4️⃣ إرجاع الكميات القديمة من الواردات أولاً (قبل التحقق من الجديد)
       for (var oldItem in oldItems) {
         final int? productId = oldItem['product_id'] as int?;
         if (productId == null) continue;
@@ -1358,8 +1324,10 @@ AND date(offer_end_date) < date('now', 'localtime')
 
               final batch = await txn.query(
                 'product_batches',
+                columns: ['remaining_quantity'],
                 where: 'id = ?',
                 whereArgs: [batchId],
+                limit: 1,
               );
 
               if (batch.isNotEmpty) {
@@ -1383,6 +1351,40 @@ AND date(offer_end_date) < date('now', 'localtime')
           'UPDATE products SET quantity = quantity + ? WHERE id = ?',
           [oldQtyInBaseUnit, productId],
         );
+      }
+
+      // 🔹 5️⃣ الآن (بعد إرجاع الكميات القديمة) تحقق من توفر الكميات الجديدة
+      for (var item in cartItems) {
+        if (item.isService) continue;
+
+        final product = item.product!;
+        double requiredQty = item.quantity;
+
+        if (item.selectedUnit != null) {
+          requiredQty = item.quantity * item.selectedUnit!.containQty;
+        }
+
+        if (requiredQty <= 0) continue;
+
+        final batchResult = await txn.rawQuery(
+          '''
+          SELECT SUM(remaining_quantity) as total_available
+          FROM product_batches 
+          WHERE product_id = ? AND remaining_quantity > 0 AND active = 1
+        ''',
+          [product.id],
+        );
+
+        final double totalAvailable =
+            (batchResult.first['total_available'] as num?)?.toDouble() ?? 0;
+
+        if (requiredQty > totalAvailable) {
+          throw Exception(
+            'المنتج "${product.name}" لا يوجد به كمية كافية. '
+            'المتاح: ${totalAvailable.toStringAsFixed(2)}، '
+            'المطلوب: ${requiredQty.toStringAsFixed(2)}',
+          );
+        }
       }
 
       // 🔹 6️⃣ حذف العناصر القديمة

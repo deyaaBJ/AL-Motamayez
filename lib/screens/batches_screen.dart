@@ -1,4 +1,3 @@
-// lib/screens/batches_screen.dart
 import 'dart:async';
 import 'dart:developer' show log;
 
@@ -23,14 +22,13 @@ class BatchesScreen extends StatefulWidget {
 class _BatchesScreenState extends State<BatchesScreen> {
   bool _isInitialLoading = false;
   String _searchQuery = '';
-  BatchFilter _currentFilter = BatchFilter();
+  BatchFilter _currentFilter = BatchFilter(); // للعرض فقط
   List<Batch> _searchResults = [];
   int _nearExpiryAlertDays = 7;
 
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
   late BatchProvider _provider;
-  StreamSubscription? _batchSubscription;
 
   @override
   void initState() {
@@ -38,13 +36,24 @@ class _BatchesScreenState extends State<BatchesScreen> {
     _provider = Provider.of<BatchProvider>(context, listen: false);
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     _nearExpiryAlertDays = settings.nearExpiryAlertDays;
-    _currentFilter = _provider.currentFilter ?? BatchFilter();
-    _setupScrollListener();
 
-    // استخدام addPostFrameCallback بدلاً من التحميل المباشر
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadInitialBatches();
-    });
+    if (_provider.currentFilter != null) {
+      _currentFilter = _provider.currentFilter!;
+    }
+
+    _setupScrollListener();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_provider.batches.isEmpty &&
+        !_isInitialLoading &&
+        !_provider.isLoadingMore) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadInitialBatches();
+      });
+    }
   }
 
   void _setupScrollListener() {
@@ -61,58 +70,61 @@ class _BatchesScreenState extends State<BatchesScreen> {
 
   Future<void> _loadInitialBatches() async {
     if (_isInitialLoading) return;
-
-    setState(() => _isInitialLoading = true);
-
+    setState(() {
+      _isInitialLoading = true;
+      _currentFilter = BatchFilter(); // مسح الفلتر من الـ state
+    });
     try {
-      await _provider.loadBatches(reset: true, filter: _currentFilter);
+      // مسح الفلتر من الـ provider أيضاً
+      _provider.currentFilter = null;
+      // تحميل بدون فلتر (عرض جميع الواردات)
+      await _provider.loadBatches(reset: true, filter: null);
     } catch (e) {
       _showErrorSnackbar('حدث خطأ في تحميل الواردات: $e');
     } finally {
-      if (mounted) {
-        setState(() => _isInitialLoading = false);
-      }
+      if (mounted) setState(() => _isInitialLoading = false);
     }
   }
 
   Future<void> _loadMoreBatches() async {
     if (_searchQuery.isNotEmpty) return;
-
-    await _provider.loadBatches(reset: false, filter: _currentFilter);
+    // استخدام الفلتر الحالي من الـ provider (الذي تم تطبيقه بالفعل)
+    await _provider.loadBatches(reset: false, filter: _provider.currentFilter);
   }
 
-  Future<void> _applyFilter(BatchFilter filter) async {
+  // ✅ تعديل الدالة لاستقبال BatchFilter? (قد يكون null)
+  Future<void> _applyFilter(BatchFilter? filter) async {
+    // إذا كان الفلتر null (إعادة تعيين) نمسح البحث وننسح الفلتر من الـ provider أيضاً
+    if (filter == null) {
+      _clearSearch();
+      _provider.currentFilter = null; // مسح الفلتر من الـ provider
+    }
+
     if (_provider.isLoadingMore) return;
 
     setState(() {
-      _currentFilter = filter;
+      _currentFilter = filter ?? BatchFilter(); // للعرض فقط
       _isInitialLoading = true;
     });
 
     try {
+      // تمرير الفلتر الجديد (قد يكون null) إلى الـ Provider
       await _provider.loadBatches(reset: true, filter: filter);
     } catch (e) {
-      log('Error applying filter: $e');
       _showErrorSnackbar('خطأ في تطبيق الفلاتر: $e');
     } finally {
-      if (mounted) {
-        setState(() => _isInitialLoading = false);
-      }
+      if (mounted) setState(() => _isInitialLoading = false);
     }
   }
 
   Future<void> _onSearchChanged(String value) async {
     final trimmedValue = value.trim();
-
     if (trimmedValue == _searchQuery) return;
-
     setState(() => _searchQuery = trimmedValue);
-
     if (trimmedValue.isEmpty) {
       setState(() => _searchResults = []);
       return;
     }
-
     try {
       final results = await _provider.searchBatches(trimmedValue);
       setState(() => _searchResults = results.cast<Batch>());
@@ -130,7 +142,6 @@ class _BatchesScreenState extends State<BatchesScreen> {
     });
   }
 
-  // في lib/screens/batches_screen.dart
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -166,7 +177,6 @@ class _BatchesScreenState extends State<BatchesScreen> {
     );
   }
 
-  // في lib/screens/batches_screen.dart
   Widget _buildStatsCard() {
     return Consumer<BatchProvider>(
       builder: (context, provider, child) {
@@ -185,7 +195,6 @@ class _BatchesScreenState extends State<BatchesScreen> {
             allBatches
                 .where((batch) => batch.daysRemaining > _nearExpiryAlertDays)
                 .length;
-
         return Card(
           elevation: 1,
           margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -212,7 +221,6 @@ class _BatchesScreenState extends State<BatchesScreen> {
           Container(
             padding: EdgeInsets.all(6),
             decoration: BoxDecoration(
-              // ignore: deprecated_member_use
               color: color.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
@@ -236,26 +244,27 @@ class _BatchesScreenState extends State<BatchesScreen> {
   }
 
   List<Batch> get _displayedBatches {
-    if (_searchQuery.isNotEmpty) {
-      return _searchResults;
+    if (_searchQuery.isNotEmpty) return _searchResults;
+    log(
+      '📱 [_displayedBatches] _provider.batches.length: ${_provider.batches.length}',
+    );
+    for (var i = 0; i < _provider.batches.length; i++) {
+      final batch = _provider.batches[i];
+      log(
+        '📱 [_displayedBatches] Batch $i: ${batch.productName}, expiry=${batch.expiryDate}',
+      );
     }
     return _provider.batches;
   }
 
-  // في lib/screens/batches_screen.dart
   Widget _buildBatchesList() {
     final batchesToDisplay = _displayedBatches;
-
-    if (_isInitialLoading && batchesToDisplay.isEmpty) {
+    if (_isInitialLoading && batchesToDisplay.isEmpty)
       return _buildLoadingIndicator();
-    }
-
     if (batchesToDisplay.isEmpty &&
         !_isInitialLoading &&
-        !_provider.isLoadingMore) {
+        !_provider.isLoadingMore)
       return _buildEmptyState();
-    }
-
     return RefreshIndicator(
       onRefresh: _loadInitialBatches,
       color: Color(0xFF6A3093),
@@ -265,10 +274,8 @@ class _BatchesScreenState extends State<BatchesScreen> {
         itemCount:
             batchesToDisplay.length + (_shouldShowLoadingIndicator ? 1 : 0),
         itemBuilder: (context, index) {
-          if (index == batchesToDisplay.length) {
+          if (index == batchesToDisplay.length)
             return _buildLoadingMoreIndicator();
-          }
-
           final batch = batchesToDisplay[index];
           return BatchItem(
             batch: batch,
@@ -319,7 +326,6 @@ class _BatchesScreenState extends State<BatchesScreen> {
         _provider.batches.isNotEmpty;
   }
 
-  // في lib/screens/batches_screen.dart
   Widget _buildEmptyState() {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -330,7 +336,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(32.0),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min, // هذا مهم جداً
+                  mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
@@ -404,13 +410,10 @@ class _BatchesScreenState extends State<BatchesScreen> {
   void dispose() {
     _scrollController.dispose();
     _searchController.dispose();
-    _batchSubscription?.cancel();
     super.dispose();
   }
 
-  // في lib/screens/batches_screen.dart
   @override
-  // في lib/screens/batches_screen.dart
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -419,24 +422,14 @@ class _BatchesScreenState extends State<BatchesScreen> {
         title: 'إدارة الدُفعات',
         child: Column(
           children: [
-            // الجزء العلوي (الفلاتر والإحصائيات والبحث)
-            // إزالة التغليف الإضافي
             BatchFilterBar(
               currentFilter: _currentFilter,
               onFilterChanged: _applyFilter,
             ),
-
             _buildStatsCard(),
-
             _buildSearchBar(),
-
             BatchTableHeader(),
-
-            // الجزء الرئيسي (قائمة الواردات) يأخذ أكبر مساحة
-            Expanded(
-              flex: 10, // إعطاء وزن أكبر للجدول
-              child: _buildBatchesList(),
-            ),
+            Expanded(flex: 10, child: _buildBatchesList()),
           ],
         ),
       ),

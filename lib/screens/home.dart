@@ -196,7 +196,7 @@ class _MainScreenState extends State<MainScreen> {
           flex: 5,
           child: Column(
             children: [
-              const SizedBox(height: 50),
+              // const SizedBox(height: 50),
               OffersSection(
                 productsOnSale: productProvider.productsOnOfferCount,
                 totalProducts: productProvider.totalProducts,
@@ -243,7 +243,7 @@ class _MainScreenState extends State<MainScreen> {
             height: isSmallScreen ? 320 : 380,
             child: const ChartSection(useExpanded: false),
           ),
-          const SizedBox(height: 20),
+          // const SizedBox(height: 20),
           isMediumScreen
               ? Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

@@ -47,402 +47,8 @@ class DBHelper {
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     log('🔄 ترقية قاعدة البيانات من النسخة $oldVersion إلى $newVersion');
 
-    if (oldVersion < 2) {
-      await _upgradeToVersion2(db);
-    }
-
-    if (oldVersion < 3) {
-      await _upgradeToVersion3(db);
-    }
-
-    if (oldVersion < 4) {
-      await _upgradeToVersion4(db);
-    }
-
-    if (oldVersion < 5) {
-      await _upgradeToVersion5(db);
-    }
-
-    if (oldVersion < 6) {
-      await _upgradeToVersion6(db);
-    }
-
-    if (oldVersion < 7) {
-      await _upgradeToVersion7(db);
-    }
-
-    if (oldVersion < 8) {
-      await _upgradeToVersion8(db);
-    }
-
-    if (oldVersion < 9) {
-      await _upgradeToVersion9(db);
-    }
-
-    if (oldVersion < 10) {
-      await _upgradeToVersion10(db);
-    }
-
-    if (oldVersion < 11) {
-      await _upgradeToVersion11(db);
-    }
-
-    if (oldVersion < 12) {
-      await _upgradeToVersion12(db);
-    }
-
-    if (oldVersion < 13) {
-      await _upgradeToVersion13(db);
-    }
-
     if (oldVersion < 14) {
       await _upgradeToVersion14(db);
-    }
-  }
-
-  // ⬅️ جديد: الترقية للنسخة 2 (إضافة user_id)
-  Future<void> _upgradeToVersion2(Database db) async {
-    try {
-      log('⬆️ بدء الترقية للنسخة 2...');
-
-      // التحقق إذا العمود موجود أو لا
-      final columns = await db.rawQuery('PRAGMA table_info(sales)');
-      bool hasUserId = columns.any((col) => col['name'] == 'user_id');
-
-      if (!hasUserId) {
-        // إضافة العمود الجديد
-        await db.execute('''
-          ALTER TABLE sales 
-          ADD COLUMN user_id INTEGER 
-          REFERENCES users(id) ON DELETE SET NULL
-        ''');
-        log('✅ تم إضافة عمود user_id بنجاح');
-      } else {
-        log('ℹ️ عمود user_id موجود مسبقاً');
-      }
-    } catch (e) {
-      log('❌ خطأ في الترقية للنسخة 2: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _upgradeToVersion3(Database db) async {
-    try {
-      log('⬆️ بدء الترقية للنسخة 3...');
-
-      final salesColumns = await db.rawQuery('PRAGMA table_info(sales)');
-      final hasPaidAmount = salesColumns.any(
-        (col) => col['name'] == 'paid_amount',
-      );
-      final hasRemainingAmount = salesColumns.any(
-        (col) => col['name'] == 'remaining_amount',
-      );
-
-      if (!hasPaidAmount) {
-        await db.execute(
-          'ALTER TABLE sales ADD COLUMN paid_amount REAL NOT NULL DEFAULT 0',
-        );
-      }
-
-      if (!hasRemainingAmount) {
-        await db.execute(
-          'ALTER TABLE sales ADD COLUMN remaining_amount REAL NOT NULL DEFAULT 0',
-        );
-      }
-
-      await db.execute('''
-        UPDATE sales
-        SET
-          paid_amount = CASE
-            WHEN payment_type = 'cash' THEN total_amount
-            ELSE COALESCE(paid_amount, 0)
-          END,
-          remaining_amount = CASE
-            WHEN payment_type = 'credit' THEN total_amount
-            ELSE 0
-          END
-        WHERE COALESCE(paid_amount, 0) = 0 AND COALESCE(remaining_amount, 0) = 0
-      ''');
-
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS sale_payment_allocations (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          transaction_id INTEGER NOT NULL,
-          sale_id INTEGER NOT NULL,
-          amount REAL NOT NULL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
-          FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
-        )
-      ''');
-
-      log('✅ تمت ترقية تتبع سداد فواتير البيع');
-    } catch (e) {
-      log('❌ خطأ في الترقية للنسخة 3: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _upgradeToVersion4(Database db) async {
-    try {
-      log('⬆️ بدء الترقية للنسخة 4...');
-
-      final salesColumns = await db.rawQuery('PRAGMA table_info(sales)');
-      final hasUserId = salesColumns.any((col) => col['name'] == 'user_id');
-
-      if (!hasUserId) {
-        await db.execute('''
-          ALTER TABLE sales
-          ADD COLUMN user_id INTEGER
-          REFERENCES users(id) ON DELETE SET NULL
-        ''');
-      }
-
-      log('✅ تم التحقق من عمود user_id في جدول sales');
-    } catch (e) {
-      log('❌ خطأ في الترقية للنسخة 4: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _upgradeToVersion5(Database db) async {
-    await _migrateLegacyPasswords(db);
-    await _createIndexes(db);
-  }
-
-  Future<void> _upgradeToVersion6(Database db) async {
-    await _upgradeArchiveSchema(db);
-    await _createIndexes(db);
-    await archiveHistoricalSales(database: db);
-  }
-
-  Future<void> _upgradeToVersion7(Database db) async {
-    await _ensureOfferColumns(
-      db,
-      tableName: 'products',
-      priceColumnName: 'price',
-    );
-    await _ensureOfferColumns(
-      db,
-      tableName: 'product_units',
-      priceColumnName: 'sell_price',
-    );
-    await _createIndexes(db);
-  }
-
-  Future<void> _upgradeToVersion8(Database db) async {
-    final existingTable = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'supplier_transactions'",
-    );
-
-    if (existingTable.isEmpty) {
-      return;
-    }
-
-    await db.transaction((txn) async {
-      await txn.execute(
-        'ALTER TABLE supplier_transactions RENAME TO supplier_transactions_old',
-      );
-
-      await txn.execute('''
-        CREATE TABLE supplier_transactions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          supplier_id INTEGER NOT NULL,
-          purchase_invoice_id INTEGER,
-          amount REAL NOT NULL,
-          type TEXT NOT NULL CHECK (type IN ('purchase', 'payment', 'return', 'collection')),
-          date TEXT NOT NULL,
-          note TEXT,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE,
-          FOREIGN KEY (purchase_invoice_id) REFERENCES purchase_invoices (id) ON DELETE SET NULL
-        );
-      ''');
-
-      await txn.execute('''
-        INSERT INTO supplier_transactions (
-          id, supplier_id, purchase_invoice_id, amount, type, date, note, created_at
-        )
-        SELECT
-          id, supplier_id, purchase_invoice_id, amount, type, date, note, created_at
-        FROM supplier_transactions_old
-      ''');
-
-      await txn.execute('DROP TABLE supplier_transactions_old');
-    });
-
-    await _createIndexes(db);
-  }
-
-  Future<void> _upgradeToVersion9(Database db) async {
-    try {
-      log('⬆️ بدء الترقية للنسخة 9...');
-
-      // إضافة حقل debt_added_in_period في جدول sales
-      final salesColumns = await db.rawQuery('PRAGMA table_info(sales)');
-      final hasDebtAdded = salesColumns.any(
-        (col) => col['name'] == 'debt_added_in_period',
-      );
-
-      if (!hasDebtAdded) {
-        await db.execute(
-          'ALTER TABLE sales ADD COLUMN debt_added_in_period REAL NOT NULL DEFAULT 0',
-        );
-        log('✅ تم إضافة عمود debt_added_in_period في جدول sales');
-      }
-
-      // إضافة حقل debt_added_in_period في جدول sales_archive
-      final archiveColumns = await db.rawQuery(
-        'PRAGMA table_info(sales_archive)',
-      );
-      final hasDebtAddedArchive = archiveColumns.any(
-        (col) => col['name'] == 'debt_added_in_period',
-      );
-
-      if (!hasDebtAddedArchive) {
-        await db.execute(
-          'ALTER TABLE sales_archive ADD COLUMN debt_added_in_period REAL NOT NULL DEFAULT 0',
-        );
-        log('✅ تم إضافة عمود debt_added_in_period في جدول sales_archive');
-      }
-
-      await _createIndexes(db);
-      log('✅ تمت ترقية إلى النسخة 9 بنجاح');
-    } catch (e) {
-      log('❌ خطأ في الترقية للنسخة 9: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _upgradeToVersion10(Database db) async {
-    try {
-      log('Starting upgrade to version 10...');
-
-      final unitColumns = await db.rawQuery('PRAGMA table_info(product_units)');
-
-      await _addColumnIfMissing(
-        db,
-        tableName: 'product_units',
-        columns: unitColumns,
-        columnName: 'multiplier_numerator',
-        statement:
-            'ALTER TABLE product_units ADD COLUMN multiplier_numerator INTEGER',
-      );
-      await _addColumnIfMissing(
-        db,
-        tableName: 'product_units',
-        columns: unitColumns,
-        columnName: 'multiplier_denominator',
-        statement:
-            'ALTER TABLE product_units ADD COLUMN multiplier_denominator INTEGER',
-      );
-
-      await db.execute('''
-        UPDATE product_units
-        SET multiplier_numerator = ROUND(contain_qty * 1000000),
-            multiplier_denominator = 1000000
-        WHERE multiplier_numerator IS NULL
-           OR multiplier_denominator IS NULL
-           OR multiplier_denominator = 0
-      ''');
-
-      await _createIndexes(db);
-      log('Completed upgrade to version 10');
-    } catch (e) {
-      log('Upgrade to version 10 failed: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _upgradeToVersion11(Database db) async {
-    try {
-      log('Starting upgrade to version 11...');
-
-      final unitColumns = await db.rawQuery('PRAGMA table_info(product_units)');
-
-      await _addColumnIfMissing(
-        db,
-        tableName: 'product_units',
-        columns: unitColumns,
-        columnName: 'parent_unit_id',
-        statement: 'ALTER TABLE product_units ADD COLUMN parent_unit_id INTEGER',
-      );
-
-      await _createIndexes(db);
-      log('Completed upgrade to version 11');
-    } catch (e) {
-      log('Upgrade to version 11 failed: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _upgradeToVersion12(Database db) async {
-    try {
-      log('Starting upgrade to version 12...');
-
-      final productColumns = await db.rawQuery('PRAGMA table_info(products)');
-
-      await _addColumnIfMissing(
-        db,
-        tableName: 'products',
-        columns: productColumns,
-        columnName: 'low_stock_threshold',
-        statement:
-            'ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER',
-      );
-
-      await _createIndexes(db);
-      log('Completed upgrade to version 12');
-    } catch (e) {
-      log('Upgrade to version 12 failed: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _upgradeToVersion13(Database db) async {
-    try {
-      log('Starting upgrade to version 13...');
-
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS opening_balances (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          movement_type TEXT NOT NULL DEFAULT 'opening_balance',
-          date TEXT NOT NULL,
-          note TEXT,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-      ''');
-
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS opening_balance_items (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          opening_balance_id INTEGER NOT NULL,
-          product_id INTEGER NOT NULL,
-          quantity REAL NOT NULL,
-          cost_price REAL NOT NULL,
-          subtotal REAL NOT NULL,
-          FOREIGN KEY (opening_balance_id) REFERENCES opening_balances (id) ON DELETE CASCADE,
-          FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
-        )
-      ''');
-
-      final openingBalanceColumns = await db.rawQuery(
-        'PRAGMA table_info(opening_balances)',
-      );
-      await _addColumnIfMissing(
-        db,
-        tableName: 'opening_balances',
-        columns: openingBalanceColumns,
-        columnName: 'movement_type',
-        statement:
-            "ALTER TABLE opening_balances ADD COLUMN movement_type TEXT NOT NULL DEFAULT 'opening_balance'",
-      );
-
-      await _createIndexes(db);
-      log('Completed upgrade to version 13');
-    } catch (e) {
-      log('Upgrade to version 13 failed: $e');
-      rethrow;
     }
   }
 
@@ -776,7 +382,7 @@ class DBHelper {
       );
     ''');
 
-      await db.execute('''
+    await db.execute('''
         CREATE TABLE opening_balances (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           movement_type TEXT NOT NULL DEFAULT 'opening_balance',
@@ -1269,6 +875,73 @@ class DBHelper {
       log('✅ انتهى التحقق من هيكل قاعدة البيانات');
     } catch (e) {
       log('❌ خطأ في التحقق من هيكل قاعدة البيانات: $e');
+    }
+  }
+
+  /// 🔧 إصلاح الواردات بدون تاريخ انتهاء التي لديها active = 0
+  /// تحديث active=1 للواردات بدون تاريخ انتهاء والتي لديها remaining_quantity > 0
+  Future<int> fixInactiveNoExpiryBatches() async {
+    try {
+      final database = await db;
+
+      // تحديث الواردات التي بدون تاريخ انتهاء وactive=0 إلى active=1
+      final result = await database.rawUpdate('''
+        UPDATE product_batches 
+        SET active = 1
+        WHERE active = 0
+        AND (expiry_date IS NULL OR expiry_date = '' OR expiry_date = '2099-12-31')
+        AND remaining_quantity > 0
+      ''');
+
+      log('✅ تم إصلاح $result دفعة بدون تاريخ انتهاء');
+      return result;
+    } catch (e) {
+      log('❌ خطأ في إصلاح البيانات: $e');
+      return 0;
+    }
+  }
+
+  /// 📊 الحصول على إحصائيات الواردات
+  Future<Map<String, int>> getBatchStats() async {
+    try {
+      final database = await db;
+
+      // إجمالي الواردات النشطة
+      final totalResult = await database.rawQuery('''
+        SELECT COUNT(*) as count FROM product_batches WHERE active = 1
+      ''');
+      final totalActive = (totalResult.first['count'] as int?) ?? 0;
+
+      // عدد الواردات بدون تاريخ انتهاء النشطة
+      final noExpiryResult = await database.rawQuery('''
+        SELECT COUNT(*) as count FROM product_batches 
+        WHERE active = 1 
+        AND (expiry_date IS NULL OR expiry_date = '' OR expiry_date = '2099-12-31')
+      ''');
+      final noExpiryActive = (noExpiryResult.first['count'] as int?) ?? 0;
+
+      // عدد الواردات بدون تاريخ انتهاء غير النشطة
+      final noExpiryInactiveResult = await database.rawQuery('''
+        SELECT COUNT(*) as count FROM product_batches 
+        WHERE active = 0 
+        AND (expiry_date IS NULL OR expiry_date = '' OR expiry_date = '2099-12-31')
+        AND remaining_quantity > 0
+      ''');
+      final noExpiryInactive =
+          (noExpiryInactiveResult.first['count'] as int?) ?? 0;
+
+      return {
+        'total_active': totalActive,
+        'no_expiry_active': noExpiryActive,
+        'no_expiry_inactive': noExpiryInactive,
+      };
+    } catch (e) {
+      log('❌ خطأ في جلب إحصائيات الواردات: $e');
+      return {
+        'total_active': 0,
+        'no_expiry_active': 0,
+        'no_expiry_inactive': 0,
+      };
     }
   }
 }

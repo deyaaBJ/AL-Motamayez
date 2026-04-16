@@ -1013,14 +1013,9 @@ class _SaleDetailsDialogState extends State<SaleDetailsDialog> {
   }
 
   String _getDisplayQuantity(double quantity, String unitType) {
-    if (unitType == 'kg' || unitType == 'custom') {
-      // إذا كانت بالكيلو أو وحدة مخصصة، نعرض بعلامة عشرية إذا لزم الأمر
-      return quantity % 1 == 0
-          ? quantity.toInt().toString()
-          : quantity.toStringAsFixed(2);
-    } else {
-      // إذا كانت قطع أو خدمات، نعرض كعدد صحيح
-      return quantity.toInt().toString();
-    }
+    // عرض القيمة العشرية إذا كانت الكمية غير صحيحة
+    return quantity % 1 == 0
+        ? quantity.toInt().toString()
+        : quantity.toStringAsFixed(2);
   }
 }

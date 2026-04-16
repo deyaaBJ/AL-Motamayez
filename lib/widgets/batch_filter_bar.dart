@@ -1,10 +1,9 @@
-// lib/widgets/batch_filter_bar.dart
 import 'package:flutter/material.dart';
 import 'package:motamayez/models/batch_filter.dart';
 
 class BatchFilterBar extends StatefulWidget {
-  final BatchFilter currentFilter;
-  final Function(BatchFilter) onFilterChanged;
+  final BatchFilter? currentFilter; // يمكن أن يكون null
+  final Function(BatchFilter?) onFilterChanged; // تستقبل null
 
   const BatchFilterBar({
     super.key,
@@ -24,14 +23,14 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
   @override
   void initState() {
     super.initState();
-    _currentFilter = widget.currentFilter;
+    _currentFilter = widget.currentFilter ?? BatchFilter();
   }
 
   @override
   void didUpdateWidget(covariant BatchFilterBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.currentFilter != oldWidget.currentFilter) {
-      _currentFilter = widget.currentFilter;
+      _currentFilter = widget.currentFilter ?? BatchFilter();
     }
   }
 
@@ -40,17 +39,15 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
   }
 
   void _resetFilters() {
-    setState(() {
-      _currentFilter = BatchFilter();
-    });
-    widget.onFilterChanged(_currentFilter);
+    // إرسال null لمسح الفلتر بالكامل
+    widget.onFilterChanged(null);
   }
 
   Widget _buildStatusFilter() {
     return SizedBox(
       width: 120,
       child: DropdownButtonFormField<String?>(
-        initialValue: _currentFilter.status,
+        value: _currentFilter.status,
         decoration: InputDecoration(
           labelText: 'الحالة',
           border: OutlineInputBorder(),
@@ -59,7 +56,7 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
         ),
         items:
             _statusOptions.map((status) {
-              return DropdownMenuItem(
+              return DropdownMenuItem<String?>(
                 value: status == 'الكل' ? null : status,
                 child: Text(status, style: TextStyle(fontSize: 13)),
               );
@@ -78,7 +75,7 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
     return SizedBox(
       width: 160,
       child: DropdownButtonFormField<String?>(
-        initialValue: _currentFilter.expiryFilter,
+        value: _currentFilter.expiryFilter,
         decoration: InputDecoration(
           labelText: 'تاريخ الانتهاء',
           border: OutlineInputBorder(),
@@ -86,23 +83,23 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
           isDense: true,
         ),
         items: [
-          DropdownMenuItem(
+          DropdownMenuItem<String?>(
             value: null,
             child: Text('الكل', style: TextStyle(fontSize: 13)),
           ),
-          DropdownMenuItem(
+          DropdownMenuItem<String?>(
             value: 'أسبوع',
             child: Text('ينتهي خلال أسبوع', style: TextStyle(fontSize: 13)),
           ),
-          DropdownMenuItem(
+          DropdownMenuItem<String?>(
             value: 'شهر',
             child: Text('ينتهي خلال شهر', style: TextStyle(fontSize: 13)),
           ),
-          DropdownMenuItem(
+          DropdownMenuItem<String?>(
             value: 'منتهي',
             child: Text('منتهي', style: TextStyle(fontSize: 13)),
           ),
-          DropdownMenuItem(
+          DropdownMenuItem<String?>(
             value: 'مستقبل',
             child: Text('لم ينته بعد', style: TextStyle(fontSize: 13)),
           ),
@@ -169,20 +166,15 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
                         _showFilters ? Icons.expand_less : Icons.expand_more,
                         size: 20,
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _showFilters = !_showFilters;
-                        });
-                      },
+                      onPressed:
+                          () => setState(() => _showFilters = !_showFilters),
                     ),
                   ],
                 ),
               ],
             ),
-
-            if (_showFilters) SizedBox(height: 12),
-
-            if (_showFilters)
+            if (_showFilters) ...[
+              SizedBox(height: 12),
               Row(
                 children: [
                   _buildStatusFilter(),
@@ -190,14 +182,13 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
                   _buildExpiryFilter(),
                 ],
               ),
-
+            ],
             if (_currentFilter.hasActiveFilters)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Container(
                   padding: EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    // ignore: deprecated_member_use
                     color: Color(0xFF6A3093).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),

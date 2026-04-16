@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 
-class SearchSection extends StatelessWidget {
+class SearchSection extends StatefulWidget {
   final TextEditingController searchController;
   final FocusNode searchFocusNode;
 
@@ -33,6 +34,19 @@ class SearchSection extends StatelessWidget {
   });
 
   @override
+  State<SearchSection> createState() => _SearchSectionState();
+}
+
+class _SearchSectionState extends State<SearchSection> {
+  Timer? _searchDebounce;
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -53,18 +67,20 @@ class SearchSection extends StatelessWidget {
                     children: [
                       const SizedBox(width: 12),
                       Icon(
-                        searchType == 'unit' ? Icons.inventory_2 : Icons.search,
+                        widget.searchType == 'unit'
+                            ? Icons.inventory_2
+                            : Icons.search,
                         color: const Color(0xFF8B5FBF),
                         size: 20,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextField(
-                          controller: searchController,
-                          focusNode: searchFocusNode,
+                          controller: widget.searchController,
+                          focusNode: widget.searchFocusNode,
                           decoration: InputDecoration(
                             hintText:
-                                searchType == 'unit'
+                                widget.searchType == 'unit'
                                     ? 'أدخل باركود الوحدة...'
                                     : 'ابحث باسم المنتج أو الباركود...',
                             border: InputBorder.none,
@@ -72,24 +88,32 @@ class SearchSection extends StatelessWidget {
                           ),
                           style: const TextStyle(fontSize: 14),
                           onChanged: (value) {
-                            // لا نبحث أثناء الكتابة لتجنب البحث غير المكتمل من الباركود
-                            // فقط ننعش الواجهة إذا تم مسح النص
+                            // مسح البحث السابق والبحث الجديد بـ debounce
+                            _searchDebounce?.cancel();
                             if (value.isEmpty) {
-                              refreshState();
+                              widget.refreshState();
+                            } else {
+                              _searchDebounce = Timer(
+                                const Duration(milliseconds: 500),
+                                () {
+                                  widget.performSearch(value.trim());
+                                },
+                              );
                             }
                           },
                           onSubmitted: (value) {
-                            // ✅ هنا نستدعي onEnterPressed لاختيار المنتج مباشرة (بدلاً من البحث فقط)
+                            // ✅ عند الضغط على Enter، نختار المنتج مباشرة
+                            _searchDebounce?.cancel();
                             if (value.isNotEmpty) {
-                              onEnterPressed(value);
+                              widget.onEnterPressed(value);
                             }
                           },
                         ),
                       ),
-                      if (searchController.text.isNotEmpty)
+                      if (widget.searchController.text.isNotEmpty)
                         IconButton(
                           icon: const Icon(Icons.clear, size: 18),
-                          onPressed: clearSearch,
+                          onPressed: widget.clearSearch,
                         ),
                       const SizedBox(width: 8),
                     ],
@@ -106,7 +130,7 @@ class SearchSection extends StatelessWidget {
                 ),
                 child: IconButton(
                   icon:
-                      isSearching
+                      widget.isSearching
                           ? const SizedBox(
                             width: 16,
                             height: 16,
@@ -123,8 +147,9 @@ class SearchSection extends StatelessWidget {
                             size: 20,
                           ),
                   onPressed: () {
-                    if (searchController.text.isNotEmpty) {
-                      performSearch(searchController.text);
+                    if (widget.searchController.text.isNotEmpty) {
+                      _searchDebounce?.cancel();
+                      widget.performSearch(widget.searchController.text);
                     }
                   },
                 ),
@@ -139,7 +164,7 @@ class SearchSection extends StatelessWidget {
                 ),
                 child: IconButton(
                   icon: const Icon(Icons.design_services, color: Colors.white),
-                  onPressed: addService,
+                  onPressed: widget.addService,
                   tooltip: 'إضافة خدمة',
                 ),
               ),

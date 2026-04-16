@@ -19,9 +19,7 @@ class BatchFilter {
     );
   }
 
-  bool get hasActiveFilters {
-    return status != null || expiryFilter != null;
-  }
+  bool get hasActiveFilters => status != null || expiryFilter != null;
 
   int getActiveFiltersCount() {
     int count = 0;
@@ -30,39 +28,40 @@ class BatchFilter {
     return count;
   }
 
+  /// بناء جملة WHERE (بدون pb.active = 1 لأنها تضاف في الاستعلام الرئيسي)
   String buildWhereClause(List<Object?> args) {
     final conditions = <String>[];
 
-    conditions.add('pb.active = 1');
-
+    // معالجة فلتر الحالة (status)
     if (status != null && status!.isNotEmpty) {
       if (status == 'منتهي') {
-        conditions.add("""
-pb.expiry_date IS NOT NULL
-AND pb.expiry_date != ''
-AND pb.expiry_date != '2099-12-31'
-AND DATE(pb.expiry_date) < DATE('now')
-""");
+        conditions.add('''
+          pb.expiry_date IS NOT NULL
+          AND pb.expiry_date != ''
+          AND pb.expiry_date != '2099-12-31'
+          AND DATE(pb.expiry_date) < DATE('now')
+        ''');
       } else if (status == 'قريب') {
-        conditions.add("""
-pb.expiry_date IS NOT NULL
-AND pb.expiry_date != ''
-AND pb.expiry_date != '2099-12-31'
-AND DATE(pb.expiry_date) >= DATE('now')
-AND DATE(pb.expiry_date) <= DATE('now', '+30 days')
-""");
+        conditions.add('''
+          pb.expiry_date IS NOT NULL
+          AND pb.expiry_date != ''
+          AND pb.expiry_date != '2099-12-31'
+          AND DATE(pb.expiry_date) >= DATE('now')
+          AND DATE(pb.expiry_date) <= DATE('now', '+30 days')
+        ''');
       } else if (status == 'جيد') {
-        conditions.add("""
-(
-  pb.expiry_date = '2099-12-31'
-  OR pb.expiry_date IS NULL
-  OR pb.expiry_date = ''
-  OR DATE(pb.expiry_date) > DATE('now', '+30 days')
-)
-""");
+        conditions.add('''
+          (
+            pb.expiry_date IS NULL
+            OR pb.expiry_date = ''
+            OR pb.expiry_date = '2099-12-31'
+            OR DATE(pb.expiry_date) > DATE('now', '+30 days')
+          )
+        ''');
       }
     }
 
+    // معالجة فلتر الصلاحية التفصيلي (expiryFilter)
     if (expiryFilter != null && expiryFilter!.isNotEmpty) {
       final today = DateTime.now();
       final todayStr = today.toIso8601String().split('T').first;
@@ -70,39 +69,38 @@ AND DATE(pb.expiry_date) <= DATE('now', '+30 days')
       if (expiryFilter == 'أسبوع') {
         final weekFromNow = today.add(const Duration(days: 7));
         final weekFromNowStr = weekFromNow.toIso8601String().split('T').first;
-        conditions.add("""
-pb.expiry_date IS NOT NULL
-AND pb.expiry_date != ''
-AND pb.expiry_date != '2099-12-31'
-AND pb.expiry_date BETWEEN ? AND ?
-""");
+        conditions.add('''
+          pb.expiry_date IS NOT NULL
+          AND pb.expiry_date != ''
+          AND pb.expiry_date != '2099-12-31'
+          AND DATE(pb.expiry_date) BETWEEN ? AND ?
+        ''');
         args.addAll([todayStr, weekFromNowStr]);
       } else if (expiryFilter == 'شهر') {
         final monthFromNow = today.add(const Duration(days: 30));
-        final monthFromNowStr =
-            monthFromNow.toIso8601String().split('T').first;
-        conditions.add("""
-pb.expiry_date IS NOT NULL
-AND pb.expiry_date != ''
-AND pb.expiry_date != '2099-12-31'
-AND pb.expiry_date BETWEEN ? AND ?
-""");
+        final monthFromNowStr = monthFromNow.toIso8601String().split('T').first;
+        conditions.add('''
+          pb.expiry_date IS NOT NULL
+          AND pb.expiry_date != ''
+          AND pb.expiry_date != '2099-12-31'
+          AND DATE(pb.expiry_date) BETWEEN ? AND ?
+        ''');
         args.addAll([todayStr, monthFromNowStr]);
       } else if (expiryFilter == 'منتهي') {
-        conditions.add("""
-pb.expiry_date IS NOT NULL
-AND pb.expiry_date != ''
-AND pb.expiry_date != '2099-12-31'
-AND pb.expiry_date < ?
-""");
+        conditions.add('''
+          pb.expiry_date IS NOT NULL
+          AND pb.expiry_date != ''
+          AND pb.expiry_date != '2099-12-31'
+          AND DATE(pb.expiry_date) < ?
+        ''');
         args.add(todayStr);
       } else if (expiryFilter == 'مستقبل') {
-        conditions.add("""
-pb.expiry_date IS NOT NULL
-AND pb.expiry_date != ''
-AND pb.expiry_date != '2099-12-31'
-AND pb.expiry_date >= ?
-""");
+        conditions.add('''
+          pb.expiry_date IS NOT NULL
+          AND pb.expiry_date != ''
+          AND pb.expiry_date != '2099-12-31'
+          AND DATE(pb.expiry_date) >= ?
+        ''');
         args.add(todayStr);
       }
     }
@@ -113,7 +111,6 @@ AND pb.expiry_date >= ?
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-
     return other is BatchFilter &&
         other.status == status &&
         other.expiryFilter == expiryFilter;

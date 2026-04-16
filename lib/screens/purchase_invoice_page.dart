@@ -33,6 +33,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
 
   int? _selectedProductId;
   Product? _selectedProduct;
+  String? _selectedProductName; // متغير جديد لتتبع اسم المنتج المختار بدقة
   int? _invoiceId;
   DateTime? _expiryDate;
   bool _isLoading = false;
@@ -63,12 +64,42 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
     setState(() {
       _selectedProductId = product.id;
       _selectedProduct = product;
+      _selectedProductName = product.name; // حفظ اسم المنتج
       _costController.text = product.costPrice.toStringAsFixed(2);
       _qtyController.text = '1';
       if (!product.hasExpiryDate) {
         _expiryDate = null;
       }
     });
+
+    // إذا كان المنتج يحتوي على وحدة مركبة، جلب معلومات الوحدة
+    if (product.name.contains('[')) {
+      try {
+        final unitNameMatch = RegExp(r'\[(.*?)\]').firstMatch(product.name);
+        if (unitNameMatch != null) {
+          final unitName = unitNameMatch.group(1);
+          final db = await DBHelper().db;
+          final unitResult = await db.query(
+            'product_units',
+            where: 'product_id = ? AND unit_name = ?',
+            whereArgs: [product.id, unitName],
+          );
+
+          if (unitResult.isNotEmpty) {
+            setState(() {
+              _selectedUnitId = unitResult.first['id'] as int?;
+              _selectedUnitName = unitResult.first['unit_name'] as String?;
+              _selectedUnitContainQty =
+                  (unitResult.first['contain_qty'] as num).toDouble();
+            });
+          }
+        }
+      } catch (e) {
+        log('خطأ في جلب معلومات الوحدة: $e');
+      }
+    } else {
+      _resetUnitData();
+    }
   }
 
   Future<void> _loadInitialData() async {
@@ -102,6 +133,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         _resetUnitData();
         _selectedProductId = null;
         _selectedProduct = null;
+        _selectedProductName = null;
         _qtyController.clear();
         _costController.clear();
       });
@@ -176,6 +208,45 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
           (p) => p.id == product.id && p.barcode == product.barcode,
         )) {
           results.add(product);
+        }
+
+        // جلب جميع الوحدات للمنتج الماليسة
+        try {
+          final db = await DBHelper().db;
+          final unitsResult = await db.query(
+            'product_units',
+            where: 'product_id = ?',
+            whereArgs: [product.id],
+          );
+
+          for (var unitMap in unitsResult) {
+            final unitId = unitMap['id'] as int;
+            final unitName = unitMap['unit_name'] as String;
+            final containQty = (unitMap['contain_qty'] as num).toDouble();
+            final sellPrice = (unitMap['sell_price'] as num).toDouble();
+
+            // حساب سعر الشراء المقترح للوحدة
+            double suggestedUnitCost = product.costPrice * containQty;
+
+            final unitProduct = Product(
+              id: product.id,
+              name: '${product.name} [$unitName]',
+              barcode: unitMap['barcode'] as String? ?? '',
+              baseUnit: product.baseUnit,
+              price: sellPrice,
+              quantity: product.quantity,
+              costPrice: suggestedUnitCost,
+              hasExpiryDate: product.hasExpiryDate,
+            );
+
+            if (!results.any(
+              (p) => p.id == unitProduct.id && p.name == unitProduct.name,
+            )) {
+              results.add(unitProduct);
+            }
+          }
+        } catch (e) {
+          log('خطأ في جلب الوحدات للمنتج ${product.name}: $e');
         }
       }
 
@@ -789,7 +860,10 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       itemCount: _searchResults.length,
       itemBuilder: (context, index) {
         final product = _searchResults[index];
-        final isSelected = _selectedProductId == product.id;
+        // قارن ID واسم المنتج معاً للتأكد من أن الوحدة الصحيحة مختارة
+        final isSelected =
+            _selectedProductId == product.id &&
+            _selectedProductName == product.name;
 
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -831,16 +905,65 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
               isSelected ? Icons.check_circle : Icons.add_circle,
               color: isSelected ? Colors.green : Colors.blue,
             ),
-            onTap: () {
+            onTap: () async {
+              // فحص إذا كان نفس العنصر مختار بالفعل
+              if (_selectedProductId == product.id &&
+                  _selectedProductName == product.name) {
+                // إلغاء التحديد
+                setState(() {
+                  _selectedProductId = null;
+                  _selectedProduct = null;
+                  _selectedProductName = null;
+                  _qtyController.clear();
+                  _costController.clear();
+                  _expiryDate = null;
+                  _resetUnitData();
+                });
+                return;
+              }
+
               setState(() {
                 _selectedProductId = product.id;
                 _selectedProduct = product;
+                _selectedProductName = product.name; // حفظ اسم المنتج
                 _costController.text = product.costPrice.toStringAsFixed(2);
                 _qtyController.text = '1';
                 if (!product.name.contains('[') && !product.hasExpiryDate) {
                   _expiryDate = null;
                 }
               });
+
+              // إذا كان المنتج يحتوي على وحدة مركبة، جلب معلومات الوحدة
+              if (product.name.contains('[')) {
+                try {
+                  final unitNameMatch = RegExp(
+                    r'\[(.*?)\]',
+                  ).firstMatch(product.name);
+                  if (unitNameMatch != null) {
+                    final unitName = unitNameMatch.group(1);
+                    final db = await DBHelper().db;
+                    final unitResult = await db.query(
+                      'product_units',
+                      where: 'product_id = ? AND unit_name = ?',
+                      whereArgs: [product.id, unitName],
+                    );
+
+                    if (unitResult.isNotEmpty) {
+                      setState(() {
+                        _selectedUnitId = unitResult.first['id'] as int?;
+                        _selectedUnitName =
+                            unitResult.first['unit_name'] as String?;
+                        _selectedUnitContainQty =
+                            (unitResult.first['contain_qty'] as num).toDouble();
+                      });
+                    }
+                  }
+                } catch (e) {
+                  log('خطأ في جلب معلومات الوحدة: $e');
+                }
+              } else {
+                _resetUnitData();
+              }
             },
           ),
         );
@@ -1608,8 +1731,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       _searchResults = [];
       _isSearching = false;
       _resetUnitData();
-      _selectedProductId = null; // تأكد من وجود هذا السطر
-      _selectedProduct = null; // تأكد من وجود هذا السطر
+      _selectedProductId = null;
+      _selectedProduct = null;
+      _selectedProductName = null;
       _qtyController.clear();
       _costController.clear();
     });
@@ -1657,6 +1781,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
       _costController.clear();
       _selectedProductId = null;
       _selectedProduct = null;
+      _selectedProductName = null;
       _expiryDate = null;
       _searchProductController.clear();
       _resetUnitData();

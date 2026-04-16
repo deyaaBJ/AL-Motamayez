@@ -109,6 +109,29 @@ class _OpeningBalanceScreenState extends State<OpeningBalanceScreen> {
         'display_name': product.name,
         'display_cost': product.costPrice,
       });
+
+      // جلب جميع الوحدات المرتبطة بالمنتج
+      try {
+        final units = await productProvider.getProductUnits(product.id!);
+        for (final unit in units) {
+          final alreadyAdded = results.any(
+            (item) =>
+                (item['product'] as Product).id == product.id &&
+                (item['unit'] as ProductUnit?)?.id == unit.id,
+          );
+          if (alreadyAdded) continue;
+
+          results.add({
+            'product': product,
+            'unit': unit,
+            'display_name':
+                '${product.name} [${_translateUnit(unit.unitName)}]',
+            'display_cost': product.costPrice * unit.containQty,
+          });
+        }
+      } catch (e) {
+        // تجاهل الأخطاء في جلب الوحدات
+      }
     }
 
     final unitsByName = await productProvider.searchProductUnitsByName(query);
@@ -537,9 +560,7 @@ class _OpeningBalanceScreenState extends State<OpeningBalanceScreen> {
                               context: context,
                               initialDate:
                                   _selectedExpiryDate ??
-                                  DateTime.now().add(
-                                    const Duration(days: 30),
-                                  ),
+                                  DateTime.now().add(const Duration(days: 30)),
                               firstDate: DateTime(
                                 _selectedDate.year,
                                 _selectedDate.month,
