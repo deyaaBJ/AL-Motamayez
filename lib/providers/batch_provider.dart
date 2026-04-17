@@ -44,25 +44,24 @@ class BatchProvider with ChangeNotifier {
     bool reset = false,
     BatchFilter? filter,
   }) async {
-    log('📥 [loadBatches] Called with reset=$reset, filter=$filter');
-    log('📥 [loadBatches] _currentFilter BEFORE: $_currentFilter');
+    log('?? [loadBatches] Called with reset=$reset, filter=$filter');
+    log('?? [loadBatches] _currentFilter BEFORE: $_currentFilter');
 
     if (reset) {
       resetPagination();
     }
 
-    // تحديث الفلتر الحالي (قد يكون null)
     _currentFilter = filter;
-    log('📥 [loadBatches] _currentFilter AFTER: $_currentFilter');
+    log('?? [loadBatches] _currentFilter AFTER: $_currentFilter');
 
     if (_isLoadingMore) return [];
 
     try {
+      await _dbHelper.fixInactiveNoExpiryBatches();
+
+      _isLoadingMore = true;
       if (!reset) {
-        _isLoadingMore = true;
         notifyListeners();
-      } else {
-        _isLoadingMore = true;
       }
 
       final db = await _dbHelper.db;
@@ -90,25 +89,29 @@ class BatchProvider with ChangeNotifier {
 
       final List<Object?> args = [];
       log(
-        '📥 [loadBatches] _currentFilter: $_currentFilter, hasActiveFilters: ${_currentFilter?.hasActiveFilters}',
+        '?? [loadBatches] _currentFilter: $_currentFilter, hasActiveFilters: ${_currentFilter?.hasActiveFilters}',
       );
 
-      // إضافة شروط الفلتر فقط إذا كان _currentFilter != null وله شروط فعالة
       if (_currentFilter != null && _currentFilter!.hasActiveFilters) {
         final filterClause = _currentFilter!.buildWhereClause(args);
-        log('📥 [loadBatches] Adding filter clause: $filterClause');
+        log('?? [loadBatches] Adding filter clause: $filterClause');
         if (filterClause.isNotEmpty) {
           query += ' AND $filterClause';
         }
       } else {
-        log('📥 [loadBatches] NO FILTER APPLIED - showing all batches');
+        log('?? [loadBatches] NO FILTER APPLIED - showing dated batches only');
+        query += '''
+          AND pb.expiry_date IS NOT NULL
+          AND pb.expiry_date != ''
+          AND pb.expiry_date != '2099-12-31'
+        ''';
       }
 
       query += '''
       ORDER BY 
         CASE 
-          WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' OR pb.expiry_date = '2099-12-31' THEN 0
-          ELSE 1
+          WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' OR pb.expiry_date = '2099-12-31' THEN 1
+          ELSE 0
         END,
         pb.expiry_date ASC
       LIMIT ? OFFSET ?
@@ -117,18 +120,22 @@ class BatchProvider with ChangeNotifier {
       args.addAll([_limit, _page * _limit]);
 
       final result = await db.rawQuery(query, args);
-      log('📥 [loadBatches] Query result count: ${result.length}');
+      log('?? [loadBatches] Query result count: ${result.length}');
 
-      // طباعة تفاصيل كل واردة
-      for (var i = 0; i < result.length; i++) {
-        final map = result[i];
-        final productName = map['product_name'] as String?;
-        final expiryDate = map['expiry_date'] as String?;
-        final remainingQty = map['remaining_quantity'] as num?;
-        log(
-          '📥 [loadBatches] Batch $i: $productName, expiry_date=$expiryDate, remaining_qty=$remainingQty',
+      final newBatches = result.map((map) {
+        String? supplierName = map['supplier_name'] as String?;
+        if (supplierName == null || supplierName.isEmpty) {
+          supplierName = 'غير محدد';
+        }
+
+        return Batch.fromMap(
+          map,
+          productName: map['product_name'] as String?,
+          productBarcode: map['product_barcode'] as String?,
+          supplierName: supplierName,
+          purchaseInvoiceId: map['purchase_invoice_id'] as int?,
         );
-      }
+      }).toList();
 
       if (result.isEmpty) {
         _hasMore = false;
@@ -136,24 +143,7 @@ class BatchProvider with ChangeNotifier {
           _batches = [];
         }
       } else {
-        final newBatches =
-            result.map((map) {
-              String? supplierName = map['supplier_name'] as String?;
-              if (supplierName == null || supplierName.isEmpty) {
-                supplierName = 'غير محدد';
-              }
-
-              return Batch.fromMap(
-                map,
-                productName: map['product_name'] as String?,
-                productBarcode: map['product_barcode'] as String?,
-                supplierName: supplierName,
-                purchaseInvoiceId: map['purchase_invoice_id'] as int?,
-              );
-            }).toList();
-
         _page++;
-
         if (newBatches.length < _limit) {
           _hasMore = false;
         }
@@ -165,11 +155,11 @@ class BatchProvider with ChangeNotifier {
         }
       }
 
-      log('📥 [loadBatches] Total _batches after update: ${_batches.length}');
+      log('?? [loadBatches] Total _batches after update: ${_batches.length}');
       for (var i = 0; i < _batches.length; i++) {
         final batch = _batches[i];
         log(
-          '📥 [_batches] Batch $i: ${batch.productName}, expiry_date=${batch.expiryDate}, qty=${batch.remainingQuantity}',
+          '?? [_batches] Batch $i: ${batch.productName}, expiry_date=${batch.expiryDate}, qty=${batch.remainingQuantity}',
         );
       }
 
@@ -218,6 +208,8 @@ class BatchProvider with ChangeNotifier {
 
   Future<List<Batch>> searchBatches(String query) async {
     try {
+      await _dbHelper.fixInactiveNoExpiryBatches();
+
       final db = await _dbHelper.db;
 
       final result = await db.rawQuery(
@@ -241,8 +233,8 @@ class BatchProvider with ChangeNotifier {
       AND (p.name LIKE ? OR p.barcode LIKE ? OR s.name LIKE ?)
     ORDER BY 
       CASE 
-        WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' OR pb.expiry_date = '2099-12-31' THEN 0
-        ELSE 1
+        WHEN pb.expiry_date IS NULL OR pb.expiry_date = '' OR pb.expiry_date = '2099-12-31' THEN 1
+        ELSE 0
       END,
       pb.expiry_date ASC
     ''',

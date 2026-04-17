@@ -102,6 +102,14 @@ class BatchFilter {
           AND DATE(pb.expiry_date) >= ?
         ''');
         args.add(todayStr);
+      } else if (expiryFilter == 'بدون تاريخ') {
+        conditions.add('''
+          (
+            pb.expiry_date IS NULL
+            OR pb.expiry_date = ''
+            OR pb.expiry_date = '2099-12-31'
+          )
+        ''');
       }
     }
 

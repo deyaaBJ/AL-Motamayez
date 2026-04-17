@@ -25,6 +25,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
   BatchFilter _currentFilter = BatchFilter(); // للعرض فقط
   List<Batch> _searchResults = [];
   int _nearExpiryAlertDays = 7;
+  int _noExpiryCount = 0;
 
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
@@ -79,6 +80,13 @@ class _BatchesScreenState extends State<BatchesScreen> {
       _provider.currentFilter = null;
       // تحميل بدون فلتر (عرض جميع الواردات)
       await _provider.loadBatches(reset: true, filter: null);
+      final stats = await _provider.getBatchStats();
+      if (mounted) {
+        setState(() {
+          _noExpiryCount = (stats['no_expiry_active'] ?? 0) +
+              (stats['no_expiry_inactive'] ?? 0);
+        });
+      }
     } catch (e) {
       _showErrorSnackbar('حدث خطأ في تحميل الواردات: $e');
     } finally {
@@ -94,27 +102,36 @@ class _BatchesScreenState extends State<BatchesScreen> {
 
   // ✅ تعديل الدالة لاستقبال BatchFilter? (قد يكون null)
   Future<void> _applyFilter(BatchFilter? filter) async {
-    // إذا كان الفلتر null (إعادة تعيين) نمسح البحث وننسح الفلتر من الـ provider أيضاً
     if (filter == null) {
-      _clearSearch();
-      _provider.currentFilter = null; // مسح الفلتر من الـ provider
+      await _loadInitialBatches();
+      return;
     }
 
     if (_provider.isLoadingMore) return;
 
     setState(() {
-      _currentFilter = filter ?? BatchFilter(); // للعرض فقط
+      _currentFilter = filter;
       _isInitialLoading = true;
     });
 
     try {
-      // تمرير الفلتر الجديد (قد يكون null) إلى الـ Provider
       await _provider.loadBatches(reset: true, filter: filter);
+      final stats = await _provider.getBatchStats();
+      if (mounted) {
+        setState(() {
+          _noExpiryCount = (stats['no_expiry_active'] ?? 0) +
+              (stats['no_expiry_inactive'] ?? 0);
+        });
+      }
     } catch (e) {
       _showErrorSnackbar('خطأ في تطبيق الفلاتر: $e');
     } finally {
       if (mounted) setState(() => _isInitialLoading = false);
     }
+  }
+
+  Future<void> _showNoExpiryBatches() async {
+    await _applyFilter(BatchFilter(expiryFilter: 'بدون تاريخ'));
   }
 
   Future<void> _onSearchChanged(String value) async {
@@ -211,6 +228,37 @@ class _BatchesScreenState extends State<BatchesScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildNoExpiryInfoCard() {
+    if (_noExpiryCount <= 0 || _currentFilter.expiryFilter == 'بدون تاريخ') {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      color: const Color(0xFFF7F3E8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline, color: Color(0xFF8A6D1D)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'يوجد $_noExpiryCount واردة بدون تاريخ انتهاء. يمكنك عرضها مباشرة من هنا أو ستظهر بعد الدفعات المؤرخة.',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            TextButton(
+              onPressed: _showNoExpiryBatches,
+              child: const Text('عرضها الآن'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -425,6 +473,8 @@ class _BatchesScreenState extends State<BatchesScreen> {
             BatchFilterBar(
               currentFilter: _currentFilter,
               onFilterChanged: _applyFilter,
+              noExpiryCount: _noExpiryCount,
+              onShowNoExpiry: _showNoExpiryBatches,
             ),
             _buildStatsCard(),
             _buildSearchBar(),

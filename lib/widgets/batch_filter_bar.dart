@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:motamayez/models/batch_filter.dart';
 
 class BatchFilterBar extends StatefulWidget {
-  final BatchFilter? currentFilter; // يمكن أن يكون null
-  final Function(BatchFilter?) onFilterChanged; // تستقبل null
+  final BatchFilter? currentFilter; // ???? ?? ???? null
+  final Function(BatchFilter?) onFilterChanged; // ?????? null
+  final int noExpiryCount;
+  final VoidCallback? onShowNoExpiry;
 
   const BatchFilterBar({
     super.key,
     required this.currentFilter,
     required this.onFilterChanged,
+    this.noExpiryCount = 0,
+    this.onShowNoExpiry,
   });
 
   @override
@@ -39,7 +43,9 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
   }
 
   void _resetFilters() {
-    // إرسال null لمسح الفلتر بالكامل
+    setState(() {
+      _currentFilter = BatchFilter();
+    });
     widget.onFilterChanged(null);
   }
 
@@ -103,6 +109,10 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
             value: 'مستقبل',
             child: Text('لم ينته بعد', style: TextStyle(fontSize: 13)),
           ),
+          DropdownMenuItem<String?>(
+            value: 'بدون تاريخ',
+            child: Text('بدون تاريخ', style: TextStyle(fontSize: 13)),
+          ),
         ],
         onChanged: (value) {
           setState(() {
@@ -143,6 +153,26 @@ class _BatchFilterBarState extends State<BatchFilterBar> {
                 ),
                 Row(
                   children: [
+                    if (widget.noExpiryCount > 0 &&
+                        _currentFilter.expiryFilter != 'بدون تاريخ') ...[
+                      OutlinedButton(
+                        onPressed: widget.onShowNoExpiry,
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Color(0xFF8A6D1D)),
+                          foregroundColor: Color(0xFF8A6D1D),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          minimumSize: Size(0, 30),
+                        ),
+                        child: Text(
+                          'بدون تاريخ ${widget.noExpiryCount}',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                    ],
                     ElevatedButton.icon(
                       onPressed: _resetFilters,
                       icon: Icon(Icons.refresh, size: 16),

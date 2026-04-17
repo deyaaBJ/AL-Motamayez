@@ -14,6 +14,16 @@ import 'dart:developer';
 
 class ProductProvider with ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
+  static const String _sellableBatchSql = '''
+remaining_quantity > 0
+AND active = 1
+AND (
+  expiry_date IS NULL
+  OR TRIM(expiry_date) = ''
+  OR expiry_date = '2099-12-31'
+  OR date(expiry_date) >= date('now', 'localtime')
+)
+''';
   static const String _expiredOfferSql = '''
 offer_enabled = 1
 AND offer_end_date IS NOT NULL
@@ -971,8 +981,7 @@ AND date(offer_end_date) < date('now', 'localtime')
           '''
         SELECT * FROM product_batches 
         WHERE product_id = ? 
-          AND remaining_quantity > 0 
-          AND active = 1
+          AND $_sellableBatchSql
         ORDER BY 
           CASE 
             WHEN expiry_date IS NOT NULL AND expiry_date != '' 
@@ -1370,7 +1379,7 @@ AND date(offer_end_date) < date('now', 'localtime')
           '''
           SELECT SUM(remaining_quantity) as total_available
           FROM product_batches 
-          WHERE product_id = ? AND remaining_quantity > 0 AND active = 1
+          WHERE product_id = ? AND $_sellableBatchSql
         ''',
           [product.id],
         );
@@ -1449,8 +1458,7 @@ AND date(offer_end_date) < date('now', 'localtime')
           '''
           SELECT * FROM product_batches 
           WHERE product_id = ? 
-            AND remaining_quantity > 0 
-            AND active = 1
+            AND $_sellableBatchSql
           ORDER BY 
             CASE 
               WHEN expiry_date IS NOT NULL AND expiry_date != '' 
