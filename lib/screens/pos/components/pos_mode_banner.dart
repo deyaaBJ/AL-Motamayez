@@ -9,6 +9,7 @@ class PosModeBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      // ignore: deprecated_member_use
       color: Colors.blueAccent.withOpacity(0.2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,

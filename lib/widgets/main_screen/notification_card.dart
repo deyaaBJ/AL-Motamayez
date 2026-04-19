@@ -33,11 +33,13 @@ class NotificationCard extends StatelessWidget {
           padding: const EdgeInsets.all(16), // زيادة padding
           decoration: BoxDecoration(
             gradient: LinearGradient(
+              // ignore: deprecated_member_use
               colors: [color.withOpacity(0.12), color.withOpacity(0.05)],
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
             ),
             borderRadius: BorderRadius.circular(16),
+            // ignore: deprecated_member_use
             border: Border.all(color: color.withOpacity(0.3), width: 1),
           ),
           child: Row(
@@ -46,6 +48,7 @@ class NotificationCard extends StatelessWidget {
                 padding: const EdgeInsets.all(10), // زيادة حجم الأيقونة
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
+                    // ignore: deprecated_member_use
                     colors: [color, color.withOpacity(0.8)],
                   ),
                   borderRadius: BorderRadius.circular(12),

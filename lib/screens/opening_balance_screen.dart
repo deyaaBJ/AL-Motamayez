@@ -715,7 +715,7 @@ class _OpeningBalanceScreenState extends State<OpeningBalanceScreen> {
                                     ),
                                   ),
                                   Text(
-                                    '${subtotal.toStringAsFixed(2)}',
+                                    subtotal.toStringAsFixed(2),
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
@@ -752,7 +752,7 @@ class _OpeningBalanceScreenState extends State<OpeningBalanceScreen> {
                             ),
                           ),
                           Text(
-                            '${total.toStringAsFixed(2)}',
+                            total.toStringAsFixed(2),
                             style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,

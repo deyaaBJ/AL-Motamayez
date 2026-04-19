@@ -65,7 +65,9 @@ class AddProductState extends ChangeNotifier {
     barcodeController.dispose();
     originalQuantityController.dispose();
     lowStockThresholdController.dispose();
-    for (var c in unitControllers) c.dispose();
+    for (var c in unitControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -180,7 +182,9 @@ class AddProductState extends ChangeNotifier {
       }
       if (units.isNotEmpty) showUnitsSection = true;
       notifyListeners();
-    } catch (e) {}
+    } catch (e) {
+      log("");
+    }
   }
 
   void resetForm() {
@@ -261,19 +265,22 @@ class AddProductState extends ChangeNotifier {
           final results = await _provider.searchProductsByBarcode(
             product.barcode ?? '',
           );
-          if (product.barcode == null || product.barcode!.isEmpty)
+          if (product.barcode == null || product.barcode!.isEmpty) {
             results.clear();
+          }
           if (results.isNotEmpty) {
             final newProductId = results.first.id;
-            if (showUnitsSection && newProductId != null)
+            if (showUnitsSection && newProductId != null) {
               await _saveProductUnits(newProductId);
+            }
           }
         } catch (e) {
           log('Could not get product ID: $e');
         }
       } else {
-        if (existingProduct?.id == null)
+        if (existingProduct?.id == null) {
           throw Exception('لا يمكن تحديث منتج بدون ID');
+        }
         final product = Product(
           id: existingProduct!.id,
           name: nameController.text,
@@ -292,25 +299,29 @@ class AddProductState extends ChangeNotifier {
           lowStockThreshold: customLowStockThreshold,
         );
         await _provider.updateProduct(product);
-        if (showUnitsSection && existingProduct!.id != null)
+        if (showUnitsSection && existingProduct!.id != null) {
           await _saveProductUnits(existingProduct!.id!);
+        }
       }
 
       if (!_disposed) {
         isLoading = false;
         notifyListeners();
         showAppToast(
+          // ignore: use_build_context_synchronously
           context,
           isNewProduct ? 'تم إضافة المنتج بنجاح' : 'تم تحديث المنتج بنجاح',
           ToastType.success,
         );
         await Future.delayed(const Duration(seconds: 1));
+        // ignore: use_build_context_synchronously
         if (!_disposed) Navigator.pop(context, true);
       }
     } catch (e) {
       if (!_disposed) {
         isLoading = false;
         notifyListeners();
+        // ignore: use_build_context_synchronously
         showAppToast(context, 'حدث خطأ: $e', ToastType.error);
       }
       log('Error saving product: $e');
@@ -323,7 +334,9 @@ class AddProductState extends ChangeNotifier {
       List<ProductUnit> existingUnits = [];
       try {
         existingUnits = await _provider.getProductUnits(productId);
-      } catch (e) {}
+      } catch (e) {
+        log('Could not load existing units: $e');
+      }
       for (int i = 0; i < unitControllers.length; i++) {
         final controller = unitControllers[i];
         final unitId = unitIds[i];
@@ -334,8 +347,12 @@ class AddProductState extends ChangeNotifier {
         );
         final sellPrice =
             double.tryParse(controller.sellPriceController.text.trim()) ?? 0.0;
-        if (unitName.isEmpty || factor == null || factor <= 0 || sellPrice <= 0)
+        if (unitName.isEmpty ||
+            factor == null ||
+            factor <= 0 ||
+            sellPrice <= 0) {
           continue;
+        }
         final offerData = buildOfferData(
           enabled: controller.offerEnabled,
           priceText: controller.offerPriceController.text,
@@ -355,10 +372,11 @@ class AddProductState extends ChangeNotifier {
           offerEndDate: offerData.offerEndDate,
           offerEnabled: offerData.offerEnabled,
         );
-        if (unitId == -1)
+        if (unitId == -1) {
           await _provider.addProductUnit(unit);
-        else
+        } else {
           await _provider.updateProductUnit(unit);
+        }
       }
       final currentUnitIds = unitIds.where((id) => id != -1).toList();
       for (final existingUnit in existingUnits) {

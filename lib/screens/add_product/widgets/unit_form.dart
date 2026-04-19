@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../../widgets/text_field.dart';
 import '../controllers/unit_controller.dart';
 import 'unit_offer_section.dart';
-import '../../../../../../../utils/unit_translator.dart';
 
 class UnitForm extends StatefulWidget {
   final int index;
@@ -82,8 +81,9 @@ class _UnitFormState extends State<UnitForm> {
             label: 'اسم الوحدة (مثال: كرتونة، علبة، باكيت)',
             prefixIcon: Icons.category,
             validator: (value) {
-              if (value == null || value.isEmpty)
+              if (value == null || value.isEmpty) {
                 return 'يرجى إدخال اسم الوحدة';
+              }
               return null;
             },
           ),
@@ -94,11 +94,13 @@ class _UnitFormState extends State<UnitForm> {
             prefixIcon: Icons.format_list_numbered,
             keyboardType: TextInputType.numberWithOptions(decimal: true),
             validator: (value) {
-              if (value == null || value.isEmpty)
+              if (value == null || value.isEmpty) {
                 return 'يرجى إدخال معامل التحويل';
+              }
               final factor = double.tryParse(value.trim());
-              if (factor == null || factor <= 0)
+              if (factor == null || factor <= 0) {
                 return 'أدخل رقمًا صحيحًا أو عشريًا أكبر من صفر';
+              }
               return null;
             },
           ),

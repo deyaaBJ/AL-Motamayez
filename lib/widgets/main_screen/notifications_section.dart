@@ -148,12 +148,14 @@ class NotificationsSection extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: const Color(0xFF7C3AED).withOpacity(0.08),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
         ],
         border: Border.all(
+          // ignore: deprecated_member_use
           color: const Color(0xFF7C3AED).withOpacity(0.15),
           width: 1,
         ),
@@ -186,8 +188,10 @@ class NotificationsSection extends StatelessWidget {
   ) {
     return Container(
       decoration: BoxDecoration(
+        // ignore: deprecated_member_use
         color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(16),
+        // ignore: deprecated_member_use
         border: Border.all(color: color.withOpacity(0.2), width: 1),
       ),
       child: Column(
@@ -209,6 +213,7 @@ class NotificationsSection extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: color.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
@@ -248,6 +253,7 @@ class NotificationsSection extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: color.withOpacity(0.15),
               borderRadius: BorderRadius.circular(20),
             ),

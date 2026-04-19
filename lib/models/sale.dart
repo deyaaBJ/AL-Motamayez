@@ -69,7 +69,7 @@ class Sale {
       final dateTime = DateTime.parse(date);
       return '${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
     } catch (e) {
-      return '';
+      return date;
     }
   }
 }

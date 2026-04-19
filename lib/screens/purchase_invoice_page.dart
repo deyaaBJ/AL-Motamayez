@@ -110,6 +110,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         listen: false,
       ).loadSuppliers();
       await Provider.of<ProductProvider>(
+        // ignore: use_build_context_synchronously
         context,
         listen: false,
       ).loadProducts(reset: true);
@@ -220,7 +221,6 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
           );
 
           for (var unitMap in unitsResult) {
-            final unitId = unitMap['id'] as int;
             final unitName = unitMap['unit_name'] as String;
             final containQty = (unitMap['contain_qty'] as num).toDouble();
             final sellPrice = (unitMap['sell_price'] as num).toDouble();
@@ -432,6 +432,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                       ),
                     ).then((_) {
                       Provider.of<SupplierProvider>(
+                        // ignore: use_build_context_synchronously
                         context,
                         listen: false,
                       ).loadSuppliers();
@@ -466,6 +467,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                           ),
                         ).then((_) {
                           Provider.of<SupplierProvider>(
+                            // ignore: use_build_context_synchronously
                             context,
                             listen: false,
                           ).loadSuppliers();
@@ -618,6 +620,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
               },
               onSubmitted: (value) async {
                 await _selectFirstProduct();
+                // ignore: use_build_context_synchronously
                 FocusScope.of(context).unfocus();
               },
             ),

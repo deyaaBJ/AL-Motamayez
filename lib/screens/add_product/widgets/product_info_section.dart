@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../../widgets/existing_product_message.dart';
-import '../../../../widgets/text_field.dart';
 import 'product_name_field.dart';
 import 'product_barcode_field.dart';
 import 'price_field.dart';

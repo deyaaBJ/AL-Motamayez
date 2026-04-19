@@ -31,6 +31,7 @@ class PosSearchResults extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.grey.withOpacity(0.2),
             blurRadius: 8,
             offset: const Offset(0, 4),
@@ -103,8 +104,9 @@ class PosSearchResults extends StatelessWidget {
                             ).getProductById(item.productId),
                             builder: (ctx2, snapshot) {
                               final product = snapshot.data;
-                              if (product == null)
+                              if (product == null) {
                                 return const SizedBox.shrink();
+                              }
                               return _UnitResultTile(
                                 unit: item,
                                 product: product,

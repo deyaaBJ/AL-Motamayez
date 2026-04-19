@@ -39,6 +39,7 @@ class PosTotalAndButtons extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.grey.withOpacity(0.2),
             blurRadius: 10,
             offset: const Offset(0, -2),

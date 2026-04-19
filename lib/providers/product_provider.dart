@@ -945,6 +945,40 @@ AND date(offer_end_date) < date('now', 'localtime')
       );
       final List<Map<String, dynamic>> productProfitEntries = [];
 
+      // 🔹 فحص مقدم: التحقق من توفر الكميات الصالحة (غير المنتهية) قبل البيع
+      for (var item in cartItems) {
+        if (item.isService) continue;
+
+        final product = item.product!;
+        double requiredQty = item.quantity;
+
+        if (item.selectedUnit != null) {
+          requiredQty = item.quantity * item.selectedUnit!.containQty;
+        }
+
+        if (requiredQty <= 0) continue;
+
+        final batchResult = await txn.rawQuery(
+          '''
+          SELECT SUM(remaining_quantity) as total_available
+          FROM product_batches 
+          WHERE product_id = ? AND $_sellableBatchSql
+        ''',
+          [product.id],
+        );
+
+        final double totalAvailable =
+            (batchResult.first['total_available'] as num?)?.toDouble() ?? 0;
+
+        if (requiredQty > totalAvailable) {
+          throw Exception(
+            'المنتج "${product.name}" لا يوجد به كمية كافية. '
+            'المتاح: ${totalAvailable.toStringAsFixed(2)}، '
+            'المطلوب: ${requiredQty.toStringAsFixed(2)}',
+          );
+        }
+      }
+
       // 🔹 معالجة كل عنصر في السلة
       for (var item in cartItems) {
         if (item.isService) {

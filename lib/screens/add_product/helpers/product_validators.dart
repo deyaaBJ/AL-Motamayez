@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 String? validateName(String? value) {
   if (value == null || value.isEmpty) return 'يرجى إدخال اسم المنتج';
   return null;
@@ -22,7 +20,8 @@ String? validateQuantity(String? value) {
 String? validateUnitFactor(String? value) {
   if (value == null || value.isEmpty) return 'يرجى إدخال معامل التحويل';
   final factor = double.tryParse(value.trim());
-  if (factor == null || factor <= 0)
+  if (factor == null || factor <= 0) {
     return 'أدخل رقمًا صحيحًا أو عشريًا أكبر من صفر';
+  }
   return null;
 }

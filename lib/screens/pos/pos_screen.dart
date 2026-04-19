@@ -8,7 +8,6 @@ import 'package:motamayez/models/customer.dart';
 import 'package:motamayez/models/product.dart';
 import 'package:motamayez/models/product_unit.dart';
 import 'package:motamayez/models/sale.dart';
-import 'package:motamayez/models/sale_item.dart';
 import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/providers/customer_provider.dart';
 import 'package:motamayez/providers/debt_provider.dart';
@@ -192,8 +191,9 @@ class _PosScreenState extends State<PosScreen>
         final productsByBarcode = await _productProvider
             .searchProductsByBarcode(trimmed);
         for (final p in productsByBarcode) {
-          if (!results.any((e) => e is ProductUnit && e.productId == p.id))
+          if (!results.any((e) => e is ProductUnit && e.productId == p.id)) {
             results.add(p);
+          }
         }
 
         // 3️⃣ البحث عن المنتجات بالاسم
@@ -216,8 +216,9 @@ class _PosScreenState extends State<PosScreen>
                   (e) =>
                       (e is Product && e.id == product.id) ||
                       (e is ProductUnit && e.productId == product.id),
-                ))
+                )) {
               results.add(unit);
+            }
           }
         }
       }
@@ -400,8 +401,10 @@ class _PosScreenState extends State<PosScreen>
           _calculateTotal();
         });
       }
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'تم إضافة ${product.name}', ToastType.success);
     } catch (e) {
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'خطأ: $e', ToastType.error);
     }
   }
@@ -439,6 +442,7 @@ class _PosScreenState extends State<PosScreen>
       _calculateTotal();
     });
     showAppToast(
+      // ignore: use_build_context_synchronously
       context,
       'تم إضافة ${product.name} (${unit.unitName})',
       ToastType.success,
@@ -562,8 +566,10 @@ class _PosScreenState extends State<PosScreen>
         logerIp: logerIp,
         logerPort: settings.logerPort ?? 9100,
       );
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'تم إرسال الفاتورة', ToastType.success);
     } catch (e) {
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'فشلت الطباعة', ToastType.warning);
     }
     await Future.delayed(const Duration(seconds: 2));
@@ -602,10 +608,13 @@ class _PosScreenState extends State<PosScreen>
         userRole: auth.role ?? 'user',
         userId: auth.currentUser?["id"],
       );
+      // ignore: use_build_context_synchronously
       context.read<SalesProvider>().invalidateAndRefresh();
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'تم إتمام البيع', ToastType.success);
       _clearCart();
     } catch (e) {
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'خطأ: ${_cleanErrorMessage(e)}', ToastType.error);
     }
   }
@@ -624,6 +633,7 @@ class _PosScreenState extends State<PosScreen>
 
     // نافذة تأكيد
     final confirmed = await showDialog<bool>(
+      // ignore: use_build_context_synchronously
       context: context,
       builder:
           (ctx) => AlertDialog(
@@ -654,7 +664,7 @@ class _PosScreenState extends State<PosScreen>
     final auth = context.read<AuthProvider>();
     final productProvider = context.read<ProductProvider>();
     final debtProvider = context.read<DebtProvider>();
-    final settings = context.read<SettingsProvider>();
+    context.read<SettingsProvider>();
     try {
       for (final item in _cartItems) {
         if (!item.isService && item.product != null) {
@@ -697,14 +707,17 @@ class _PosScreenState extends State<PosScreen>
                   : 'استخدام رصيد لتسديد كامل الفاتورة',
         );
       }
+      // ignore: use_build_context_synchronously
       context.read<SalesProvider>().invalidateAndRefresh();
       showAppToast(
+        // ignore: use_build_context_synchronously
         context,
         'تم تسجيل بيع مؤجل للزبون ${customer.name}',
         ToastType.success,
       );
       _clearCart();
     } catch (e) {
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'خطأ: ${_cleanErrorMessage(e)}', ToastType.error);
     }
   }
@@ -776,6 +789,7 @@ class _PosScreenState extends State<PosScreen>
           // تحقق فقط إذا كانت هناك كمية إضافية مطلوبة
           if (additionalQty > 0 && freshProduct.quantity < additionalQty) {
             showAppToast(
+              // ignore: use_build_context_synchronously
               context,
               'كمية غير كافية لـ ${item.product!.name}. المتوفر: ${freshProduct.quantity.toStringAsFixed(2)}, المطلوب إضافياً: ${additionalQty.toStringAsFixed(2)}',
               ToastType.error,
@@ -791,10 +805,14 @@ class _PosScreenState extends State<PosScreen>
         totalAmount: _finalAmount,
         userRole: auth.role ?? 'user',
       );
+      // ignore: use_build_context_synchronously
       context.read<SalesProvider>().invalidateAndRefresh();
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'تم تحديث الفاتورة', ToastType.success);
+      // ignore: use_build_context_synchronously
       Navigator.pop(context);
     } catch (e) {
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'خطأ: ${_cleanErrorMessage(e)}', ToastType.warning);
     }
   }

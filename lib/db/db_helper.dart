@@ -456,23 +456,6 @@ class DBHelper {
     });
   }
 
-  Future<void> _migrateLegacyPasswords(Database db) async {
-    final users = await db.query('users', columns: ['id', 'password']);
-    for (final user in users) {
-      final storedPassword = user['password']?.toString() ?? '';
-      if (!PasswordService.isLegacyPlaintext(storedPassword)) {
-        continue;
-      }
-
-      await db.update(
-        'users',
-        {'password': PasswordService.hashPassword(storedPassword)},
-        where: 'id = ?',
-        whereArgs: [user['id']],
-      );
-    }
-  }
-
   Future<void> _createIndexes(Database db) async {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(date DESC)',
@@ -641,63 +624,6 @@ class DBHelper {
       log('Adding missing column $columnName to $tableName');
       await db.execute(statement);
     }
-  }
-
-  Future<void> _ensureOfferColumns(
-    Database db, {
-    required String tableName,
-    required String priceColumnName,
-  }) async {
-    final columns = await db.rawQuery('PRAGMA table_info($tableName)');
-
-    await _addColumnIfMissing(
-      db,
-      tableName: tableName,
-      columns: columns,
-      columnName: 'offer_price',
-      statement: 'ALTER TABLE $tableName ADD COLUMN offer_price REAL',
-    );
-    await _addColumnIfMissing(
-      db,
-      tableName: tableName,
-      columns: columns,
-      columnName: 'offer_start_date',
-      statement: 'ALTER TABLE $tableName ADD COLUMN offer_start_date TEXT',
-    );
-    await _addColumnIfMissing(
-      db,
-      tableName: tableName,
-      columns: columns,
-      columnName: 'offer_end_date',
-      statement: 'ALTER TABLE $tableName ADD COLUMN offer_end_date TEXT',
-    );
-    await _addColumnIfMissing(
-      db,
-      tableName: tableName,
-      columns: columns,
-      columnName: 'offer_enabled',
-      statement:
-          'ALTER TABLE $tableName ADD COLUMN offer_enabled INTEGER NOT NULL DEFAULT 0',
-    );
-
-    await db.execute('''
-      UPDATE $tableName
-      SET offer_enabled = 0
-      WHERE offer_enabled IS NULL
-    ''');
-
-    await db.execute('''
-      UPDATE $tableName
-      SET offer_enabled = 0
-      WHERE offer_enabled = 1
-        AND (
-          offer_price IS NULL
-          OR offer_price <= 0
-          OR offer_end_date IS NULL
-          OR TRIM(offer_end_date) = ''
-          OR offer_price = $priceColumnName
-        )
-    ''');
   }
 
   Future<int> archiveHistoricalSales({Database? database}) async {

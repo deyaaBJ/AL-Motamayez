@@ -83,7 +83,8 @@ class _BatchesScreenState extends State<BatchesScreen> {
       final stats = await _provider.getBatchStats();
       if (mounted) {
         setState(() {
-          _noExpiryCount = (stats['no_expiry_active'] ?? 0) +
+          _noExpiryCount =
+              (stats['no_expiry_active'] ?? 0) +
               (stats['no_expiry_inactive'] ?? 0);
         });
       }
@@ -119,7 +120,8 @@ class _BatchesScreenState extends State<BatchesScreen> {
       final stats = await _provider.getBatchStats();
       if (mounted) {
         setState(() {
-          _noExpiryCount = (stats['no_expiry_active'] ?? 0) +
+          _noExpiryCount =
+              (stats['no_expiry_active'] ?? 0) +
               (stats['no_expiry_inactive'] ?? 0);
         });
       }
@@ -231,37 +233,6 @@ class _BatchesScreenState extends State<BatchesScreen> {
     );
   }
 
-  Widget _buildNoExpiryInfoCard() {
-    if (_noExpiryCount <= 0 || _currentFilter.expiryFilter == 'بدون تاريخ') {
-      return const SizedBox.shrink();
-    }
-
-    return Card(
-      elevation: 1,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      color: const Color(0xFFF7F3E8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            const Icon(Icons.info_outline, color: Color(0xFF8A6D1D)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'يوجد $_noExpiryCount واردة بدون تاريخ انتهاء. يمكنك عرضها مباشرة من هنا أو ستظهر بعد الدفعات المؤرخة.',
-                style: const TextStyle(fontSize: 13),
-              ),
-            ),
-            TextButton(
-              onPressed: _showNoExpiryBatches,
-              child: const Text('عرضها الآن'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildStatItem(String label, int count, Color color) {
     return Expanded(
       child: Column(
@@ -269,6 +240,7 @@ class _BatchesScreenState extends State<BatchesScreen> {
           Container(
             padding: EdgeInsets.all(6),
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: color.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
@@ -307,12 +279,14 @@ class _BatchesScreenState extends State<BatchesScreen> {
 
   Widget _buildBatchesList() {
     final batchesToDisplay = _displayedBatches;
-    if (_isInitialLoading && batchesToDisplay.isEmpty)
+    if (_isInitialLoading && batchesToDisplay.isEmpty) {
       return _buildLoadingIndicator();
+    }
     if (batchesToDisplay.isEmpty &&
         !_isInitialLoading &&
-        !_provider.isLoadingMore)
+        !_provider.isLoadingMore) {
       return _buildEmptyState();
+    }
     return RefreshIndicator(
       onRefresh: _loadInitialBatches,
       color: Color(0xFF6A3093),
@@ -322,8 +296,9 @@ class _BatchesScreenState extends State<BatchesScreen> {
         itemCount:
             batchesToDisplay.length + (_shouldShowLoadingIndicator ? 1 : 0),
         itemBuilder: (context, index) {
-          if (index == batchesToDisplay.length)
+          if (index == batchesToDisplay.length) {
             return _buildLoadingMoreIndicator();
+          }
           final batch = batchesToDisplay[index];
           return BatchItem(
             batch: batch,

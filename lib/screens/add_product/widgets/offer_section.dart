@@ -86,8 +86,9 @@ class _OfferSectionState extends State<OfferSection> {
                       );
                       if (picked != null) {
                         widget.onStartDateChanged(picked);
-                        if (widget.offerEndDate == null)
+                        if (widget.offerEndDate == null) {
                           widget.onEndDateChanged(picked);
+                        }
                       }
                     },
                   ),

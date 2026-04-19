@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'qr_scanner_card.dart';
 import 'product_info_section.dart';
 import 'save_button.dart';
 import '../../../../widgets/qr_scan_section.dart';

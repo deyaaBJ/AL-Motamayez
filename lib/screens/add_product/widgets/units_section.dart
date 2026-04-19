@@ -91,7 +91,7 @@ class UnitsSection extends StatelessWidget {
                 totalQuantity: totalQuantity,
                 baseUnit: baseUnit,
               );
-            }).toList(),
+            }),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
