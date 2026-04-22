@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:motamayez/components/login_card.dart';
 import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/providers/auth_provider.dart';
+import 'package:motamayez/services/activation_service.dart';
 import 'package:motamayez/widgets/whatsapp_support_button.dart';
 import 'package:provider/provider.dart';
 
@@ -19,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen>
   late AnimationController _controller;
   late Animation<double> _animation;
   late Animation<double> _fadeAnimation;
+  final ActivationService _activationService = ActivationService();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   late final AuthProvider authProvider;
@@ -73,6 +75,20 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   void _login() async {
+    final isActivated = await _activationService.checkActivationSilently();
+
+    if (!mounted) return;
+
+    if (!isActivated) {
+      showAppToast(
+        context,
+        'انتهت صلاحية التفعيل أو بيانات التفعيل غير صالحة. سيتم تحويلك إلى صفحة التفعيل.',
+        ToastType.error,
+      );
+      Navigator.pushNamedAndRemoveUntil(context, '/activation', (route) => false);
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });

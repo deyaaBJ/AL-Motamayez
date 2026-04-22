@@ -39,7 +39,6 @@ import 'screens/purchase_invoice_page.dart';
 
 import 'screens/expenses_page.dart';
 import 'screens/activation_page.dart';
-import 'screens/invalid_signature_screen.dart';
 import 'screens/batches_screen.dart';
 import 'screens/opening_balance_screen.dart';
 import 'services/activation_service.dart';
@@ -192,7 +191,6 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
         '/suppliers': (_) => const SuppliersListPage(),
         '/expenses': (_) => const ExpensesPage(),
         '/activation': (_) => const ActivationPage(),
-        '/invalidSignature': (_) => const InvalidSignatureScreen(),
         '/batches': (_) => const BatchesScreen(),
         '/openingBalance': (_) => const OpeningBalanceScreen(),
         '/cashier': (_) => const CashierActivityScreen(),
@@ -230,15 +228,16 @@ class _AppEntryState extends State<AppEntry> {
 
       switch (status) {
         case 'valid':
-          return {'status': 'valid'};
+          return {
+            'status': 'valid',
+            'activation_type': info['activation_type'],
+            'remaining_days': info['remaining_days'],
+          };
 
         case 'invalid':
-          return {
-            'status': 'invalid',
-            'stored_signature': info['stored_signature'],
-            'expected_signature': info['expected_signature'],
-            'activation_code': info['activation_code'],
-          };
+        case 'expired':
+          await activationService.clearActivation();
+          return {'status': 'not_activated'};
 
         case 'not_activated':
           return {'status': 'not_activated'};
@@ -270,9 +269,6 @@ class _AppEntryState extends State<AppEntry> {
         switch (status) {
           case 'valid':
             return const LoginScreen();
-
-          case 'invalid':
-            return const InvalidSignatureScreen();
 
           case 'not_activated':
             return const ActivationPage();

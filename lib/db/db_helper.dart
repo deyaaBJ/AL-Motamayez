@@ -21,11 +21,16 @@ class DBHelper {
       databaseFactory = databaseFactoryFfi;
     }
 
-    final appDir = await getApplicationDocumentsDirectory();
-    String folderPath = join(appDir.path, 'Motamayez', 'data');
+    // 1. الحصول على مسار المجلد الحالي للمشروع
+    // ملحوظة: في بيئة التطوير سيكون مجلد المشروع، وفي الإنتاج سيكون بجانب ملف الـ .exe
+    String projectRoot = Directory.current.path;
+    String folderPath = join(projectRoot, 'data');
+
+    // 2. إنشاء المجلد إذا لم يكن موجوداً
     Directory(folderPath).createSync(recursive: true);
 
     String path = join(folderPath, 'motamayez.db');
+    log('📂 Database path: $path');
 
     Database database = await openDatabase(
       path,
@@ -41,6 +46,34 @@ class DBHelper {
     await archiveHistoricalSales(database: database);
 
     return database;
+  }
+
+  // تحديث دالة resetDatabase لتستخدم نفس المسار الجديد
+  Future<void> resetDatabase() async {
+    try {
+      log('⚠️ بدء عملية إعادة تعيين قاعدة البيانات...');
+
+      if (_db != null) {
+        await _db!.close();
+        _db = null;
+      }
+
+      // استخدام نفس المنطق للوصول للمجلد
+      String folderPath = join(Directory.current.path, 'data');
+      String path = join(folderPath, 'motamayez.db');
+
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+        log('✅ تم حذف ملف قاعدة البيانات القديم من مجلد data');
+      }
+
+      _db = await initDb();
+      log('🎉 تم إعادة إنشاء قاعدة البيانات بنجاح!');
+    } catch (e) {
+      log('❌ خطأ في إعادة تعيين قاعدة البيانات: $e');
+      rethrow;
+    }
   }
 
   // ⬅️ جديد: دالة الترقية بين النسخ
@@ -733,32 +766,6 @@ class DBHelper {
     }
 
     return archivedSalesCount;
-  }
-
-  Future<void> resetDatabase() async {
-    try {
-      log('⚠️ بدء عملية إعادة تعيين قاعدة البيانات...');
-
-      if (_db != null) {
-        await _db!.close();
-        _db = null;
-      }
-
-      String folderPath = join(Directory.current.path, 'data');
-      String path = join(folderPath, 'motamayez.db');
-
-      final file = File(path);
-      if (await file.exists()) {
-        await file.delete();
-        log('✅ تم حذف ملف قاعدة البيانات القديم');
-      }
-
-      _db = await initDb();
-      log('🎉 تم إعادة إنشاء قاعدة البيانات بنجاح!');
-    } catch (e) {
-      log('❌ خطأ في إعادة تعيين قاعدة البيانات: $e');
-      rethrow;
-    }
   }
 
   Future<void> checkDatabaseStructure() async {

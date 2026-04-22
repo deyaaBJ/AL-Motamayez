@@ -19,11 +19,17 @@ class _ActivationPageState extends State<ActivationPage> {
   bool _loading = false;
   bool _sendingRequest = false;
   bool _checkingStatus = false;
+  bool _isAssignedCodeLocked = false;
   String? _error;
   String? _info;
   String? _requestId;
   String _requestStatus = 'idle';
   Timer? _statusTimer;
+
+  bool get _hasActivationCode => _codeController.text.trim().isNotEmpty;
+
+  bool get _canAttemptActivation =>
+      _requestStatus == 'approved' || _hasActivationCode;
 
   @override
   void initState() {
@@ -39,6 +45,7 @@ class _ActivationPageState extends State<ActivationPage> {
   }
 
   Future<void> _initializeActivationState() async {
+    await _activationService.clearPendingRequestCode();
     final savedRequest = await _activationService.getSavedPendingRequest();
 
     if (!mounted) return;
@@ -46,11 +53,10 @@ class _ActivationPageState extends State<ActivationPage> {
     setState(() {
       _requestId = savedRequest?['requestId']?.toString();
       _requestStatus = savedRequest?['status']?.toString() ?? 'idle';
-
-      final savedCode = savedRequest?['assignedCode']?.toString();
-      if (savedCode != null && savedCode.isNotEmpty) {
-        _codeController.text = savedCode;
-      }
+      _codeController.clear();
+      _isAssignedCodeLocked = false;
+      _error = null;
+      _info = null;
     });
 
     if (_requestId != null) {
@@ -73,11 +79,20 @@ class _ActivationPageState extends State<ActivationPage> {
     });
   }
 
+  void _applyAssignedCode(String? assignedCode) {
+    if (assignedCode == null || assignedCode.isEmpty) return;
+
+    _codeController.text = assignedCode;
+    _isAssignedCodeLocked = true;
+  }
+
   Future<void> _sendRequest() async {
     setState(() {
       _sendingRequest = true;
       _error = null;
       _info = null;
+      _codeController.clear();
+      _isAssignedCodeLocked = false;
     });
 
     final result = await _activationService.createActivationRequest();
@@ -102,10 +117,7 @@ class _ActivationPageState extends State<ActivationPage> {
       _requestId = result['requestId']?.toString() ?? _requestId;
       _requestStatus = status;
       _info = result['message']?.toString() ?? 'تم إرسال طلب التفعيل بنجاح';
-
-      if (assignedCode != null && assignedCode.isNotEmpty) {
-        _codeController.text = assignedCode;
-      }
+      _applyAssignedCode(assignedCode);
     });
 
     if (status == 'already_activated') {
@@ -153,14 +165,10 @@ class _ActivationPageState extends State<ActivationPage> {
 
     setState(() {
       _requestStatus = status;
-
-      if (assignedCode != null && assignedCode.isNotEmpty) {
-        _codeController.text = assignedCode;
-      }
+      _applyAssignedCode(assignedCode);
 
       if (status == 'approved') {
-        _info =
-            'تمت الموافقة على الطلب. الآن يمكنك إدخال الكود والضغط على تفعيل.';
+        _info = 'تمت الموافقة على الطلب. يمكنك الآن متابعة التفعيل.';
       } else if (status == 'pending') {
         _info = 'طلب التفعيل ما زال بانتظار الموافقة.';
       } else if (status == 'rejected') {
@@ -175,9 +183,6 @@ class _ActivationPageState extends State<ActivationPage> {
 
     if (status == 'completed') {
       _statusTimer?.cancel();
-      setState(() {
-        _info = 'تم تفعيل البرنامج على هذا الجهاز.';
-      });
       return;
     }
 
@@ -185,6 +190,8 @@ class _ActivationPageState extends State<ActivationPage> {
       _statusTimer?.cancel();
       setState(() {
         _requestId = null;
+        _codeController.clear();
+        _isAssignedCodeLocked = false;
       });
       return;
     }
@@ -202,9 +209,9 @@ class _ActivationPageState extends State<ActivationPage> {
       return;
     }
 
-    if (_requestStatus != 'approved') {
+    if (_requestStatus != 'approved' && code.isEmpty) {
       setState(() {
-        _error = 'لا يمكن تفعيل البرنامج قبل الموافقة على الطلب';
+        _error = 'لا يمكن التفعيل قبل الموافقة أو بدون كود تفعيل';
       });
       return;
     }
@@ -263,7 +270,7 @@ class _ActivationPageState extends State<ActivationPage> {
       case 'pending':
         return 'بانتظار موافقة الإدارة';
       case 'approved':
-        return 'تمت الموافقة، الآن أدخل الكود';
+        return 'تمت الموافقة، الكود جاهز للتفعيل';
       case 'rejected':
         return 'تم رفض الطلب';
       case 'completed':
@@ -290,7 +297,7 @@ class _ActivationPageState extends State<ActivationPage> {
 
   @override
   Widget build(BuildContext context) {
-    final canEnterCode = _requestStatus == 'approved';
+    final canEnterCode = _requestStatus == 'approved' || _hasActivationCode;
     final canSendRequest =
         !_sendingRequest &&
         _requestStatus != 'pending' &&
@@ -327,13 +334,11 @@ class _ActivationPageState extends State<ActivationPage> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'اضغط على إرسال طلب تفعيل، وبعد موافقة الإدارة أدخل الكود ثم اضغط على تفعيل.',
+                      'أرسل طلب تفعيل، وبعد موافقة الإدارة سيتم عرض الكود بشكل مخفي ثم يمكنك الضغط على تفعيل.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.black54, height: 1.5),
                     ),
                     const SizedBox(height: 20),
-
-                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -411,12 +416,16 @@ class _ActivationPageState extends State<ActivationPage> {
                     TextField(
                       controller: _codeController,
                       enabled: canEnterCode && !_loading,
+                      readOnly: _isAssignedCodeLocked,
+                      obscureText: _isAssignedCodeLocked,
                       decoration: InputDecoration(
                         labelText: 'كود التفعيل',
                         hintText:
-                            canEnterCode
+                            _isAssignedCodeLocked
+                                ? 'تم استلام الكود وهو مخفي ومحمي من التعديل'
+                                : canEnterCode
                                 ? 'أدخل الكود الذي وصلك من الإدارة'
-                                : 'حقل الكود يتفعل بعد الموافقة',
+                                : 'أرسل الطلب أولًا ثم انتظر الموافقة',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -445,7 +454,10 @@ class _ActivationPageState extends State<ActivationPage> {
                       width: double.infinity,
                       height: 46,
                       child: ElevatedButton(
-                        onPressed: _loading ? null : _activate,
+                        onPressed:
+                            (_loading || !_canAttemptActivation)
+                                ? null
+                                : _activate,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
                           foregroundColor: Colors.white,

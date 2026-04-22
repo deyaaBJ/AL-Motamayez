@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
@@ -37,8 +39,15 @@ class ActivationService {
   static const String _requestIdKey = 'activation_request_id';
   static const String _requestStatusKey = 'activation_request_status';
   static const String _requestCodeKey = 'activation_request_code';
+  static const String _activationFileName = 'activation_guard.json';
+  static const String _activationMetadataKey = 'activation_metadata';
 
   static final String _activationBaseUrl = AppConstants.activationBaseUrl;
+
+  static final RegExp _temporaryActivationPattern = RegExp(
+    r'^DAY-(\d+)$',
+    caseSensitive: false,
+  );
 
   String? _maskValue(String? value) {
     if (value == null || value.isEmpty) return value;
@@ -149,9 +158,27 @@ class ActivationService {
       CREATE TABLE IF NOT EXISTS activation (
         id INTEGER PRIMARY KEY,
         signature TEXT,
-        activation_code TEXT
+        activation_code TEXT,
+        activation_metadata TEXT
       )
     ''');
+    await _ensureColumnExists(db, 'activation', 'activation_metadata', 'TEXT');
+  }
+
+  Future<void> _ensureColumnExists(
+    Database db,
+    String tableName,
+    String columnName,
+    String columnDefinition,
+  ) async {
+    final tableInfo = await db.rawQuery("PRAGMA table_info($tableName)");
+    final hasColumn = tableInfo.any((column) => column['name'] == columnName);
+
+    if (!hasColumn) {
+      await db.execute(
+        'ALTER TABLE $tableName ADD COLUMN $columnName $columnDefinition',
+      );
+    }
   }
 
   Future<void> _saveSignature(String signature) async {
@@ -166,6 +193,7 @@ class ActivationService {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('activation_signature', encrypted);
+    await _saveActivationGuardFile(signature: signature);
   }
 
   Future<void> _saveActivationCode(String code) async {
@@ -175,6 +203,103 @@ class ActivationService {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('activation_code', code);
+    await _saveActivationGuardFile(code: code);
+  }
+
+  Map<String, dynamic> _buildActivationMetadata(String activationCode) {
+    final now = DateTime.now();
+    final temporaryMatch = _temporaryActivationPattern.firstMatch(
+      activationCode.trim(),
+    );
+
+    if (temporaryMatch == null) {
+      return {
+        'type': 'permanent',
+        'activatedAt': now.toIso8601String(),
+        'expiresAt': null,
+        'durationDays': null,
+      };
+    }
+
+    final durationDays = int.tryParse(temporaryMatch.group(1) ?? '') ?? 0;
+    final safeDurationDays = durationDays < 1 ? 1 : durationDays;
+    final expiresAt = now.add(Duration(days: safeDurationDays));
+
+    return {
+      'type': 'temporary',
+      'activatedAt': now.toIso8601String(),
+      'expiresAt': expiresAt.toIso8601String(),
+      'durationDays': safeDurationDays,
+    };
+  }
+
+  Future<void> _saveActivationMetadata(Map<String, dynamic> metadata) async {
+    final encoded = jsonEncode(metadata);
+    final db = await _dbHelper.db;
+    await _ensureActivationTable(db);
+    await db.update('activation', {
+      'activation_metadata': encoded,
+    }, where: 'id = 1');
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_activationMetadataKey, encoded);
+    await _saveActivationGuardFile(metadata: metadata);
+  }
+
+  Future<File> _getActivationGuardFile() async {
+    final dir = await getApplicationSupportDirectory();
+    return File(path.join(dir.path, _activationFileName));
+  }
+
+  Future<Map<String, dynamic>?> _readActivationGuardFile() async {
+    try {
+      final file = await _getActivationGuardFile();
+      if (!await file.exists()) {
+        return null;
+      }
+
+      final content = await file.readAsString();
+      if (content.trim().isEmpty) {
+        return null;
+      }
+
+      final decoded = jsonDecode(content);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  Future<void> _saveActivationGuardFile({
+    String? signature,
+    String? code,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      final file = await _getActivationGuardFile();
+      final current = await _readActivationGuardFile() ?? <String, dynamic>{};
+
+      if (signature != null && signature.isNotEmpty) {
+        current['signature'] = EncryptionService.encrypt(signature);
+      }
+
+      if (code != null && code.isNotEmpty) {
+        current['activation_code'] = code;
+      }
+
+      if (metadata != null && metadata.isNotEmpty) {
+        current[_activationMetadataKey] = metadata;
+      }
+
+      if (current.isEmpty) {
+        return;
+      }
+
+      await file.parent.create(recursive: true);
+      await file.writeAsString(jsonEncode(current), flush: true);
+    } catch (_) {}
   }
 
   Future<String?> _getStoredSignature() async {
@@ -182,22 +307,38 @@ class ActivationService {
       final db = await _dbHelper.db;
       await _ensureActivationTable(db);
 
+      String? dbSignature;
       final result = await db.query('activation', limit: 1);
       if (result.isNotEmpty) {
         final encrypted = result.first['signature'] as String?;
-        if (encrypted == null || encrypted.isEmpty) return null;
-        return EncryptionService.decrypt(encrypted);
+        if (encrypted != null && encrypted.isNotEmpty) {
+          dbSignature = EncryptionService.decrypt(encrypted);
+        }
       }
 
       final prefs = await SharedPreferences.getInstance();
-      final encrypted = prefs.getString('activation_signature');
-      if (encrypted == null || encrypted.isEmpty) return null;
+      final prefsEncrypted = prefs.getString('activation_signature');
+      final prefsSignature =
+          (prefsEncrypted == null || prefsEncrypted.isEmpty)
+              ? null
+              : EncryptionService.decrypt(prefsEncrypted);
 
-      await db.insert('activation', {
-        'id': 1,
-        'signature': encrypted,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-      return EncryptionService.decrypt(encrypted);
+      final fileData = await _readActivationGuardFile();
+      final fileEncrypted = fileData?['signature']?.toString();
+      final fileSignature =
+          (fileEncrypted == null || fileEncrypted.isEmpty)
+              ? null
+              : EncryptionService.decrypt(fileEncrypted);
+
+      if (dbSignature == null ||
+          prefsSignature == null ||
+          fileSignature == null ||
+          dbSignature != prefsSignature ||
+          dbSignature != fileSignature) {
+        return null;
+      }
+
+      return dbSignature;
     } catch (_) {
       return null;
     }
@@ -207,16 +348,109 @@ class ActivationService {
     try {
       final db = await _dbHelper.db;
       await _ensureActivationTable(db);
+
+      String? dbCode;
       final result = await db.query('activation', limit: 1);
       if (result.isNotEmpty && result.first.containsKey('activation_code')) {
-        return result.first['activation_code'] as String?;
+        dbCode = result.first['activation_code'] as String?;
       }
 
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getString('activation_code');
+      final prefsCode = prefs.getString('activation_code');
+      final fileData = await _readActivationGuardFile();
+      final fileCode = fileData?['activation_code']?.toString();
+
+      if (dbCode == null ||
+          dbCode.isEmpty ||
+          prefsCode == null ||
+          prefsCode.isEmpty ||
+          fileCode == null ||
+          fileCode.isEmpty ||
+          dbCode != prefsCode ||
+          dbCode != fileCode) {
+        return null;
+      }
+
+      return dbCode;
     } catch (_) {
       return null;
     }
+  }
+
+  Map<String, dynamic>? _decodeMetadata(String? value) {
+    if (value == null || value.isEmpty) return null;
+
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> _getStoredActivationMetadata() async {
+    try {
+      final db = await _dbHelper.db;
+      await _ensureActivationTable(db);
+
+      String? dbMetadata;
+      final result = await db.query('activation', limit: 1);
+      if (result.isNotEmpty && result.first.containsKey('activation_metadata')) {
+        dbMetadata = result.first['activation_metadata'] as String?;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final prefsMetadata = prefs.getString(_activationMetadataKey);
+      final fileData = await _readActivationGuardFile();
+      final fileMetadata = fileData?[_activationMetadataKey];
+      final fileMetadataEncoded =
+          fileMetadata == null ? null : jsonEncode(fileMetadata);
+
+      final dbDecoded = _decodeMetadata(dbMetadata);
+      final prefsDecoded = _decodeMetadata(prefsMetadata);
+      final fileDecoded = _decodeMetadata(fileMetadataEncoded);
+
+      if (dbDecoded == null || prefsDecoded == null || fileDecoded == null) {
+        return null;
+      }
+
+      final dbNormalized = jsonEncode(dbDecoded);
+      final prefsNormalized = jsonEncode(prefsDecoded);
+      final fileNormalized = jsonEncode(fileDecoded);
+
+      if (dbNormalized != prefsNormalized || dbNormalized != fileNormalized) {
+        return null;
+      }
+
+      return dbDecoded;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  int _calculateRemainingDays(String expiresAt) {
+    final expiry = DateTime.tryParse(expiresAt);
+    if (expiry == null) return 0;
+
+    final remaining = expiry.difference(DateTime.now());
+    if (remaining.inSeconds <= 0) return 0;
+
+    return (remaining.inSeconds / Duration.secondsPerDay).ceil();
+  }
+
+  bool _isTemporaryExpired(Map<String, dynamic> metadata) {
+    if (metadata['type']?.toString() != 'temporary') {
+      return false;
+    }
+
+    final expiresAt = metadata['expiresAt']?.toString();
+    if (expiresAt == null || expiresAt.isEmpty) {
+      return true;
+    }
+
+    return _calculateRemainingDays(expiresAt) <= 0;
   }
 
   Future<void> _savePendingRequest({
@@ -257,11 +491,18 @@ class ActivationService {
     };
   }
 
+  Future<void> clearPendingRequestCode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_requestCodeKey);
+  }
+
   Future<void> _completeLocalActivation(String activationCode) async {
     final deviceId = await getDeviceId();
     final signature = _generateSignature(deviceId);
+    final metadata = _buildActivationMetadata(activationCode);
     await _saveSignature(signature);
     await _saveActivationCode(activationCode);
+    await _saveActivationMetadata(metadata);
     await clearPendingRequest();
   }
 
@@ -499,6 +740,11 @@ class ActivationService {
       return false;
     }
 
+    final metadata = await _getStoredActivationMetadata();
+    if (metadata == null || _isTemporaryExpired(metadata)) {
+      return false;
+    }
+
     final deviceId = await getDeviceId();
     final expectedSignature = _generateSignature(deviceId);
 
@@ -517,6 +763,8 @@ class ActivationService {
     try {
       final storedSignature = await _getStoredSignature();
       if (storedSignature == null) return false;
+      final metadata = await _getStoredActivationMetadata();
+      if (metadata == null || _isTemporaryExpired(metadata)) return false;
       final deviceId = await getDeviceId();
       return storedSignature == _generateSignature(deviceId);
     } catch (_) {
@@ -533,8 +781,14 @@ class ActivationService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('activation_signature');
       await prefs.remove('activation_code');
+      await prefs.remove(_activationMetadataKey);
       await prefs.remove('device_id');
       await clearPendingRequest();
+
+      final guardFile = await _getActivationGuardFile();
+      if (await guardFile.exists()) {
+        await guardFile.delete();
+      }
     } catch (_) {}
   }
 
@@ -542,11 +796,31 @@ class ActivationService {
     try {
       final storedSignature = await _getStoredSignature();
       final storedCode = await getStoredActivationCode();
+      final metadata = await _getStoredActivationMetadata();
 
-      final hasActivation = storedSignature != null && storedCode != null;
+      final hasActivation =
+          storedSignature != null && storedCode != null && metadata != null;
 
       if (!hasActivation) {
         return {'has_activation': false, 'status': 'not_activated'};
+      }
+
+      final activationType = metadata['type']?.toString() ?? 'permanent';
+      final expiresAt = metadata['expiresAt']?.toString();
+      final remainingDays =
+          expiresAt == null || expiresAt.isEmpty
+              ? null
+              : _calculateRemainingDays(expiresAt);
+
+      if (_isTemporaryExpired(metadata)) {
+        return {
+          'has_activation': true,
+          'status': 'expired',
+          'activation_code': storedCode,
+          'activation_type': activationType,
+          'expires_at': expiresAt,
+          'remaining_days': 0,
+        };
       }
 
       try {
@@ -558,6 +832,9 @@ class ActivationService {
             'status': 'valid',
             'activation_code': storedCode,
             'signature': storedSignature,
+            'activation_type': activationType,
+            'expires_at': expiresAt,
+            'remaining_days': remainingDays,
           };
         } else {
           return {
@@ -565,6 +842,9 @@ class ActivationService {
             'status': 'invalid',
             'activation_code': storedCode,
             'signature': storedSignature,
+            'activation_type': activationType,
+            'expires_at': expiresAt,
+            'remaining_days': remainingDays,
           };
         }
       } on ActivationException catch (e) {
@@ -575,6 +855,9 @@ class ActivationService {
           'signature': storedSignature,
           'stored_signature': e.storedSignature,
           'expected_signature': e.expectedSignature,
+          'activation_type': activationType,
+          'expires_at': expiresAt,
+          'remaining_days': remainingDays,
         };
       }
     } catch (e) {

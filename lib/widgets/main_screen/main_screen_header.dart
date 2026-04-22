@@ -1,11 +1,15 @@
-// widgets/main_screen/main_screen_header.dart
 import 'package:flutter/material.dart' hide DateUtils;
 import 'package:motamayez/utils/date_utils.dart';
 
 class MainScreenHeader extends StatelessWidget {
   final String userName;
+  final String activationLabel;
 
-  const MainScreenHeader({super.key, required this.userName});
+  const MainScreenHeader({
+    super.key,
+    required this.userName,
+    required this.activationLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -14,7 +18,6 @@ class MainScreenHeader extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            // ignore: deprecated_member_use
             color: const Color(0xFF7C3AED).withOpacity(0.15),
             width: 1,
           ),
@@ -29,7 +32,7 @@ class MainScreenHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "مرحباً، $userName",
+                    'مرحبًا، $userName',
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
@@ -55,14 +58,12 @@ class MainScreenHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(30),
               boxShadow: [
                 BoxShadow(
-                  // ignore: deprecated_member_use
                   color: Colors.black.withOpacity(0.03),
                   blurRadius: 15,
                   offset: const Offset(0, 3),
                 ),
               ],
               border: Border.all(
-                // ignore: deprecated_member_use
                 color: const Color(0xFF7C3AED).withOpacity(0.2),
                 width: 1,
               ),
@@ -80,9 +81,9 @@ class MainScreenHeader extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Text(
-                  "جلسة نشطة",
-                  style: TextStyle(
+                Text(
+                  activationLabel,
+                  style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFF4C1D95),
                     fontWeight: FontWeight.w600,
