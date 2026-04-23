@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:developer';
 import 'package:motamayez/services/password_service.dart';
-import 'package:path_provider/path_provider.dart';
 
 class DBHelper {
   static Database? _db;

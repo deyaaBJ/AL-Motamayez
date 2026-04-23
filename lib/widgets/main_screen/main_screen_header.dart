@@ -18,6 +18,7 @@ class MainScreenHeader extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
+            // ignore: deprecated_member_use
             color: const Color(0xFF7C3AED).withOpacity(0.15),
             width: 1,
           ),
@@ -58,12 +59,14 @@ class MainScreenHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(30),
               boxShadow: [
                 BoxShadow(
+                  // ignore: deprecated_member_use
                   color: Colors.black.withOpacity(0.03),
                   blurRadius: 15,
                   offset: const Offset(0, 3),
                 ),
               ],
               border: Border.all(
+                // ignore: deprecated_member_use
                 color: const Color(0xFF7C3AED).withOpacity(0.2),
                 width: 1,
               ),

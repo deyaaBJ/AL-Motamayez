@@ -166,9 +166,11 @@ class _MainScreenState extends State<MainScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
+            // ignore: deprecated_member_use
             const Color(0xFF7C3AED).withOpacity(0.03),
             Colors.white,
             Colors.white,
+            // ignore: deprecated_member_use
             const Color(0xFF6D28D9).withOpacity(0.02),
           ],
         ),
