@@ -32,7 +32,6 @@ class _UnitFormState extends State<UnitForm> {
   void initState() {
     super.initState();
     _containQtyController = widget.controller.containQtyController;
-    // إعادة بناء الـ widget عند تغيير النص في حقل معامل التحويل
     _containQtyController.addListener(_onContainQtyChanged);
   }
 
@@ -43,7 +42,7 @@ class _UnitFormState extends State<UnitForm> {
   }
 
   void _onContainQtyChanged() {
-    setState(() {}); // يُحدِّث قسم الحساب فقط
+    setState(() {});
   }
 
   @override
@@ -92,7 +91,7 @@ class _UnitFormState extends State<UnitForm> {
             controller: widget.controller.containQtyController,
             label: 'كم وحدة مرجعية تحتوي هذه الوحدة',
             prefixIcon: Icons.format_list_numbered,
-            keyboardType: TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             validator: (value) {
               if (value == null || value.isEmpty) {
                 return 'يرجى إدخال معامل التحويل';
@@ -117,10 +116,14 @@ class _UnitFormState extends State<UnitForm> {
             controller: widget.controller.sellPriceController,
             label: 'سعر بيع هذه الوحدة',
             prefixIcon: Icons.attach_money,
-            keyboardType: TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             validator: (value) {
-              if (value == null || value.isEmpty) return 'يرجى إدخال السعر';
-              if (double.tryParse(value) == null) return 'يرجى إدخال سعر صحيح';
+              if (value == null || value.trim().isEmpty) {
+                return null;
+              }
+              if (double.tryParse(value) == null) {
+                return 'يرجى إدخال سعر صحيح';
+              }
               return null;
             },
           ),
@@ -162,7 +165,6 @@ class _UnitFormState extends State<UnitForm> {
       remainder = remainder.roundToDouble();
     }
 
-    // تحويل الوحدة الأساسية: piece/price -> قطعة، kg -> كيلو
     String getBaseUnitName(String baseUnit) {
       final normalized = baseUnit.trim().toLowerCase();
       if (normalized == 'piece' || normalized == 'price') {
@@ -170,7 +172,7 @@ class _UnitFormState extends State<UnitForm> {
       } else if (normalized == 'kg') {
         return 'كيلو';
       } else {
-        return baseUnit; // مثل "حبة" أو "علبة"
+        return baseUnit;
       }
     }
 

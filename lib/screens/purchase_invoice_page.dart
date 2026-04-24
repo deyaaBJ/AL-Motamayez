@@ -690,8 +690,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     decoration: InputDecoration(
                       labelText:
                           _selectedUnitId != null
-                              ? 'سعر شراء الوحدة'
-                              : 'سعر شراء الوحدة المرجعية',
+                              ? 'إجمالي سعر الشراء'
+                              : 'إجمالي سعر شراء الكمية',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -1100,7 +1100,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                     final productName = item['product_name'] ?? 'غير معروف';
                     final quantity = (item['quantity'] as num).toDouble();
                     final costPrice = (item['cost_price'] as num).toDouble();
-                    final subtotal = quantity * costPrice;
+                    final subtotal =
+                        (item['subtotal'] as num?)?.toDouble() ??
+                        (quantity * costPrice);
                     final hasExpiry = item['has_expiry'] as bool? ?? false;
                     final expiryDate = item['expiry_date_formatted'] as String?;
                     final isUnit = item['is_unit'] as bool? ?? false;
@@ -1110,6 +1112,9 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                         (item['display_quantity'] as num?)?.toDouble() ??
                         quantity;
                     final unitName = item['unit_name'] as String?;
+                    final enteredCostPrice =
+                        (item['entered_cost_price'] as num?)?.toDouble() ??
+                        subtotal;
 
                     double displayUnitPrice = costPrice;
                     if (isUnit) {
@@ -1214,11 +1219,19 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   Text(
-                                    Formatters.formatCurrency(
-                                      isUnit ? displayUnitPrice : costPrice,
-                                    ),
+                                    Formatters.formatCurrency(enteredCostPrice),
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  Text(
+                                    isUnit
+                                        ? '(${Formatters.formatCurrency(displayUnitPrice)}/${unitName ?? 'وحدة'})'
+                                        : '(${Formatters.formatCurrency(costPrice)}/قطعة)',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey,
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
@@ -1543,11 +1556,10 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
         displayName = '${product.name} ($displayQuantity × $unitName)';
       }
 
-      double costPricePerBaseUnit = cost;
+      final costPricePerBaseUnit = cost / actualQuantity;
       if (isUnit) {
-        costPricePerBaseUnit = cost / unitContainQty;
         log(
-          'تكلفة الوحدة المرجعية: $costPricePerBaseUnit (سعر شراء الوحدة $cost ÷ $unitContainQty)',
+          'تكلفة الوحدة المرجعية: $costPricePerBaseUnit (إجمالي سعر الشراء $cost ÷ الكمية الفعلية $actualQuantity)',
         );
       }
 
@@ -1568,7 +1580,8 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
           'quantity': actualQuantity,
           'display_quantity': displayQuantity,
           'cost_price': costPricePerBaseUnit,
-          'subtotal': actualQuantity * costPricePerBaseUnit,
+          'entered_cost_price': cost,
+          'subtotal': cost,
           'has_expiry': true,
           'expiry_date': _expiryDate!.toIso8601String(),
           'expiry_date_formatted': DateFormat(
@@ -1588,12 +1601,13 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
           'quantity': actualQuantity,
           'display_quantity': displayQuantity,
           'cost_price': costPricePerBaseUnit,
-          'subtotal': actualQuantity * costPricePerBaseUnit,
+          'entered_cost_price': cost,
+          'subtotal': cost,
           'has_expiry': false,
           'is_unit': isUnit,
           'unit_id': _selectedUnitId,
           'unit_name': unitName,
-          'unit_containQty': unitContainQty,
+          'unit_contain_qty': unitContainQty,
         };
         invoiceProvider.addTempItem(newItem);
         _showSuccess('تم إضافة "$displayName" بنجاح');

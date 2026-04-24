@@ -11,6 +11,7 @@ import 'package:motamayez/providers/settings_provider.dart';
 class CartItemWidget extends StatefulWidget {
   final CartItem item;
   final Function(CartItem, double) onQuantityChange;
+  final Function(CartItem, double) onSetQuantity;
   final Function(CartItem) onRemove;
   final Function(CartItem, ProductUnit?) onUnitChange;
   final Function(CartItem, double?) onPriceChange;
@@ -19,6 +20,7 @@ class CartItemWidget extends StatefulWidget {
     super.key,
     required this.item,
     required this.onQuantityChange,
+    required this.onSetQuantity,
     required this.onRemove,
     required this.onUnitChange,
     required this.onPriceChange,
@@ -73,7 +75,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
             child:
                 widget.item.isService
                     ? _buildServiceQuantityDisplay()
-                    : _buildQuantityControls(),
+                    : _buildQuantityControls(settings),
           ),
 
           // المجموع
@@ -540,85 +542,108 @@ class _CartItemWidgetState extends State<CartItemWidget> {
     );
   }
 
-  Widget _buildQuantityControls() {
-    return Column(
+  Widget _buildQuantityControls(SettingsProvider settings) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8F5FF),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE1D4F7), width: 1.5),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // زر الناقص
-              IconButton(
-                icon: const Icon(Icons.remove, size: 28),
-                onPressed: () => widget.onQuantityChange(widget.item, -1),
-                padding: const EdgeInsets.all(6),
-                color: const Color(0xFF6A3093),
-                iconSize: 28,
-              ),
+        // حاوية أزرار +/- والرقم القابل للنقر
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8F5FF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE1D4F7), width: 1.5),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // زر الناقص
+                IconButton(
+                  icon: const Icon(Icons.remove, size: 28),
+                  onPressed: () => widget.onQuantityChange(widget.item, -1),
+                  padding: const EdgeInsets.all(6),
+                  color: const Color(0xFF6A3093),
+                  iconSize: 28,
+                ),
 
-              // عرض الكمية
-              Container(
-                width: 70,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Column(
-                  children: [
-                    Text(
-                      _formatQuantityForDisplay(widget.item.quantity),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        color: _getQuantityColor(widget.item.quantity),
+                // الرقم المعروض (قابل للنقر لفتح نافذة إدخال الكمية)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _showCustomQuantityInput,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _formatQuantityForDisplay(widget.item.quantity),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                              color: _getQuantityColor(widget.item.quantity),
+                            ),
+                          ),
+                          Text(
+                            _getQuantitySuffix(),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    Text(
-                      _getQuantitySuffix(),
-                      style: const TextStyle(fontSize: 10, color: Colors.grey),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
 
-              // زر الزائد
-              IconButton(
-                icon: const Icon(Icons.add, size: 28),
-                onPressed: () => widget.onQuantityChange(widget.item, 1),
-                padding: const EdgeInsets.all(6),
-                color: const Color(0xFF6A3093),
-                iconSize: 28,
-              ),
-            ],
-          ),
-        ),
-
-        // زر لإدخال كمية مخصصة
-        const SizedBox(height: 4),
-        GestureDetector(
-          onTap: _showCustomQuantityInput,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.edit, size: 16, color: Colors.black),
-                SizedBox(width: 4),
-                Text(
-                  'إدخال كمية',
-                  style: TextStyle(fontSize: 16, color: Colors.black),
+                // زر الزائد
+                IconButton(
+                  icon: const Icon(Icons.add, size: 28),
+                  onPressed: () => widget.onQuantityChange(widget.item, 1),
+                  padding: const EdgeInsets.all(6),
+                  color: const Color(0xFF6A3093),
+                  iconSize: 28,
                 ),
               ],
             ),
           ),
         ),
+
+        // زر "إدخال مبلغ" (يظهر فقط للمنتجات التي تدعم الإدخال بالمبلغ)
+        if (_supportsAmountBasedWeightEntry()) ...[
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => _showAmountBasedWeightInput(context, settings),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF8EE),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.calculate_outlined,
+                    size: 18,
+                    color: Colors.green,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'إدخال مبلغ',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.green[800],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -698,6 +723,121 @@ class _CartItemWidgetState extends State<CartItemWidget> {
             ],
           ),
     );
+  }
+
+  bool _supportsAmountBasedWeightEntry() {
+    if (widget.item.isService || widget.item.product == null) {
+      return false;
+    }
+
+    final isBaseKg = widget.item.product!.baseUnit.toLowerCase() == 'kg';
+    return isBaseKg &&
+        widget.item.selectedUnit == null &&
+        widget.item.unitPrice > 0;
+  }
+
+  void _showAmountBasedWeightInput(
+    BuildContext context,
+    SettingsProvider settings,
+  ) {
+    final TextEditingController controller = TextEditingController(
+      text:
+          widget.item.totalPrice == 0
+              ? ''
+              : widget.item.totalPrice.toStringAsFixed(2),
+    );
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('إدخال مبلغ المنتج'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.item.itemName,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'سعر الكيلو: ${settings.currencyName} ${widget.item.unitPrice.toStringAsFixed(2)}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: false,
+                  ),
+                  autofocus: true,
+                  textAlign: TextAlign.center,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                  decoration: InputDecoration(
+                    hintText: 'أدخل المبلغ المطلوب',
+                    suffixText: settings.currencyName,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'سيتم حساب الوزن تلقائياً = المبلغ / سعر الكيلو',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إلغاء'),
+              ),
+              TextButton(
+                onPressed: () {
+                  final amount = double.tryParse(controller.text.trim());
+                  if (amount == null || amount <= 0) {
+                    showAppToast(
+                      context,
+                      'الرجاء إدخال مبلغ صالح',
+                      ToastType.error,
+                    );
+                    return;
+                  }
+
+                  final quantity = amount / widget.item.unitPrice;
+                  widget.onSetQuantity(widget.item, quantity);
+                  Navigator.pop(context);
+
+                  showAppToast(
+                    context,
+                    'تم احتساب الوزن ${_formatWeight(quantity)} كيلو بسعر ${amount.toStringAsFixed(2)}',
+                    ToastType.success,
+                  );
+                },
+                child: const Text('حفظ'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  String _formatWeight(double quantity) {
+    if (quantity == quantity.truncateToDouble()) {
+      return quantity.toStringAsFixed(0);
+    }
+    if ((quantity * 10) == (quantity * 10).truncateToDouble()) {
+      return quantity.toStringAsFixed(1);
+    }
+    if ((quantity * 100) == (quantity * 100).truncateToDouble()) {
+      return quantity.toStringAsFixed(2);
+    }
+    return quantity.toStringAsFixed(3);
   }
 
   // دالة للحصول على اسم الوحدة المعروض

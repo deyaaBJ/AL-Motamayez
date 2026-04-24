@@ -7,6 +7,7 @@ import 'package:motamayez/widgets/table_header_widget.dart';
 class PosCartTable extends StatelessWidget {
   final List<CartItem> cartItems;
   final Function(CartItem, double) onQuantityChange;
+  final Function(CartItem, double) onSetQuantity;
   final Function(CartItem) onRemove;
   final Function(CartItem, ProductUnit?) onUnitChange;
   final Function(CartItem, double?) onPriceChange;
@@ -15,6 +16,7 @@ class PosCartTable extends StatelessWidget {
     super.key,
     required this.cartItems,
     required this.onQuantityChange,
+    required this.onSetQuantity,
     required this.onRemove,
     required this.onUnitChange,
     required this.onPriceChange,
@@ -52,6 +54,7 @@ class PosCartTable extends StatelessWidget {
                 ),
                 item: entry.value,
                 onQuantityChange: onQuantityChange,
+                onSetQuantity: onSetQuantity,
                 onRemove: onRemove,
                 onUnitChange: onUnitChange,
                 onPriceChange: onPriceChange,

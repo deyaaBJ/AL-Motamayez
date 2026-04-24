@@ -21,6 +21,7 @@ class PurchaseItemProvider with ChangeNotifier {
 
     await db.transaction((txn) async {
       double displayQuantity = quantity;
+      final subtotal = quantity * costPrice;
 
       if (isUnit && unitContainQty > 1) {
         displayQuantity = quantity / unitContainQty;
@@ -32,7 +33,7 @@ class PurchaseItemProvider with ChangeNotifier {
         'product_id': productId,
         'quantity': quantity,
         'cost_price': costPrice,
-        'subtotal': quantity * costPrice,
+        'subtotal': subtotal,
         'unit_id': unitId,
         'display_quantity': displayQuantity,
         // ❌ ما تحط purchase_item_id هنا
@@ -55,7 +56,7 @@ class PurchaseItemProvider with ChangeNotifier {
 
       // حساب المتوسط المرجح للتكلفة
       final totalOldCost = oldQty * oldCost;
-      final totalNewCost = quantity * costPrice;
+      final totalNewCost = subtotal;
       final totalQty = oldQty + quantity;
 
       double newAverageCost = costPrice;

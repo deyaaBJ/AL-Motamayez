@@ -424,65 +424,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                       backgroundColor: Colors.teal.shade50,
                                       valueFontSize: 16,
                                     ),
-                                    const SizedBox(height: 16),
-                                    Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.all(16),
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            Colors.purple.shade50,
-                                            Colors.purple.shade100,
-                                          ],
-                                        ),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: Colors.purple.shade200,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Icon(
-                                                Icons.trending_up,
-                                                color: Colors.purple.shade700,
-                                                size: 28,
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Text(
-                                                'الربح التقريبي لل${_getUnitText(_product!.baseUnit)}',
-                                                style: TextStyle(
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.purple.shade800,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          Text(
-                                            '${(_product!.price - _averageCost).toStringAsFixed(2)} شيكل',
-                                            style: TextStyle(
-                                              fontSize: 24,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.purple.shade800,
-                                              fontFamily: 'Cairo',
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'الربح الفعلي في البيع يُحسب من الواردات المصروفة، أما هنا فنعرض متوسط التكلفة الحالي وآخر سعر شراء للمرجعية.',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey.shade600,
-                                        height: 1.5,
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),

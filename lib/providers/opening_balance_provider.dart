@@ -26,13 +26,15 @@ class OpeningBalanceProvider with ChangeNotifier {
         final int productId = item['product_id'] as int;
         final double quantity = (item['quantity'] as num).toDouble();
         final double costPrice = (item['cost_price'] as num).toDouble();
+        final double subtotal =
+            (item['subtotal'] as num?)?.toDouble() ?? (quantity * costPrice);
 
         await txn.insert('opening_balance_items', {
           'opening_balance_id': openingBalanceId,
           'product_id': productId,
           'quantity': quantity,
           'cost_price': costPrice,
-          'subtotal': quantity * costPrice,
+          'subtotal': subtotal,
         });
 
         final productResult = await txn.query(

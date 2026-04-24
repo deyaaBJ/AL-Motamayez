@@ -650,9 +650,10 @@ class PurchaseInvoiceProvider with ChangeNotifier {
   void addTempItem(Map<String, dynamic> item) {
     _tempInvoiceItems.add(item);
     // تحديث الإجمالي
-    double itemTotal =
-        (item['quantity'] as num).toDouble() *
-        (item['cost_price'] as num).toDouble();
+    final double itemTotal =
+        (item['subtotal'] as num?)?.toDouble() ??
+        ((item['quantity'] as num).toDouble() *
+            (item['cost_price'] as num).toDouble());
     _tempInvoiceTotal += itemTotal;
 
     // تحديث الخصم إذا كان أكبر من الإجمالي الجديد
@@ -666,9 +667,10 @@ class PurchaseInvoiceProvider with ChangeNotifier {
     if (index >= 0 && index < _tempInvoiceItems.length) {
       final removedItem = _tempInvoiceItems.removeAt(index);
       // تحديث الإجمالي
-      double removedAmount =
-          (removedItem['quantity'] as num).toDouble() *
-          (removedItem['cost_price'] as num).toDouble();
+      final double removedAmount =
+          (removedItem['subtotal'] as num?)?.toDouble() ??
+          ((removedItem['quantity'] as num).toDouble() *
+              (removedItem['cost_price'] as num).toDouble());
       _tempInvoiceTotal -= removedAmount;
 
       // تحديث الخصم إذا كان أكبر من الإجمالي الجديد

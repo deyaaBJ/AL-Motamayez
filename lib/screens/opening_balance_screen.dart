@@ -213,7 +213,7 @@ class _OpeningBalanceScreenState extends State<OpeningBalanceScreen> {
     }
 
     final actualQuantity = quantity * _selectedUnitContainQty;
-    final costPerBaseUnit = enteredCostPrice / _selectedUnitContainQty;
+    final costPerBaseUnit = enteredCostPrice / actualQuantity;
     final displayName =
         isUnit
             ? '${_selectedProduct!.name} [${_translateUnit(_selectedUnit!.unitName)}]'
@@ -232,7 +232,7 @@ class _OpeningBalanceScreenState extends State<OpeningBalanceScreen> {
       'quantity': actualQuantity,
       'cost_price': costPerBaseUnit,
       'entered_cost_price': enteredCostPrice,
-      'subtotal': actualQuantity * costPerBaseUnit,
+      'subtotal': enteredCostPrice,
       'unit_id': _selectedUnit?.id,
       'unit_name': _selectedUnit?.unitName,
       'unit_contain_qty': _selectedUnitContainQty,
@@ -521,8 +521,8 @@ class _OpeningBalanceScreenState extends State<OpeningBalanceScreen> {
                               decoration: InputDecoration(
                                 labelText:
                                     _selectedUnit == null
-                                        ? 'سعر التكلفة'
-                                        : 'سعر التكلفة (${_translateUnit(_selectedUnit!.unitName)})',
+                                        ? 'إجمالي سعر الشراء'
+                                        : 'إجمالي سعر الشراء (${_translateUnit(_selectedUnit!.unitName)})',
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -695,8 +695,8 @@ class _OpeningBalanceScreenState extends State<OpeningBalanceScreen> {
                                         const SizedBox(height: 4),
                                         Text(
                                           isUnit
-                                              ? 'الكمية: $displayQty $unitName | التكلفة: $enteredCost | الفعلي: ${actualQty.toStringAsFixed(2)}'
-                                              : 'الكمية: ${actualQty.toStringAsFixed(2)} | التكلفة: ${costPerBase.toStringAsFixed(2)}',
+                                              ? 'الكمية: $displayQty $unitName | إجمالي الشراء: ${enteredCost.toStringAsFixed(2)} | سعر القطعة: ${costPerBase.toStringAsFixed(2)} | الفعلي: ${actualQty.toStringAsFixed(2)}'
+                                              : 'الكمية: ${actualQty.toStringAsFixed(2)} | إجمالي الشراء: ${enteredCost.toStringAsFixed(2)} | سعر القطعة: ${costPerBase.toStringAsFixed(2)}',
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: Colors.grey.shade700,

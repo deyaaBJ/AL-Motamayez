@@ -347,7 +347,6 @@ class _PosScreenState extends State<PosScreen>
               : [];
       final List<ProductUnit> units = unitsRaw.cast<ProductUnit>();
       final uniqueUnits = removeDuplicateUnits(units);
-
       if (widget.isEditMode && _originalSale != null) {
         final saleItems = await _productProvider.getSaleItems(
           _originalSale!.id,
@@ -420,7 +419,6 @@ class _PosScreenState extends State<PosScreen>
             : [];
     final List<ProductUnit> allUnits = unitsRaw.cast<ProductUnit>();
     final uniqueUnits = removeDuplicateUnits(allUnits);
-
     final existingIndex = _cartItems.indexWhere(
       (i) => i.product?.id == product.id && i.selectedUnit?.id == unit.id,
     );
@@ -488,6 +486,17 @@ class _PosScreenState extends State<PosScreen>
     });
   }
 
+  void _setItemQuantity(CartItem item, double newQuantity) {
+    setState(() {
+      if (newQuantity <= 0) {
+        _cartItems.remove(item);
+      } else {
+        item.quantity = newQuantity;
+      }
+      _calculateTotal();
+    });
+  }
+
   void _updateSelectedUnit(CartItem item, ProductUnit? unit) {
     setState(() {
       item.selectedUnit = unit;
@@ -532,14 +541,20 @@ class _PosScreenState extends State<PosScreen>
       showAppToast(context, 'السلة فارغة', ToastType.warning);
       return;
     }
+    final pricesReady = await _ensureMissingPricesResolved();
+    if (!pricesReady) return;
+    // ignore: use_build_context_synchronously
     final settings = Provider.of<SettingsProvider>(context, listen: false);
+    // ignore: use_build_context_synchronously
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final logerIp = settings.logerIp;
     if (logerIp == null || logerIp.isEmpty) {
+      // ignore: use_build_context_synchronously
       showAppToast(context, 'يرجى إعداد الطابعة', ToastType.warning);
       return;
     }
 
+    // ignore: use_build_context_synchronously
     final payment = await showPaymentDialog(context, _finalAmount);
     if (payment == null) return;
 
@@ -581,7 +596,11 @@ class _PosScreenState extends State<PosScreen>
       showAppToast(context, 'السلة فارغة', ToastType.warning);
       return;
     }
+    final pricesReady = await _ensureMissingPricesResolved();
+    if (!pricesReady) return;
+    // ignore: use_build_context_synchronously
     final auth = context.read<AuthProvider>();
+    // ignore: use_build_context_synchronously
     final productProvider = context.read<ProductProvider>();
     try {
       for (final item in _cartItems) {
@@ -592,6 +611,7 @@ class _PosScreenState extends State<PosScreen>
                   : item.quantity;
           if (item.product!.quantity < reqQty) {
             showAppToast(
+              // ignore: use_build_context_synchronously
               context,
               'كمية غير كافية لـ ${item.product!.name}',
               ToastType.error,
@@ -625,6 +645,9 @@ class _PosScreenState extends State<PosScreen>
       showAppToast(context, 'السلة فارغة', ToastType.warning);
       return;
     }
+    final pricesReady = await _ensureMissingPricesResolved();
+    if (!pricesReady) return;
+    // ignore: use_build_context_synchronously
     final customerProvider = context.read<CustomerProvider>();
     await customerProvider.fetchCustomers(reset: true);
     if (!mounted) return;
@@ -661,9 +684,15 @@ class _PosScreenState extends State<PosScreen>
   }
 
   Future<void> _finalizeSaleWithCustomer(Customer customer) async {
+    final pricesReady = await _ensureMissingPricesResolved();
+    if (!pricesReady) return;
+    // ignore: use_build_context_synchronously
     final auth = context.read<AuthProvider>();
+    // ignore: use_build_context_synchronously
     final productProvider = context.read<ProductProvider>();
+    // ignore: use_build_context_synchronously
     final debtProvider = context.read<DebtProvider>();
+    // ignore: use_build_context_synchronously
     context.read<SettingsProvider>();
     try {
       for (final item in _cartItems) {
@@ -674,6 +703,7 @@ class _PosScreenState extends State<PosScreen>
                   : item.quantity;
           if (item.product!.quantity < reqQty) {
             showAppToast(
+              // ignore: use_build_context_synchronously
               context,
               'كمية غير كافية لـ ${item.product!.name}',
               ToastType.error,
@@ -824,6 +854,95 @@ class _PosScreenState extends State<PosScreen>
           .replaceAll("Bad state: ", "")
           .trim();
 
+  Future<bool> _ensureMissingPricesResolved() async {
+    for (final item in _cartItems) {
+      if (item.isService || item.unitPrice > 0) continue;
+
+      final enteredLineTotal = await _promptForMissingLineTotal(item);
+      if (enteredLineTotal == null) {
+        if (mounted) {
+          showAppToast(
+            context,
+            'لا يمكن متابعة البيع بدون إدخال سعر بيع للعناصر التي بلا سعر',
+            ToastType.warning,
+          );
+        }
+        return false;
+      }
+
+      item.setCustomPrice(enteredLineTotal / item.quantity);
+    }
+
+    if (mounted) {
+      _calculateTotal();
+    }
+    return true;
+  }
+
+  Future<double?> _promptForMissingLineTotal(CartItem item) async {
+    final controller = TextEditingController();
+    final unitLabel =
+        item.selectedUnit?.unitName ?? item.product?.baseUnit ?? '';
+
+    return showDialog<double>(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('إدخال سعر بيع مؤقت'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${item.itemName} لا يحتوي على سعر بيع محفوظ لهذه الفاتورة',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'الكمية: ${item.quantity.toStringAsFixed(item.quantity % 1 == 0 ? 0 : 2)} $unitLabel',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: false,
+                  ),
+                  autofocus: true,
+                  textAlign: TextAlign.center,
+                  decoration: const InputDecoration(
+                    labelText: 'سعر بيع هذه الكمية',
+                    hintText: '0.00',
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final price = double.tryParse(controller.text.trim());
+                  if (price == null || price <= 0) {
+                    showAppToast(
+                      dialogContext,
+                      'أدخل سعر بيع صالح أكبر من صفر',
+                      ToastType.error,
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogContext, price);
+                },
+                child: const Text('حفظ'),
+              ),
+            ],
+          ),
+    );
+  }
+
   void _showTotalEditor(BuildContext context) {
     _totalEditorController.text = _finalAmount.toStringAsFixed(2);
     showDialog(
@@ -923,6 +1042,7 @@ class _PosScreenState extends State<PosScreen>
               child: PosCartTable(
                 cartItems: _cartItems,
                 onQuantityChange: _updateQuantity,
+                onSetQuantity: _setItemQuantity,
                 onRemove: _removeFromCart,
                 onUnitChange: _updateSelectedUnit,
                 onPriceChange: _updateItemPrice,
