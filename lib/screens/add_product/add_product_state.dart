@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:motamayez/helpers/helpers.dart';
@@ -11,6 +12,8 @@ import 'helpers/offer_helper.dart';
 class AddProductState extends ChangeNotifier {
   final ProductProvider _provider = ProductProvider();
   bool _disposed = false;
+  Timer? _barcodeDebounce;
+  bool _isApplyingProductData = false;
 
   final TextEditingController qrController = TextEditingController();
   final TextEditingController nameController = TextEditingController();
@@ -45,6 +48,14 @@ class AddProductState extends ChangeNotifier {
     qrController.addListener(_onQrChanged);
   }
 
+  void _setControllerText(TextEditingController controller, String value) {
+    if (controller.text == value) return;
+    controller.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
+
   void _onQrChanged() {
     if (qrController.text.isEmpty && isNewProduct) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -56,6 +67,7 @@ class AddProductState extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _barcodeDebounce?.cancel();
     qrController.dispose();
     nameController.dispose();
     priceController.dispose();
@@ -79,24 +91,7 @@ class AddProductState extends ChangeNotifier {
       final product = await _provider.getProductById(productId);
       if (_disposed) return;
       if (product != null) {
-        existingProduct = product;
-        isNewProduct = false;
-        nameController.text = product.name;
-        priceController.text = product.price.toStringAsFixed(2);
-        costPriceController.text = product.costPrice.toStringAsFixed(2);
-        quantityController.text = '0';
-        originalQuantityController.text = product.quantity.toStringAsFixed(2);
-        barcodeController.text = product.barcode ?? '';
-        selectedUnit = product.baseUnit;
-        offerEnabled = product.offerEnabled;
-        offerPriceController.text = product.offerPrice?.toString() ?? '';
-        offerStartDate = parseStoredDate(product.offerStartDate);
-        offerEndDate = parseStoredDate(product.offerEndDate);
-        isProductActive = product.active;
-        hasExpiryDate = product.hasExpiryDate;
-        useCustomLowStockThreshold = product.lowStockThreshold != null;
-        lowStockThresholdController.text =
-            product.lowStockThreshold?.toString() ?? '';
+        _applyProductData(product);
         await _loadExistingUnits();
       } else {
         resetForm();
@@ -120,32 +115,11 @@ class AddProductState extends ChangeNotifier {
       final results = await _provider.searchProductsByBarcode(qrCode);
       if (_disposed) return;
       if (results.isNotEmpty) {
-        existingProduct = results.first;
-        isNewProduct = false;
-        nameController.text = existingProduct!.name;
-        priceController.text = existingProduct!.price.toStringAsFixed(2);
-        costPriceController.text = existingProduct!.costPrice.toStringAsFixed(
-          2,
-        );
-        originalQuantityController.text = existingProduct!.quantity
-            .toStringAsFixed(2);
-        quantityController.text = '0';
-        barcodeController.text = existingProduct!.barcode ?? '';
-        selectedUnit = existingProduct!.baseUnit;
-        offerEnabled = existingProduct!.offerEnabled;
-        offerPriceController.text =
-            existingProduct!.offerPrice?.toString() ?? '';
-        offerStartDate = parseStoredDate(existingProduct!.offerStartDate);
-        offerEndDate = parseStoredDate(existingProduct!.offerEndDate);
-        isProductActive = existingProduct!.active;
-        hasExpiryDate = existingProduct!.hasExpiryDate;
-        useCustomLowStockThreshold = existingProduct!.lowStockThreshold != null;
-        lowStockThresholdController.text =
-            existingProduct!.lowStockThreshold?.toString() ?? '';
+        _applyProductData(results.first);
         await _loadExistingUnits();
       } else {
         resetForm();
-        barcodeController.text = qrCode;
+        _setControllerText(barcodeController, qrCode);
       }
     } catch (e) {
       log('Error searching product: $e');
@@ -155,6 +129,59 @@ class AddProductState extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  void _applyProductData(Product product) {
+    _isApplyingProductData = true;
+    existingProduct = product;
+    isNewProduct = false;
+    _setControllerText(nameController, product.name);
+    _setControllerText(priceController, product.price.toStringAsFixed(2));
+    _setControllerText(
+      costPriceController,
+      product.costPrice.toStringAsFixed(2),
+    );
+    _setControllerText(quantityController, '0');
+    _setControllerText(
+      originalQuantityController,
+      product.quantity.toStringAsFixed(2),
+    );
+    _setControllerText(barcodeController, product.barcode ?? '');
+    selectedUnit = product.baseUnit;
+    offerEnabled = product.offerEnabled;
+    _setControllerText(offerPriceController, product.offerPrice?.toString() ?? '');
+    offerStartDate = parseStoredDate(product.offerStartDate);
+    offerEndDate = parseStoredDate(product.offerEndDate);
+    isProductActive = product.active;
+    hasExpiryDate = product.hasExpiryDate;
+    useCustomLowStockThreshold = product.lowStockThreshold != null;
+    _setControllerText(
+      lowStockThresholdController,
+      product.lowStockThreshold?.toString() ?? '',
+    );
+    _isApplyingProductData = false;
+  }
+
+  void onBarcodeChanged(String value) {
+    if (_disposed || _isApplyingProductData) return;
+
+    final trimmedValue = value.trim();
+    _barcodeDebounce?.cancel();
+
+    if (existingProduct != null &&
+        trimmedValue != (existingProduct!.barcode ?? '').trim()) {
+      _clearProductState(keepBarcode: true);
+      notifyListeners();
+    }
+
+    if (trimmedValue.isEmpty) {
+      return;
+    }
+
+    _barcodeDebounce = Timer(const Duration(milliseconds: 350), () async {
+      if (_disposed || _isApplyingProductData) return;
+      await checkProduct(trimmedValue);
+    });
   }
 
   Future<void> _loadExistingUnits() async {
@@ -167,12 +194,20 @@ class AddProductState extends ChangeNotifier {
       unitIds.clear();
       for (final unit in units) {
         final controller = UnitController();
-        controller.unitNameController.text = unit.unitName;
-        controller.barcodeController.text = unit.barcode ?? '';
-        controller.containQtyController.text = unit.containQty.toString();
-        controller.sellPriceController.text = unit.sellPrice.toString();
-        controller.offerPriceController.text =
-            unit.offerPrice?.toString() ?? '';
+        _setControllerText(controller.unitNameController, unit.unitName);
+        _setControllerText(controller.barcodeController, unit.barcode ?? '');
+        _setControllerText(
+          controller.containQtyController,
+          unit.containQty.toString(),
+        );
+        _setControllerText(
+          controller.sellPriceController,
+          unit.sellPrice.toString(),
+        );
+        _setControllerText(
+          controller.offerPriceController,
+          unit.offerPrice?.toString() ?? '',
+        );
         controller.offerEnabled = unit.offerEnabled;
         controller.offerStartDate = parseStoredDate(unit.offerStartDate);
         controller.offerEndDate = parseStoredDate(unit.offerEndDate);
@@ -189,6 +224,12 @@ class AddProductState extends ChangeNotifier {
 
   void resetForm() {
     if (_disposed) return;
+    _clearProductState();
+    notifyListeners();
+  }
+
+  void _clearProductState({bool keepBarcode = false}) {
+    if (_disposed) return;
     nameController.clear();
     priceController.clear();
     offerPriceController.clear();
@@ -198,7 +239,9 @@ class AddProductState extends ChangeNotifier {
     showUnitsSection = false;
     unitControllers.clear();
     unitIds.clear();
-    barcodeController.clear();
+    if (!keepBarcode) {
+      barcodeController.clear();
+    }
     offerStartDate = null;
     offerEndDate = null;
     offerEnabled = false;
@@ -208,7 +251,6 @@ class AddProductState extends ChangeNotifier {
     hasExpiryDate = false;
     existingProduct = null;
     isNewProduct = true;
-    notifyListeners();
   }
 
   Future<void> saveProduct(BuildContext context) async {
@@ -260,22 +302,13 @@ class AddProductState extends ChangeNotifier {
           hasExpiryDate: hasExpiryDate,
           lowStockThreshold: customLowStockThreshold,
         );
-        await _provider.addProduct(product);
+        final newProductId = await _provider.addProduct(product);
         try {
-          final results = await _provider.searchProductsByBarcode(
-            product.barcode ?? '',
-          );
-          if (product.barcode == null || product.barcode!.isEmpty) {
-            results.clear();
-          }
-          if (results.isNotEmpty) {
-            final newProductId = results.first.id;
-            if (showUnitsSection && newProductId != null) {
-              await _saveProductUnits(newProductId);
-            }
+          if (showUnitsSection) {
+            await _saveProductUnits(newProductId);
           }
         } catch (e) {
-          log('Could not get product ID: $e');
+          log('Could not save product units: $e');
         }
       } else {
         if (existingProduct?.id == null) {
@@ -347,10 +380,7 @@ class AddProductState extends ChangeNotifier {
         );
         final sellPrice =
             double.tryParse(controller.sellPriceController.text.trim()) ?? 0.0;
-        if (unitName.isEmpty ||
-            factor == null ||
-            factor <= 0 ||
-            sellPrice <= 0) {
+        if (unitName.isEmpty || factor == null || factor <= 0) {
           continue;
         }
         final offerData = buildOfferData(

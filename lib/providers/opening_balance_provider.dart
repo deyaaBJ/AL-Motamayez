@@ -1,6 +1,7 @@
 import 'dart:developer';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:motamayez/db/db_helper.dart';
 
 class OpeningBalanceProvider with ChangeNotifier {
@@ -75,7 +76,9 @@ class OpeningBalanceProvider with ChangeNotifier {
         }
 
         final String batchExpiry =
-            hasExpiryDate ? providedExpiryDate! : '2099-12-31';
+            hasExpiryDate
+                ? _normalizeExpiryDate(providedExpiryDate!)
+                : '2099-12-31';
 
         await txn.insert('product_batches', {
           'product_id': productId,
@@ -94,5 +97,14 @@ class OpeningBalanceProvider with ChangeNotifier {
     log('Saved opening balance #$openingBalanceId');
     notifyListeners();
     return openingBalanceId;
+  }
+
+  String _normalizeExpiryDate(String value) {
+    final trimmed = value.trim();
+    final parsed = DateTime.tryParse(trimmed);
+    if (parsed == null) {
+      return trimmed;
+    }
+    return DateFormat('yyyy-MM-dd').format(parsed);
   }
 }

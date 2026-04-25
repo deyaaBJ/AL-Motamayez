@@ -71,7 +71,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
     });
 
     try {
-      await _provider.loadProductsByFilter(filter, reset: reset);
+      final defaultThreshold =
+          context.read<SettingsProvider>().lowStockThreshold;
+      await _provider.loadProductsByFilter(
+        filter,
+        reset: reset,
+        defaultLowStockThreshold: defaultThreshold,
+      );
     } catch (e) {
       log('Error loading products by filter: $e');
       if (!mounted) return;
@@ -91,7 +97,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _provider.loadMoreProducts();
+      final defaultThreshold =
+          context.read<SettingsProvider>().lowStockThreshold;
+      await _provider.loadMoreProducts(
+        defaultLowStockThreshold: defaultThreshold,
+      );
     } catch (e) {
       log('Error loading more products: $e');
     } finally {
@@ -146,21 +156,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 _searchDebounce = Timer(
                   const Duration(milliseconds: 300),
                   () async {
-                    bool? active;
-                    switch (_currentFilter) {
-                      case ProductFilter.inactive:
-                        active = false;
-                        break;
-                      case ProductFilter.all:
-                        active = null;
-                        break;
-                      default:
-                        active = true;
-                    }
+                    final defaultThreshold =
+                        context.read<SettingsProvider>().lowStockThreshold;
 
                     final results = await _provider.searchProducts(
                       value,
-                      active: active,
+                      filter: _currentFilter,
+                      defaultLowStockThreshold: defaultThreshold,
                     );
 
                     if (!mounted || _searchQuery != value.trim()) return;
@@ -206,11 +208,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   List<Product> get _displayedProducts {
-    final source =
-        _searchQuery.isNotEmpty ? _searchResults : _provider.products;
-    return source
-        .where((product) => matchesFilter(context, product, _currentFilter))
-        .toList();
+    return _searchQuery.isNotEmpty ? _searchResults : _provider.products;
   }
 
   Widget _buildProductsList() {
@@ -355,55 +353,5 @@ class _ProductsScreenState extends State<ProductsScreen> {
     _searchDebounce?.cancel();
     _scrollController.dispose();
     super.dispose();
-  }
-}
-
-bool matchesFilter(
-  BuildContext context,
-  Product product,
-  ProductFilter currentFilter,
-) {
-  bool hasOffer =
-      product.active && (product.hasValidOffer || product.hasOfferInUnits);
-
-  try {
-    final settingsProvider = Provider.of<SettingsProvider>(
-      context,
-      listen: false,
-    );
-    final defaultThreshold = settingsProvider.lowStockThreshold;
-
-    switch (currentFilter) {
-      case ProductFilter.all:
-        return true;
-      case ProductFilter.available:
-        return product.quantity > 0;
-      case ProductFilter.unavailable:
-        return product.quantity == 0;
-      case ProductFilter.lowStock:
-        return product.isLowStock(defaultThreshold);
-      case ProductFilter.onOffer:
-        return hasOffer;
-      case ProductFilter.inactive:
-        return !product.active;
-    }
-  } catch (e) {
-    log('Error in matchesFilter: $e');
-    const defaultThreshold = 5;
-
-    switch (currentFilter) {
-      case ProductFilter.all:
-        return true;
-      case ProductFilter.available:
-        return product.quantity > 0;
-      case ProductFilter.unavailable:
-        return product.quantity == 0;
-      case ProductFilter.lowStock:
-        return product.isLowStock(defaultThreshold);
-      case ProductFilter.onOffer:
-        return hasOffer;
-      case ProductFilter.inactive:
-        return !product.active;
-    }
   }
 }

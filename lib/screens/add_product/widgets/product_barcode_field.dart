@@ -4,10 +4,13 @@ import '../../../../widgets/text_field.dart';
 class ProductBarcodeField extends StatelessWidget {
   final TextEditingController controller;
   final bool readOnly;
+  final ValueChanged<String>? onChanged;
+
   const ProductBarcodeField({
     super.key,
     required this.controller,
     required this.readOnly,
+    this.onChanged,
   });
 
   @override
@@ -16,7 +19,7 @@ class ProductBarcodeField extends StatelessWidget {
       controller: controller,
       label: 'الباركود',
       prefixIcon: Icons.qr_code,
-      readOnly: readOnly,
+      onChanged: onChanged,
     );
   }
 }

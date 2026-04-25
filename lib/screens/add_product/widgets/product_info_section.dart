@@ -72,6 +72,14 @@ class ProductInfoSection extends StatelessWidget {
           runSpacing: 16,
           children: [
             SizedBox(
+              width: 200,
+              child: ProductBarcodeField(
+                controller: formData['barcodeController'],
+                readOnly: false,
+                onChanged: formData['onBarcodeChanged'],
+              ),
+            ),
+            SizedBox(
               width: 300,
               child: ProductNameField(controller: formData['nameController']),
             ),
@@ -80,13 +88,6 @@ class ProductInfoSection extends StatelessWidget {
               child: UnitDropdown(
                 selectedUnit: formData['selectedUnit'],
                 onChanged: formData['onUnitChanged'],
-              ),
-            ),
-            SizedBox(
-              width: 200,
-              child: ProductBarcodeField(
-                controller: formData['barcodeController'],
-                readOnly: formData['isNewProduct'],
               ),
             ),
           ],
@@ -142,6 +143,12 @@ class ProductInfoSection extends StatelessWidget {
   Widget _buildTabletForm() {
     return Column(
       children: [
+        ProductBarcodeField(
+          controller: formData['barcodeController'],
+          readOnly: false,
+          onChanged: formData['onBarcodeChanged'],
+        ),
+        const SizedBox(height: 16),
         ProductNameField(controller: formData['nameController']),
         const SizedBox(height: 16),
         Row(
@@ -150,13 +157,6 @@ class ProductInfoSection extends StatelessWidget {
               child: UnitDropdown(
                 selectedUnit: formData['selectedUnit'],
                 onChanged: formData['onUnitChanged'],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: ProductBarcodeField(
-                controller: formData['barcodeController'],
-                readOnly: formData['isNewProduct'],
               ),
             ),
           ],

@@ -1583,7 +1583,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
           'entered_cost_price': cost,
           'subtotal': cost,
           'has_expiry': true,
-          'expiry_date': _expiryDate!.toIso8601String(),
+          'expiry_date': DateFormat('yyyy-MM-dd').format(_expiryDate!),
           'expiry_date_formatted': DateFormat(
             'yyyy-MM-dd',
           ).format(_expiryDate!),

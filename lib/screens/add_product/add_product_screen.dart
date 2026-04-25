@@ -77,6 +77,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
               'unitIds': _state.unitIds,
               'isLoading': _state.isLoading,
               'onSave': () => _state.saveProduct(context),
+              'onBarcodeChanged': _state.onBarcodeChanged,
               'onUnitChanged': _state.updateSelectedUnit,
               'onOfferEnabledChanged': _state.updateOfferEnabled,
               'onOfferStartDateChanged': _state.updateOfferStartDate,
@@ -96,14 +97,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
               child:
                   screenType == ScreenType.desktop
                       ? DesktopLayout(
-                        qrController: _state.qrController,
-                        onQRCodeChanged: _state.checkProduct,
                         formKey: _state.formKey,
                         formData: formData,
                       )
                       : TabletLayout(
-                        qrController: _state.qrController,
-                        onQRCodeChanged: _state.checkProduct,
                         formKey: _state.formKey,
                         formData: formData,
                       ),

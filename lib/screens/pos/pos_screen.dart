@@ -336,14 +336,20 @@ class _PosScreenState extends State<PosScreen>
 
   // ==================== دوال إضافة المنتجات / الوحدات / الخدمات ====================
   Future<void> _addProductFromSearch(Product product) async {
-    if (product.quantity <= 0) {
-      _showOutOfStockDialog(product.name);
+    final freshProduct =
+        product.id != null
+            ? await _productProvider.getProductById(product.id!)
+            : product;
+    final targetProduct = freshProduct ?? product;
+
+    if (targetProduct.quantity <= 0) {
+      _showOutOfStockDialog(targetProduct.name);
       return;
     }
     try {
       final unitsRaw =
-          (product.id != null)
-              ? await _productProvider.getProductUnits(product.id!)
+          (targetProduct.id != null)
+              ? await _productProvider.getProductUnits(targetProduct.id!)
               : [];
       final List<ProductUnit> units = unitsRaw.cast<ProductUnit>();
       final uniqueUnits = removeDuplicateUnits(units);
@@ -352,7 +358,7 @@ class _PosScreenState extends State<PosScreen>
           _originalSale!.id,
         );
         final existingSaleItem = saleItems.firstWhereOrNull(
-          (i) => i.productId == product.id,
+          (i) => i.productId == targetProduct.id,
         );
         ProductUnit? selectedUnit;
         if (existingSaleItem?.unitId != null) {
@@ -362,7 +368,7 @@ class _PosScreenState extends State<PosScreen>
         }
         final index = _cartItems.indexWhere(
           (i) =>
-              i.product?.id == product.id &&
+              i.product?.id == targetProduct.id &&
               i.selectedUnit?.id == selectedUnit?.id,
         );
         setState(() {
@@ -371,7 +377,7 @@ class _PosScreenState extends State<PosScreen>
           } else {
             _cartItems.add(
               CartItem.product(
-                product: product,
+                product: targetProduct,
                 quantity: 1,
                 availableUnits: uniqueUnits,
                 selectedUnit: selectedUnit,
@@ -382,7 +388,7 @@ class _PosScreenState extends State<PosScreen>
         });
       } else {
         final index = _cartItems.indexWhere(
-          (i) => i.product?.id == product.id && i.selectedUnit == null,
+          (i) => i.product?.id == targetProduct.id && i.selectedUnit == null,
         );
         setState(() {
           if (index != -1) {
@@ -390,7 +396,7 @@ class _PosScreenState extends State<PosScreen>
           } else {
             _cartItems.add(
               CartItem.product(
-                product: product,
+                product: targetProduct,
                 quantity: 1,
                 availableUnits: uniqueUnits,
                 selectedUnit: null,
@@ -401,7 +407,7 @@ class _PosScreenState extends State<PosScreen>
         });
       }
       // ignore: use_build_context_synchronously
-      showAppToast(context, 'تم إضافة ${product.name}', ToastType.success);
+      showAppToast(context, 'تم إضافة ${targetProduct.name}', ToastType.success);
     } catch (e) {
       // ignore: use_build_context_synchronously
       showAppToast(context, 'خطأ: $e', ToastType.error);
@@ -409,18 +415,24 @@ class _PosScreenState extends State<PosScreen>
   }
 
   Future<void> _addUnitFromSearch(ProductUnit unit, Product product) async {
-    if (product.quantity <= 0) {
-      _showOutOfStockDialog('${product.name} - ${unit.unitName}');
+    final freshProduct =
+        product.id != null
+            ? await _productProvider.getProductById(product.id!)
+            : product;
+    final targetProduct = freshProduct ?? product;
+
+    if (targetProduct.quantity <= 0) {
+      _showOutOfStockDialog('${targetProduct.name} - ${unit.unitName}');
       return;
     }
     final unitsRaw =
-        (product.id != null)
-            ? await _productProvider.getProductUnits(product.id!)
+        (targetProduct.id != null)
+            ? await _productProvider.getProductUnits(targetProduct.id!)
             : [];
     final List<ProductUnit> allUnits = unitsRaw.cast<ProductUnit>();
     final uniqueUnits = removeDuplicateUnits(allUnits);
     final existingIndex = _cartItems.indexWhere(
-      (i) => i.product?.id == product.id && i.selectedUnit?.id == unit.id,
+      (i) => i.product?.id == targetProduct.id && i.selectedUnit?.id == unit.id,
     );
     setState(() {
       if (existingIndex != -1) {
@@ -430,7 +442,7 @@ class _PosScreenState extends State<PosScreen>
             uniqueUnits.firstWhereOrNull((u) => u.id == unit.id) ?? unit;
         _cartItems.add(
           CartItem.product(
-            product: product,
+            product: targetProduct,
             quantity: 1,
             availableUnits: uniqueUnits,
             selectedUnit: matchingUnit,
@@ -442,7 +454,7 @@ class _PosScreenState extends State<PosScreen>
     showAppToast(
       // ignore: use_build_context_synchronously
       context,
-      'تم إضافة ${product.name} (${unit.unitName})',
+      'تم إضافة ${targetProduct.name} (${unit.unitName})',
       ToastType.success,
     );
   }
@@ -605,15 +617,26 @@ class _PosScreenState extends State<PosScreen>
     try {
       for (final item in _cartItems) {
         if (!item.isService && item.product != null) {
+          final freshProduct = await productProvider.getProductById(
+            item.product!.id!,
+          );
+          if (freshProduct == null) {
+            showAppToast(
+              context,
+              'المنتج ${item.product!.name} غير موجود',
+              ToastType.error,
+            );
+            return;
+          }
           final reqQty =
               item.selectedUnit != null
                   ? item.quantity * item.selectedUnit!.containQty
                   : item.quantity;
-          if (item.product!.quantity < reqQty) {
+          if (freshProduct.quantity < reqQty) {
             showAppToast(
               // ignore: use_build_context_synchronously
               context,
-              'كمية غير كافية لـ ${item.product!.name}',
+              'كمية غير كافية لـ ${freshProduct.name}',
               ToastType.error,
             );
             return;
@@ -697,15 +720,26 @@ class _PosScreenState extends State<PosScreen>
     try {
       for (final item in _cartItems) {
         if (!item.isService && item.product != null) {
+          final freshProduct = await productProvider.getProductById(
+            item.product!.id!,
+          );
+          if (freshProduct == null) {
+            showAppToast(
+              context,
+              'المنتج ${item.product!.name} غير موجود',
+              ToastType.error,
+            );
+            return;
+          }
           final reqQty =
               item.selectedUnit != null
                   ? item.quantity * item.selectedUnit!.containQty
                   : item.quantity;
-          if (item.product!.quantity < reqQty) {
+          if (freshProduct.quantity < reqQty) {
             showAppToast(
               // ignore: use_build_context_synchronously
               context,
-              'كمية غير كافية لـ ${item.product!.name}',
+              'كمية غير كافية لـ ${freshProduct.name}',
               ToastType.error,
             );
             return;

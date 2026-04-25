@@ -238,7 +238,9 @@ class _OpeningBalanceScreenState extends State<OpeningBalanceScreen> {
       'unit_contain_qty': _selectedUnitContainQty,
       'is_unit': isUnit,
       'expiry_date':
-          requiresExpiry ? _selectedExpiryDate!.toIso8601String() : null,
+          requiresExpiry
+              ? DateFormat('yyyy-MM-dd').format(_selectedExpiryDate!)
+              : null,
       'expiry_date_formatted':
           requiresExpiry
               ? DateFormat('yyyy-MM-dd').format(_selectedExpiryDate!)

@@ -72,6 +72,51 @@ AND date(offer_end_date) < date('now', 'localtime')
   int lowStockCount = 0;
   int outOfStockCount = 0;
 
+  ({String whereClause, List<Object?> whereArgs}) _buildFilterQueryParts(
+    ProductFilter? filter,
+    int defaultLowStockThreshold,
+  ) {
+    switch (filter) {
+      case ProductFilter.inactive:
+        return (whereClause: 'p.active = ?', whereArgs: [0]);
+      case ProductFilter.available:
+        return (
+          whereClause: 'p.active = ? AND p.quantity > 0',
+          whereArgs: [1],
+        );
+      case ProductFilter.unavailable:
+        return (
+          whereClause: 'p.active = ? AND p.quantity <= 0',
+          whereArgs: [1],
+        );
+      case ProductFilter.lowStock:
+        return (
+          whereClause:
+              'p.active = ? AND p.quantity > 0 AND p.quantity <= COALESCE(p.low_stock_threshold, ?)',
+          whereArgs: [1, defaultLowStockThreshold],
+        );
+      case ProductFilter.onOffer:
+        return (
+          whereClause: '''
+            p.active = 1
+            AND (
+              $_activeOfferDateSql
+              OR EXISTS(
+                SELECT 1
+                FROM product_units pu
+                WHERE pu.product_id = p.id
+                  AND $_activeOfferDateSql
+              )
+            )
+          ''',
+          whereArgs: <Object?>[],
+        );
+      case ProductFilter.all:
+      case null:
+        return (whereClause: '', whereArgs: <Object?>[]);
+    }
+  }
+
   // ========== دوال المنتجات ==========
 
   void resetPagination() {
@@ -196,7 +241,11 @@ AND date(offer_end_date) < date('now', 'localtime')
     }
   }
 
-  Future<List<Product>> loadProducts({bool reset = false, bool? active}) async {
+  Future<List<Product>> loadProducts({
+    bool reset = false,
+    ProductFilter? filter,
+    int defaultLowStockThreshold = 0,
+  }) async {
     if (!reset && !_hasMore) return [];
 
     if (reset) {
@@ -208,13 +257,7 @@ AND date(offer_end_date) < date('now', 'localtime')
     try {
       await _clearExpiredOffers();
 
-      String whereClause = '';
-      final List<Object?> whereArgs = [];
-
-      if (active != null) {
-        whereClause = 'active = ?';
-        whereArgs.add(active ? 1 : 0);
-      }
+      final filterQuery = _buildFilterQueryParts(filter, defaultLowStockThreshold);
 
       final result = await db.rawQuery(
         '''
@@ -227,11 +270,11 @@ AND date(offer_end_date) < date('now', 'localtime')
               AND $_activeOfferDateSql
           ) AS has_offer_in_units
         FROM products p
-        ${whereClause.isNotEmpty ? 'WHERE $whereClause' : ''}
+        ${filterQuery.whereClause.isNotEmpty ? 'WHERE ${filterQuery.whereClause}' : ''}
         ORDER BY p.id DESC
         LIMIT ? OFFSET ?
         ''',
-        [...whereArgs, _limit, _page * _limit],
+        [...filterQuery.whereArgs, _limit, _page * _limit],
       );
 
       if (result.isEmpty) {
@@ -285,7 +328,10 @@ AND date(offer_end_date) < date('now', 'localtime')
         _products.addAll(newProducts);
       }
 
-      await _loadTotalProductsByFilter(_currentActiveFilter);
+      await _loadTotalProductsByFilter(
+        _currentActiveFilter,
+        defaultLowStockThreshold: defaultLowStockThreshold,
+      );
       notifyListeners();
       return newProducts;
     } catch (e) {
@@ -294,53 +340,19 @@ AND date(offer_end_date) < date('now', 'localtime')
     }
   }
 
-  Future<void> _loadTotalProductsByFilter(ProductFilter? filter) async {
+  Future<void> _loadTotalProductsByFilter(
+    ProductFilter? filter, {
+    required int defaultLowStockThreshold,
+  }) async {
     try {
       final db = await _dbHelper.db;
-      String whereClause = '';
-      List<Object?> whereArgs = [];
-
-      switch (filter) {
-        case ProductFilter.inactive:
-          whereClause = 'p.active = ?';
-          whereArgs = [0];
-          break;
-        case ProductFilter.available:
-          whereClause = 'p.active = ? AND p.quantity > 0';
-          whereArgs = [1];
-          break;
-        case ProductFilter.unavailable:
-          whereClause = 'p.active = ? AND p.quantity = 0';
-          whereArgs = [1];
-          break;
-        case ProductFilter.lowStock:
-          whereClause = 'p.active = ? AND p.quantity > 0';
-          whereArgs = [1];
-          break;
-        case ProductFilter.onOffer:
-          whereClause = '''
-            p.active = 1
-            AND (
-              $_activeOfferDateSql
-              OR EXISTS(
-                SELECT 1
-                FROM product_units pu
-                WHERE pu.product_id = p.id
-                  AND $_activeOfferDateSql
-              )
-            )
-          ''';
-          break;
-        case ProductFilter.all:
-        case null:
-          break;
-      }
+      final filterQuery = _buildFilterQueryParts(filter, defaultLowStockThreshold);
 
       final res = await db.rawQuery('''
         SELECT COUNT(*) as count
         FROM products p
-        ${whereClause.isNotEmpty ? 'WHERE $whereClause' : ''}
-        ''', whereArgs);
+        ${filterQuery.whereClause.isNotEmpty ? 'WHERE ${filterQuery.whereClause}' : ''}
+        ''', filterQuery.whereArgs);
 
       if (res.isNotEmpty) {
         _totalProducts = (res.first['count'] as int?) ?? 0;
@@ -358,27 +370,21 @@ AND date(offer_end_date) < date('now', 'localtime')
   Future<void> loadProductsByFilter(
     ProductFilter filter, {
     bool reset = true,
+    int defaultLowStockThreshold = 0,
   }) async {
-    bool? active;
-    switch (filter) {
-      case ProductFilter.inactive:
-        active = false;
-        break;
-      case ProductFilter.all:
-        active = null;
-        break;
-      case ProductFilter.available:
-      case ProductFilter.unavailable:
-      case ProductFilter.lowStock:
-      case ProductFilter.onOffer:
-        active = true;
-        break;
-    }
     _currentActiveFilter = filter;
-    await loadProducts(reset: reset, active: active);
+    await loadProducts(
+      reset: reset,
+      filter: filter,
+      defaultLowStockThreshold: defaultLowStockThreshold,
+    );
   }
 
-  Future<List<Product>> searchProducts(String query, {bool? active}) async {
+  Future<List<Product>> searchProducts(
+    String query, {
+    ProductFilter filter = ProductFilter.all,
+    int defaultLowStockThreshold = 0,
+  }) async {
     final db = await _dbHelper.db;
     if (query.trim().isEmpty) {
       return _products;
@@ -386,6 +392,8 @@ AND date(offer_end_date) < date('now', 'localtime')
 
     try {
       await _clearExpiredOffers();
+
+      final filterQuery = _buildFilterQueryParts(filter, defaultLowStockThreshold);
 
       String whereClause = '''
         (
@@ -409,9 +417,9 @@ AND date(offer_end_date) < date('now', 'localtime')
         '%$query%',
       ];
 
-      if (active != null) {
-        whereClause += ' AND p.active = ?';
-        whereArgs.add(active ? 1 : 0);
+      if (filterQuery.whereClause.isNotEmpty) {
+        whereClause += ' AND ${filterQuery.whereClause}';
+        whereArgs.addAll(filterQuery.whereArgs);
       }
 
       final result = await db.rawQuery('''
@@ -435,22 +443,15 @@ AND date(offer_end_date) < date('now', 'localtime')
     }
   }
 
-  Future<void> loadMoreProducts() async {
+  Future<void> loadMoreProducts({
+    int defaultLowStockThreshold = 0,
+  }) async {
     if (!_hasMore) return;
-    bool? active;
-    if (_currentActiveFilter != null) {
-      switch (_currentActiveFilter!) {
-        case ProductFilter.inactive:
-          active = false;
-          break;
-        case ProductFilter.all:
-          active = null;
-          break;
-        default:
-          active = true;
-      }
-    }
-    await loadProducts(reset: false, active: active);
+    await loadProducts(
+      reset: false,
+      filter: _currentActiveFilter,
+      defaultLowStockThreshold: defaultLowStockThreshold,
+    );
   }
 
   Future<void> toggleProductActive(int productId) async {
@@ -593,7 +594,7 @@ AND date(offer_end_date) < date('now', 'localtime')
     await loadProductsOnOfferCount();
   }
 
-  Future<void> addProduct(Product product) async {
+  Future<int> addProduct(Product product) async {
     final db = await _dbHelper.db;
     final safeQuantity = product.quantity.isNaN ? 0.0 : product.quantity;
     final safeCostPrice = product.costPrice.isNaN ? 0.0 : product.costPrice;
@@ -648,7 +649,7 @@ AND date(offer_end_date) < date('now', 'localtime')
         await loadProducts(reset: true);
         await loadProductsOnOfferCount();
         notifyListeners();
-        return;
+          return oldProduct['id'] as int;
       }
     }
 
@@ -669,11 +670,12 @@ AND date(offer_end_date) < date('now', 'localtime')
       'low_stock_threshold': product.lowStockThreshold,
     };
 
-    await db.insert('products', productMap);
-    await loadProducts(reset: true);
-    await loadProductsOnOfferCount();
-    notifyListeners();
-  }
+      final id = await db.insert('products', productMap);
+      await loadProducts(reset: true);
+      await loadProductsOnOfferCount();
+      notifyListeners();
+      return id;
+    }
 
   Future<void> updateProduct(Product updatedProduct) async {
     if (updatedProduct.id == null) {
@@ -681,9 +683,13 @@ AND date(offer_end_date) < date('now', 'localtime')
     }
 
     final db = await _dbHelper.db;
+    final normalizedBarcode =
+        updatedProduct.barcode?.trim().isNotEmpty == true
+            ? updatedProduct.barcode!.trim()
+            : null;
     final updateData = <String, dynamic>{
       'name': updatedProduct.name,
-      'barcode': updatedProduct.barcode,
+      'barcode': normalizedBarcode,
       'base_unit': updatedProduct.baseUnit,
       'price': updatedProduct.price,
       'offer_price':
@@ -709,6 +715,7 @@ AND date(offer_end_date) < date('now', 'localtime')
 
     final index = _products.indexWhere((p) => p.id == updatedProduct.id);
     if (index != -1) {
+      updatedProduct.barcode = normalizedBarcode;
       _products[index] = updatedProduct;
       notifyListeners();
     }
