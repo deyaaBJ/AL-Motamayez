@@ -23,6 +23,7 @@ import 'package:motamayez/screens/pos/components/pos_payment_dialog.dart';
 import 'package:motamayez/screens/pos/components/pos_customer_selection_dialog.dart';
 import 'package:motamayez/screens/pos/components/pos_add_service_dialog.dart';
 import 'package:motamayez/screens/pos/pos_helpers.dart';
+import 'package:motamayez/utils/formatters.dart';
 import 'dart:developer';
 import 'dart:async';
 
@@ -342,7 +343,12 @@ class _PosScreenState extends State<PosScreen>
             : product;
     final targetProduct = freshProduct ?? product;
 
-    if (targetProduct.quantity <= 0) {
+    final sellableQuantity =
+        targetProduct.id != null
+            ? await _productProvider.getSellableQuantity(targetProduct.id!)
+            : targetProduct.quantity;
+
+    if (sellableQuantity <= 0) {
       _showOutOfStockDialog(targetProduct.name);
       return;
     }
@@ -407,7 +413,12 @@ class _PosScreenState extends State<PosScreen>
         });
       }
       // ignore: use_build_context_synchronously
-      showAppToast(context, 'تم إضافة ${targetProduct.name}', ToastType.success);
+      showAppToast(
+        // ignore: use_build_context_synchronously
+        context,
+        'تم إضافة ${targetProduct.name}',
+        ToastType.success,
+      );
     } catch (e) {
       // ignore: use_build_context_synchronously
       showAppToast(context, 'خطأ: $e', ToastType.error);
@@ -421,7 +432,12 @@ class _PosScreenState extends State<PosScreen>
             : product;
     final targetProduct = freshProduct ?? product;
 
-    if (targetProduct.quantity <= 0) {
+    final sellableQuantity =
+        targetProduct.id != null
+            ? await _productProvider.getSellableQuantity(targetProduct.id!)
+            : targetProduct.quantity;
+
+    if (sellableQuantity <= 0) {
       _showOutOfStockDialog('${targetProduct.name} - ${unit.unitName}');
       return;
     }
@@ -622,6 +638,7 @@ class _PosScreenState extends State<PosScreen>
           );
           if (freshProduct == null) {
             showAppToast(
+              // ignore: use_build_context_synchronously
               context,
               'المنتج ${item.product!.name} غير موجود',
               ToastType.error,
@@ -632,7 +649,10 @@ class _PosScreenState extends State<PosScreen>
               item.selectedUnit != null
                   ? item.quantity * item.selectedUnit!.containQty
                   : item.quantity;
-          if (freshProduct.quantity < reqQty) {
+          final sellableQuantity = await productProvider.getSellableQuantity(
+            item.product!.id!,
+          );
+          if (sellableQuantity < reqQty) {
             showAppToast(
               // ignore: use_build_context_synchronously
               context,
@@ -725,6 +745,7 @@ class _PosScreenState extends State<PosScreen>
           );
           if (freshProduct == null) {
             showAppToast(
+              // ignore: use_build_context_synchronously
               context,
               'المنتج ${item.product!.name} غير موجود',
               ToastType.error,
@@ -735,7 +756,10 @@ class _PosScreenState extends State<PosScreen>
               item.selectedUnit != null
                   ? item.quantity * item.selectedUnit!.containQty
                   : item.quantity;
-          if (freshProduct.quantity < reqQty) {
+          final sellableQuantity = await productProvider.getSellableQuantity(
+            item.product!.id!,
+          );
+          if (sellableQuantity < reqQty) {
             showAppToast(
               // ignore: use_build_context_synchronously
               context,
@@ -845,17 +869,20 @@ class _PosScreenState extends State<PosScreen>
 
           final oldQty = oldQuantities[item.product!.id] ?? 0;
           final additionalQty = newReqQty - oldQty;
+          final sellableQuantity = await productProvider.getSellableQuantity(
+            item.product!.id!,
+          );
 
           log(
-            '🔍 التحقق: ${item.product!.name} | قديم: $oldQty، جديد: $newReqQty، إضافي: $additionalQty، متوفر: ${freshProduct.quantity}',
+            '🔍 التحقق: ${item.product!.name} | قديم: $oldQty، جديد: $newReqQty، إضافي: $additionalQty، متوفر: $sellableQuantity',
           );
 
           // تحقق فقط إذا كانت هناك كمية إضافية مطلوبة
-          if (additionalQty > 0 && freshProduct.quantity < additionalQty) {
+          if (additionalQty > 0 && sellableQuantity < additionalQty) {
             showAppToast(
               // ignore: use_build_context_synchronously
               context,
-              'كمية غير كافية لـ ${item.product!.name}. المتوفر: ${freshProduct.quantity.toStringAsFixed(2)}, المطلوب إضافياً: ${additionalQty.toStringAsFixed(2)}',
+              'كمية غير كافية لـ ${item.product!.name}. المتوفر: ${Formatters.formatQuantity(sellableQuantity)}, المطلوب إضافياً: ${Formatters.formatQuantity(additionalQty)}',
               ToastType.error,
             );
             return;
@@ -933,7 +960,7 @@ class _PosScreenState extends State<PosScreen>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'الكمية: ${item.quantity.toStringAsFixed(item.quantity % 1 == 0 ? 0 : 2)} $unitLabel',
+                  'الكمية: ${Formatters.formatQuantity(item.quantity)} $unitLabel',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),

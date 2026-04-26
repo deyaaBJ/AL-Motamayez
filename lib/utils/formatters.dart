@@ -78,6 +78,19 @@ class Formatters {
     return format.format(number);
   }
 
+  static String formatQuantity(double quantity, {int maxDecimalDigits = 3}) {
+    if (quantity.isNaN || quantity.isInfinite) {
+      return quantity.toString();
+    }
+
+    if (quantity == quantity.truncateToDouble()) {
+      return quantity.toInt().toString();
+    }
+
+    final formatted = quantity.toStringAsFixed(maxDecimalDigits);
+    return formatted.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
   static String formatPhone(String phone) {
     if (phone.isEmpty) return '';
     if (phone.startsWith('0')) {

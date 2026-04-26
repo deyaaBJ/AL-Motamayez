@@ -5,6 +5,7 @@ import 'package:motamayez/models/product.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/screens/add_product/add_product_screen.dart';
+import 'package:motamayez/utils/formatters.dart';
 
 class ProductItem extends StatelessWidget {
   final Product product;
@@ -125,7 +126,7 @@ class ProductItem extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  product.quantity.toString(),
+                  Formatters.formatQuantity(product.quantity),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,

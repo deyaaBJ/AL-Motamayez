@@ -5,6 +5,7 @@ import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/product.dart';
 import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/screens/add_product/add_product_screen.dart';
+import 'package:motamayez/utils/formatters.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final int productId;
@@ -315,7 +316,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                       icon: Icons.inventory,
                                       label: 'المخزون',
                                       value:
-                                          '${_product!.quantity.toStringAsFixed(2)} ${_getUnitText(_product!.baseUnit)}',
+                                          '${Formatters.formatQuantity(_product!.quantity)} ${_getUnitText(_product!.baseUnit)}',
                                       color: Colors.blue.shade700,
                                       backgroundColor: Colors.blue.shade50,
                                       valueFontSize: 20,

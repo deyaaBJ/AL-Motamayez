@@ -7,6 +7,7 @@ import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/models/cart_item.dart';
 import 'package:motamayez/models/product_unit.dart';
 import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/utils/formatters.dart';
 
 class CartItemWidget extends StatefulWidget {
   final CartItem item;
@@ -828,16 +829,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
   }
 
   String _formatWeight(double quantity) {
-    if (quantity == quantity.truncateToDouble()) {
-      return quantity.toStringAsFixed(0);
-    }
-    if ((quantity * 10) == (quantity * 10).truncateToDouble()) {
-      return quantity.toStringAsFixed(1);
-    }
-    if ((quantity * 100) == (quantity * 100).truncateToDouble()) {
-      return quantity.toStringAsFixed(2);
-    }
-    return quantity.toStringAsFixed(3);
+    return Formatters.formatQuantity(quantity);
   }
 
   // دالة للحصول على اسم الوحدة المعروض
@@ -868,17 +860,7 @@ class _CartItemWidgetState extends State<CartItemWidget> {
 
   // دالة لتنسيق الكمية للعرض
   String _formatQuantityForDisplay(double quantity) {
-    if (quantity % 1 == 0) {
-      return quantity.toInt().toString();
-    } else {
-      final String formatted = quantity.toStringAsFixed(2);
-      if (formatted.endsWith('.00')) {
-        return quantity.toInt().toString();
-      } else if (formatted.endsWith('0')) {
-        return quantity.toStringAsFixed(1);
-      }
-      return formatted;
-    }
+    return Formatters.formatQuantity(quantity);
   }
 
   // دالة لتنسيق الكمية للإدخال

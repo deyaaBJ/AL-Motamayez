@@ -5,6 +5,7 @@ import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/models/product.dart';
 import 'package:motamayez/models/product_unit.dart';
 import 'package:motamayez/providers/product_provider.dart';
+import 'package:motamayez/utils/formatters.dart';
 import 'controllers/unit_controller.dart';
 import 'helpers/date_helper.dart';
 import 'helpers/offer_helper.dart';
@@ -144,7 +145,7 @@ class AddProductState extends ChangeNotifier {
     _setControllerText(quantityController, '0');
     _setControllerText(
       originalQuantityController,
-      product.quantity.toStringAsFixed(2),
+      Formatters.formatQuantity(product.quantity),
     );
     _setControllerText(barcodeController, product.barcode ?? '');
     selectedUnit = product.baseUnit;

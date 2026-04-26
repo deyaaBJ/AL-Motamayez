@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:motamayez/utils/formatters.dart';
 import '../../../../widgets/text_field.dart';
 
 class QuantitySection extends StatelessWidget {
@@ -34,7 +35,7 @@ class QuantitySection extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'الكمية الحالية: ${existingQuantity!.toStringAsFixed(2)}',
+                    'الكمية الحالية: ${Formatters.formatQuantity(existingQuantity!)}',
                     style: TextStyle(color: Colors.blue[700]),
                   ),
                 ),

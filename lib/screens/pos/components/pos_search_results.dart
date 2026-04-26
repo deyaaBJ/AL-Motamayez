@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:motamayez/models/product.dart';
 import 'package:motamayez/models/product_unit.dart';
 import 'package:motamayez/providers/product_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/utils/formatters.dart';
+import 'package:provider/provider.dart';
 
 class PosSearchResults extends StatelessWidget {
   final List<dynamic> results;
@@ -139,59 +140,72 @@ class _ProductResultTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      leading: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8F5FF),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: const Icon(
-          Icons.shopping_bag,
-          color: Color(0xFF6A3093),
-          size: 16,
-        ),
-      ),
-      title: Text(
-        product.name,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'باركود: ${product.barcode}',
-            style: const TextStyle(fontSize: 10),
+    return FutureBuilder<double>(
+      future: Provider.of<ProductProvider>(
+        context,
+        listen: false,
+      ).getSellableQuantity(product.id!),
+      builder: (context, snapshot) {
+        final sellableQuantity = snapshot.data ?? 0.0;
+
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 4,
           ),
-          Text(
-            'سعر: $currency${product.price.toStringAsFixed(2)} | مخزون: ${product.quantity}',
-            style: const TextStyle(fontSize: 10),
+          leading: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8F5FF),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Icon(
+              Icons.shopping_bag,
+              color: Color(0xFF6A3093),
+              size: 16,
+            ),
           ),
-        ],
-      ),
-      trailing:
-          product.quantity > 0
-              ? IconButton(
-                icon: const Icon(
-                  Icons.add_shopping_cart,
-                  color: Colors.green,
-                  size: 16,
-                ),
-                onPressed: onTap,
-              )
-              : const Text(
-                'نفذ',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.red,
-                  fontWeight: FontWeight.bold,
-                ),
+          title: Text(
+            product.name,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'باركود: ${product.barcode}',
+                style: const TextStyle(fontSize: 10),
               ),
-      onTap: onTap,
+              Text(
+                'سعر: $currency${product.price.toStringAsFixed(2)} | مخزون: ${Formatters.formatQuantity(sellableQuantity)}',
+                style: const TextStyle(fontSize: 10),
+              ),
+            ],
+          ),
+          trailing:
+              sellableQuantity > 0
+                  ? IconButton(
+                    icon: const Icon(
+                      Icons.add_shopping_cart,
+                      color: Colors.green,
+                      size: 16,
+                    ),
+                    onPressed: onTap,
+                  )
+                  : const Text(
+                    'نفذ',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+          onTap: sellableQuantity > 0 ? onTap : null,
+        );
+      },
     );
   }
 }
@@ -211,59 +225,76 @@ class _UnitResultTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      leading: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF0F7FF),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: const Icon(
-          Icons.inventory_2,
-          color: Color(0xFF2196F3),
-          size: 16,
-        ),
-      ),
-      title: Text(
-        '${product.name} - ${unit.unitName}',
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'باركود الوحدة: ${unit.barcode ?? "لا يوجد"}',
-            style: const TextStyle(fontSize: 10),
+    return FutureBuilder<double>(
+      future: Provider.of<ProductProvider>(
+        context,
+        listen: false,
+      ).getSellableQuantity(product.id!),
+      builder: (context, snapshot) {
+        final sellableQuantity = snapshot.data ?? 0.0;
+
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 4,
           ),
-          Text(
-            'سعر الوحدة: $currency${unit.effectivePrice.toStringAsFixed(2)}',
-            style: const TextStyle(fontSize: 10),
+          leading: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F7FF),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Icon(
+              Icons.inventory_2,
+              color: Color(0xFF2196F3),
+              size: 16,
+            ),
           ),
-        ],
-      ),
-      trailing:
-          product.quantity > 0
-              ? IconButton(
-                icon: const Icon(
-                  Icons.add_shopping_cart,
-                  color: Colors.blue,
-                  size: 16,
-                ),
-                onPressed: onTap,
-              )
-              : const Text(
-                'نفذ',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.red,
-                  fontWeight: FontWeight.bold,
-                ),
+          title: Text(
+            '${product.name} - ${unit.unitName}',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'باركود الوحدة: ${unit.barcode ?? "لا يوجد"}',
+                style: const TextStyle(fontSize: 10),
               ),
-      onTap: onTap,
+              Text(
+                'سعر الوحدة: $currency${unit.effectivePrice.toStringAsFixed(2)}',
+                style: const TextStyle(fontSize: 10),
+              ),
+              Text(
+                'المتاح: ${Formatters.formatQuantity(sellableQuantity)}',
+                style: const TextStyle(fontSize: 10),
+              ),
+            ],
+          ),
+          trailing:
+              sellableQuantity > 0
+                  ? IconButton(
+                    icon: const Icon(
+                      Icons.add_shopping_cart,
+                      color: Colors.blue,
+                      size: 16,
+                    ),
+                    onPressed: onTap,
+                  )
+                  : const Text(
+                    'نفذ',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+          onTap: sellableQuantity > 0 ? onTap : null,
+        );
+      },
     );
   }
 }

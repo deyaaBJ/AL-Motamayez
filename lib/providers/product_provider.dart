@@ -767,6 +767,88 @@ AND date(offer_end_date) < date('now', 'localtime')
     }
   }
 
+  Future<double> getSellableQuantity(int productId) async {
+    try {
+      final db = await _dbHelper.db;
+      final result = await db.rawQuery(
+        '''
+        SELECT COALESCE(SUM(remaining_quantity), 0) AS total_available
+        FROM product_batches
+        WHERE product_id = ?
+          AND $_sellableBatchSql
+        ''',
+        [productId],
+      );
+
+      final batchQuantity =
+          (result.first['total_available'] as num?)?.toDouble() ?? 0.0;
+
+      if (batchQuantity > 0) {
+        return batchQuantity;
+      }
+
+      final productResult = await db.query(
+        'products',
+        columns: ['quantity'],
+        where: 'id = ?',
+        whereArgs: [productId],
+        limit: 1,
+      );
+
+      final productQuantity =
+          productResult.isNotEmpty
+              ? ((productResult.first['quantity'] as num?)?.toDouble() ?? 0.0)
+              : 0.0;
+
+      if (productQuantity > 0) {
+        log(
+          '⚠️ sellable quantity fallback for product $productId: no sellable batches found, using products.quantity=$productQuantity',
+        );
+      }
+
+      return productQuantity;
+    } catch (e) {
+      log('Error getting sellable quantity: $e');
+      return 0.0;
+    }
+  }
+
+  Future<double> _getBatchSellableQuantity(
+    DatabaseExecutor db,
+    int productId,
+  ) async {
+    final batchResult = await db.rawQuery(
+      '''
+      SELECT SUM(remaining_quantity) as total_available
+      FROM product_batches
+      WHERE product_id = ? AND $_sellableBatchSql
+    ''',
+      [productId],
+    );
+
+    return (batchResult.first['total_available'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  Future<double> _getAvailableQuantityForSaleCheck(
+    DatabaseExecutor db,
+    int productId,
+  ) async {
+    final batchQuantity = await _getBatchSellableQuantity(db, productId);
+    if (batchQuantity > 0) return batchQuantity;
+
+    final productResult = await db.query(
+      'products',
+      columns: ['quantity'],
+      where: 'id = ?',
+      whereArgs: [productId],
+      limit: 1,
+    );
+
+    return productResult.isNotEmpty
+        ? ((productResult.first['quantity'] as num?)?.toDouble() ?? 0.0)
+        : 0.0;
+  }
+
   Future<Map<String, dynamic>> getProductCostSummary(int productId) async {
     try {
       final db = await _dbHelper.db;
@@ -965,17 +1047,10 @@ AND date(offer_end_date) < date('now', 'localtime')
 
         if (requiredQty <= 0) continue;
 
-        final batchResult = await txn.rawQuery(
-          '''
-          SELECT SUM(remaining_quantity) as total_available
-          FROM product_batches 
-          WHERE product_id = ? AND $_sellableBatchSql
-        ''',
-          [product.id],
+        final double totalAvailable = await _getAvailableQuantityForSaleCheck(
+          txn,
+          product.id!,
         );
-
-        final double totalAvailable =
-            (batchResult.first['total_available'] as num?)?.toDouble() ?? 0;
 
         if (requiredQty > totalAvailable) {
           throw Exception(
@@ -1416,17 +1491,10 @@ AND date(offer_end_date) < date('now', 'localtime')
 
         if (requiredQty <= 0) continue;
 
-        final batchResult = await txn.rawQuery(
-          '''
-          SELECT SUM(remaining_quantity) as total_available
-          FROM product_batches 
-          WHERE product_id = ? AND $_sellableBatchSql
-        ''',
-          [product.id],
+        final double totalAvailable = await _getAvailableQuantityForSaleCheck(
+          txn,
+          product.id!,
         );
-
-        final double totalAvailable =
-            (batchResult.first['total_available'] as num?)?.toDouble() ?? 0;
 
         if (requiredQty > totalAvailable) {
           throw Exception(
@@ -1511,64 +1579,73 @@ AND date(offer_end_date) < date('now', 'localtime')
           [product.id],
         );
 
-        if (batches.isEmpty && requiredQtyInBaseUnit > 0) {
-          throw Exception('لا توجد واردات متاحة للمنتج ${product.name}');
-        }
-
         double remainingToDeduct = requiredQtyInBaseUnit;
         List<Map<String, dynamic>> itemDeductions = [];
         double itemTotalCost = 0.0;
         double itemProfit = 0.0;
 
-        for (var batch in batches) {
-          if (remainingToDeduct <= 0) break;
+        if (batches.isNotEmpty) {
+          for (var batch in batches) {
+            if (remainingToDeduct <= 0) break;
 
-          final batchId = batch['id'] as int;
-          final double batchQty =
-              (batch['remaining_quantity'] as num).toDouble();
-          final double batchCost = (batch['cost_price'] as num).toDouble();
-          final String? batchExpiry = batch['expiry_date'] as String?;
+            final batchId = batch['id'] as int;
+            final double batchQty =
+                (batch['remaining_quantity'] as num).toDouble();
+            final double batchCost = (batch['cost_price'] as num).toDouble();
+            final String? batchExpiry = batch['expiry_date'] as String?;
 
-          final double toDeduct =
-              batchQty >= remainingToDeduct ? remainingToDeduct : batchQty;
+            final double toDeduct =
+                batchQty >= remainingToDeduct ? remainingToDeduct : batchQty;
 
-          // تحديث الدفعة
-          final double newQty = batchQty - toDeduct;
-          await txn.update(
-            'product_batches',
-            {'remaining_quantity': newQty, 'active': newQty > 0 ? 1 : 0},
-            where: 'id = ?',
-            whereArgs: [batchId],
-          );
+            // تحديث الدفعة
+            final double newQty = batchQty - toDeduct;
+            await txn.update(
+              'product_batches',
+              {'remaining_quantity': newQty, 'active': newQty > 0 ? 1 : 0},
+              where: 'id = ?',
+              whereArgs: [batchId],
+            );
 
-          itemDeductions.add({
-            'batchId': batchId,
-            'quantity': toDeduct,
-            'costPrice': batchCost,
-            'expiryDate': batchExpiry,
-          });
+            itemDeductions.add({
+              'batchId': batchId,
+              'quantity': toDeduct,
+              'costPrice': batchCost,
+              'expiryDate': batchExpiry,
+            });
 
-          final double batchCostAmount = toDeduct * batchCost;
-          itemTotalCost += batchCostAmount;
+            final double batchCostAmount = toDeduct * batchCost;
+            itemTotalCost += batchCostAmount;
+
+            final double unitPrice = item.unitPrice;
+            double soldQtyInUnit;
+
+            if (item.selectedUnit != null) {
+              soldQtyInUnit = toDeduct / item.selectedUnit!.containQty;
+            } else {
+              soldQtyInUnit = toDeduct;
+            }
+
+            final double batchRevenue = unitPrice * soldQtyInUnit;
+            final double batchProfit = batchRevenue - batchCostAmount;
+            itemProfit += batchProfit;
+
+            remainingToDeduct -= toDeduct;
+          }
+        } else {
+          itemTotalCost = requiredQtyInBaseUnit * product.costPrice;
 
           final double unitPrice = item.unitPrice;
-          double soldQtyInUnit;
+          final double soldQtyInUnit =
+              item.selectedUnit != null
+                  ? requiredQtyInBaseUnit / item.selectedUnit!.containQty
+                  : requiredQtyInBaseUnit;
 
-          if (item.selectedUnit != null) {
-            soldQtyInUnit = toDeduct / item.selectedUnit!.containQty;
-          } else {
-            soldQtyInUnit = toDeduct;
-          }
+          final double revenue = unitPrice * soldQtyInUnit;
+          itemProfit = revenue - itemTotalCost;
 
-          final double batchRevenue = unitPrice * soldQtyInUnit;
-          final double batchProfit = batchRevenue - batchCostAmount;
-          itemProfit += batchProfit;
-
-          remainingToDeduct -= toDeduct;
-        }
-
-        if (remainingToDeduct > 0) {
-          throw Exception('كمية غير كافية للمنتج ${product.name}');
+          log(
+            '⚠️ لا توجد واردات قابلة للبيع للمنتج ${product.name} أثناء تعديل الفاتورة - تم الاعتماد على المخزون الإجمالي',
+          );
         }
 
         allBatchDeductions.addAll(
