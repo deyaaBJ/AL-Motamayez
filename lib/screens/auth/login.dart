@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:motamayez/components/login_card.dart';
 import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/providers/auth_provider.dart';
+import 'package:motamayez/screens/activation_page.dart';
+import 'package:motamayez/screens/activation_validation_required_screen.dart';
 import 'package:motamayez/services/activation_service.dart';
+import 'package:motamayez/services/license_session_guard.dart';
 import 'package:motamayez/widgets/whatsapp_support_button.dart';
 import 'package:provider/provider.dart';
 
@@ -49,6 +52,52 @@ class _LoginScreenState extends State<LoginScreen>
     );
 
     _loadSavedCredentials();
+    _verifyActivationStillValid();
+  }
+
+  Future<void> _verifyActivationStillValid() async {
+    var info = await _activationService.getActivationInfo(
+      forceServerValidation: false,
+    );
+    if (!mounted) return;
+
+    var status = info['status']?.toString();
+    if (status == 'valid' || status == 'grace_period') return;
+
+    if (status == 'session_only' ||
+        status == 'needs_revalidation' ||
+        status == 'clock_tampering_detected' ||
+        status == 'runtime_suspicious') {
+      info = await _activationService.getActivationInfo(
+        forceServerValidation: true,
+      );
+      if (!mounted) return;
+
+      status = info['status']?.toString();
+      if (status == 'valid' || status == 'grace_period') return;
+    }
+
+    if (status == 'needs_revalidation' ||
+        status == 'clock_tampering_detected' ||
+        status == 'runtime_suspicious' ||
+        status == 'session_only') {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder:
+              (context) => ActivationValidationRequiredScreen(
+                message: info['signature_details']?.toString(),
+                onRetry: _handleActivationRetry,
+              ),
+        ),
+        (route) => false,
+      );
+      return;
+    }
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const ActivationPage()),
+      (route) => false,
+    );
   }
 
   Future<void> _loadSavedCredentials() async {
@@ -75,23 +124,55 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   void _login() async {
-    final isActivated = await _activationService.checkActivationSilently();
-
-    if (!mounted) return;
-
-    if (!isActivated) {
-      showAppToast(
-        context,
-        'انتهت صلاحية التفعيل أو بيانات التفعيل غير صالحة. سيتم تحويلك إلى صفحة التفعيل.',
-        ToastType.error,
-      );
-      Navigator.pushNamedAndRemoveUntil(context, '/activation', (route) => false);
-      return;
-    }
-
     setState(() {
       _isLoading = true;
     });
+
+    var activationInfo = await _activationService.getActivationInfo(
+      forceServerValidation: false,
+    );
+    var activationStatus = activationInfo['status']?.toString();
+    if (activationStatus != 'valid' && activationStatus != 'grace_period') {
+      if (activationStatus == 'session_only' ||
+          activationStatus == 'needs_revalidation' ||
+          activationStatus == 'clock_tampering_detected' ||
+          activationStatus == 'runtime_suspicious') {
+        activationInfo = await _activationService.getActivationInfo(
+          forceServerValidation: true,
+        );
+        activationStatus = activationInfo['status']?.toString();
+      }
+    }
+
+    if (activationStatus != 'valid' && activationStatus != 'grace_period') {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (activationStatus == 'needs_revalidation' ||
+          activationStatus == 'clock_tampering_detected' ||
+          activationStatus == 'runtime_suspicious' ||
+          activationStatus == 'session_only') {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder:
+                (context) => ActivationValidationRequiredScreen(
+                  message: activationInfo['signature_details']?.toString(),
+                  onRetry: _handleActivationRetry,
+                ),
+          ),
+          (route) => false,
+        );
+        return;
+      }
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const ActivationPage()),
+        (route) => false,
+      );
+      return;
+    }
 
     final success = await authProvider.login(
       _emailController.text.trim(),
@@ -106,11 +187,53 @@ class _LoginScreenState extends State<LoginScreen>
     });
 
     if (success) {
+      await _activationService.markSessionStarted();
+      if (!mounted) return;
+      LicenseSessionGuard.instance.start(
+        authProvider: authProvider,
+        navigator: Navigator.of(context),
+      );
       showAppToast(context, 'تم تسجيل الدخول بنجاح!', ToastType.success);
       Navigator.pushReplacementNamed(context, '/home');
     } else {
       showAppToast(context, 'البريد أو كلمة السر خاطئة', ToastType.error);
     }
+  }
+
+  Future<void> _handleActivationRetry() async {
+    final activationInfo = await _activationService.getActivationInfo(
+      forceServerValidation: true,
+    );
+    final activationStatus = activationInfo['status']?.toString();
+
+    if (!mounted) return;
+
+    if (activationStatus == 'valid' || activationStatus == 'grace_period') {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+      return;
+    }
+
+    if (activationStatus == 'not_activated' || activationStatus == 'expired') {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const ActivationPage()),
+        (route) => false,
+      );
+      return;
+    }
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder:
+            (context) => ActivationValidationRequiredScreen(
+              message: activationInfo['signature_details']?.toString(),
+              onRetry: _handleActivationRetry,
+            ),
+      ),
+      (route) => false,
+    );
   }
 
   Widget _buildLoginContent() {

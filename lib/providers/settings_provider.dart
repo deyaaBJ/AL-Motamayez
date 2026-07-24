@@ -4,6 +4,8 @@ import 'dart:developer';
 
 class SettingsProvider with ChangeNotifier {
   final DBHelper _dbHelper = DBHelper();
+  bool _isLoaded = false;
+  bool get isLoaded => _isLoaded;
 
   // الحد الأدنى للمخزون
   int _lowStockThreshold = 0;
@@ -42,6 +44,7 @@ class SettingsProvider with ChangeNotifier {
 
   // 🔹 تحميل جميع الإعدادات من قاعدة البيانات
   Future<void> loadSettings() async {
+    if (_isLoaded) return;
     try {
       final db = await _dbHelper.db;
       final result = await db.query('settings', limit: 1);
@@ -73,6 +76,7 @@ class SettingsProvider with ChangeNotifier {
             _parseInt(result.first['nearExpiryAlertDays']) ?? 7;
       }
 
+      _isLoaded = true;
       notifyListeners();
     } catch (e) {
       log('Error loading settings: $e');

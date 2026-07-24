@@ -1,12 +1,19 @@
 import 'dart:async';
-
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:motamayez/screens/auth/login.dart';
 import 'package:motamayez/services/activation_service.dart';
 import 'package:motamayez/widgets/whatsapp_support_button.dart';
 
 class ActivationPage extends StatefulWidget {
-  const ActivationPage({super.key});
+  const ActivationPage({
+    super.key,
+    this.initialMessage,
+    this.renewalMode = false,
+  });
+
+  final String? initialMessage;
+  final bool renewalMode;
 
   @override
   State<ActivationPage> createState() => _ActivationPageState();
@@ -19,6 +26,7 @@ class _ActivationPageState extends State<ActivationPage> {
   bool _loading = false;
   bool _sendingRequest = false;
   bool _checkingStatus = false;
+  bool _checkingServerActivation = false;
   bool _isAssignedCodeLocked = false;
   String? _error;
   String? _info;
@@ -28,36 +36,90 @@ class _ActivationPageState extends State<ActivationPage> {
 
   bool get _hasActivationCode => _codeController.text.trim().isNotEmpty;
 
+  bool get _isRequestReadyForActivation =>
+      _requestStatus == 'approved' ||
+      (_requestStatus == 'completed' && _hasActivationCode);
+
   bool get _canAttemptActivation =>
-      _requestStatus == 'approved' || _hasActivationCode;
+      _isRequestReadyForActivation || _hasActivationCode;
+
+  bool _isInactiveRequestStatus(String? status) {
+    final normalized = status?.trim().toLowerCase();
+    return normalized == 'rejected' ||
+        normalized == 'deactivated' ||
+        normalized == 'revoked' ||
+        normalized == 'expired' ||
+        normalized == 'device_changed' ||
+        normalized == 'not_activated';
+  }
 
   @override
   void initState() {
     super.initState();
+    _codeController.addListener(_handleCodeChanged);
     _initializeActivationState();
   }
 
   @override
   void dispose() {
     _statusTimer?.cancel();
+    _codeController.removeListener(_handleCodeChanged);
     _codeController.dispose();
     super.dispose();
   }
 
+  void _handleCodeChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  String _normalizeText(String text) {
+    if (!(text.contains('Ø') ||
+        text.contains('Ù') ||
+        text.contains('Ã') ||
+        text.contains('Â'))) {
+      return text;
+    }
+
+    try {
+      return utf8.decode(latin1.encode(text));
+    } catch (_) {
+      return text;
+    }
+  }
+
+  String _messageOrDefault(dynamic value, String fallback) {
+    final raw = value?.toString().trim();
+    if (raw == null || raw.isEmpty) {
+      return fallback;
+    }
+    return _normalizeText(raw);
+  }
+
   Future<void> _initializeActivationState() async {
-    await _activationService.clearPendingRequestCode();
+    // نسح كل البيانات المحفوظة أولاً لـ fresh start
     final savedRequest = await _activationService.getSavedPendingRequest();
+    final savedAssignedCode = savedRequest?['assignedCode']?.toString();
 
     if (!mounted) return;
 
     setState(() {
       _requestId = savedRequest?['requestId']?.toString();
       _requestStatus = savedRequest?['status']?.toString() ?? 'idle';
+      // دائماً نسح الكود والـ locked status عند الفتح
       _codeController.clear();
       _isAssignedCodeLocked = false;
+      if (savedAssignedCode != null && savedAssignedCode.isNotEmpty) {
+        _applyAssignedCode(savedAssignedCode);
+      }
       _error = null;
-      _info = null;
+      _info = widget.initialMessage;
     });
+
+    final activatedFromServer = await _checkServerActivationOnOpen();
+    if (activatedFromServer) {
+      return;
+    }
 
     if (_requestId != null) {
       await _refreshRequestStatus(showLoader: false);
@@ -65,12 +127,77 @@ class _ActivationPageState extends State<ActivationPage> {
     }
   }
 
+  Future<bool> _checkServerActivationOnOpen() async {
+    if (!mounted) return false;
+
+    setState(() {
+      _checkingServerActivation = true;
+      _error = null;
+      _info = widget.initialMessage ?? 'جاري فحص تفعيل الجهاز من السيرفر...';
+    });
+
+    final result = await _activationService.checkDeviceActivationOnServer();
+
+    if (!mounted) return false;
+
+    setState(() {
+      _checkingServerActivation = false;
+    });
+
+    if (result['success'] == true && result['activated'] == true) {
+      setState(() {
+        _requestStatus = 'completed';
+        _info = _messageOrDefault(
+          result['message'],
+          'تم تفعيل هذا الجهاز من السيرفر.',
+        );
+      });
+      await _goToLogin();
+      return true;
+    }
+
+    final requestId = result['requestId']?.toString();
+    final assignedCode = result['assignedCode']?.toString();
+    if (requestId != null && requestId.isNotEmpty) {
+      setState(() {
+        _requestId = requestId;
+        _requestStatus = result['status']?.toString() ?? _requestStatus;
+        _applyAssignedCode(assignedCode);
+        _info = _messageOrDefault(
+          result['message'],
+          'تم العثور على تفعيل جاهز لهذا الجهاز.',
+        );
+      });
+
+      if (_hasActivationCode) {
+        await _activate();
+        return true;
+      }
+      return false;
+    }
+
+    final status = result['status']?.toString();
+    if (result['success'] == false &&
+        status != 'offline' &&
+        status != 'endpoint_not_found') {
+      setState(() {
+        _info = widget.initialMessage;
+      });
+    } else if (_info == 'جاري فحص تفعيل الجهاز من السيرفر...') {
+      setState(() {
+        _info = widget.initialMessage;
+      });
+    }
+
+    return false;
+  }
+
   void _startStatusPolling() {
     _statusTimer?.cancel();
 
     if (_requestId == null ||
         _requestStatus == 'completed' ||
-        _requestStatus == 'rejected') {
+        _isInactiveRequestStatus(_requestStatus)) {
       return;
     }
 
@@ -90,7 +217,7 @@ class _ActivationPageState extends State<ActivationPage> {
     setState(() {
       _sendingRequest = true;
       _error = null;
-      _info = null;
+      _info = widget.initialMessage;
       _codeController.clear();
       _isAssignedCodeLocked = false;
     });
@@ -105,7 +232,12 @@ class _ActivationPageState extends State<ActivationPage> {
 
     if (result['success'] != true) {
       setState(() {
-        _error = result['message']?.toString() ?? 'فشل إرسال طلب التفعيل';
+        _error = _messageOrDefault(
+          result['message'],
+          widget.renewalMode
+              ? 'فشل إرسال طلب التجديد'
+              : 'فشل إرسال طلب التفعيل',
+        );
       });
       return;
     }
@@ -116,7 +248,12 @@ class _ActivationPageState extends State<ActivationPage> {
     setState(() {
       _requestId = result['requestId']?.toString() ?? _requestId;
       _requestStatus = status;
-      _info = result['message']?.toString() ?? 'تم إرسال طلب التفعيل بنجاح';
+      _info = _messageOrDefault(
+        result['message'],
+        widget.renewalMode
+            ? 'تم إرسال طلب التجديد بنجاح'
+            : 'تم إرسال طلب التفعيل بنجاح',
+      );
       _applyAssignedCode(assignedCode);
     });
 
@@ -130,7 +267,10 @@ class _ActivationPageState extends State<ActivationPage> {
     _startStatusPolling();
   }
 
-  Future<void> _refreshRequestStatus({bool showLoader = true}) async {
+  Future<void> _refreshRequestStatus({
+    bool showLoader = true,
+    bool applyAssignedCode = true,
+  }) async {
     if (_requestId == null) return;
 
     if (showLoader) {
@@ -154,7 +294,10 @@ class _ActivationPageState extends State<ActivationPage> {
 
     if (result['success'] != true) {
       setState(() {
-        _error = result['message']?.toString() ?? 'تعذر التحقق من حالة الطلب';
+        _error = _messageOrDefault(
+          result['message'],
+          'تعذر التحقق من حالة الطلب',
+        );
       });
       return;
     }
@@ -165,7 +308,13 @@ class _ActivationPageState extends State<ActivationPage> {
 
     setState(() {
       _requestStatus = status;
-      _applyAssignedCode(assignedCode);
+
+      if (applyAssignedCode) {
+        _applyAssignedCode(assignedCode);
+      } else if (_codeController.text.trim().isEmpty) {
+        _codeController.clear();
+        _isAssignedCodeLocked = false;
+      }
 
       if (status == 'approved') {
         _info = 'تمت الموافقة على الطلب. يمكنك الآن متابعة التفعيل.';
@@ -174,19 +323,25 @@ class _ActivationPageState extends State<ActivationPage> {
       } else if (status == 'rejected') {
         _info =
             rejectionReason != null && rejectionReason.isNotEmpty
-                ? 'تم رفض الطلب: $rejectionReason'
+                ? 'تم رفض الطلب: ${_normalizeText(rejectionReason)}'
                 : 'تم رفض طلب التفعيل.';
       } else if (status == 'completed') {
-        _info = 'تم تفعيل البرنامج على هذا الجهاز.';
+        _info =
+            assignedCode != null && assignedCode.isNotEmpty
+                ? 'تم استلام كود التفعيل. اضغط تفعيل لإكمال العملية.'
+                : 'تمت الموافقة على الطلب. حدّث حالة الطلب لاستلام الكود.';
       }
     });
 
     if (status == 'completed') {
       _statusTimer?.cancel();
+      if (_hasActivationCode) {
+        await _activate();
+      }
       return;
     }
 
-    if (status == 'rejected') {
+    if (_isInactiveRequestStatus(status)) {
       _statusTimer?.cancel();
       setState(() {
         _requestId = null;
@@ -204,12 +359,15 @@ class _ActivationPageState extends State<ActivationPage> {
 
     if (_requestId == null) {
       setState(() {
-        _error = 'أرسل طلب تفعيل أولًا قبل التفعيل';
+        _error =
+            widget.renewalMode
+                ? 'أرسل طلب تجديد أولًا قبل التفعيل'
+                : 'أرسل طلب تفعيل أولًا قبل التفعيل';
       });
       return;
     }
 
-    if (_requestStatus != 'approved' && code.isEmpty) {
+    if (!_isRequestReadyForActivation && code.isEmpty) {
       setState(() {
         _error = 'لا يمكن التفعيل قبل الموافقة أو بدون كود تفعيل';
       });
@@ -243,14 +401,14 @@ class _ActivationPageState extends State<ActivationPage> {
     if (result['success'] == true) {
       setState(() {
         _requestStatus = 'completed';
-        _info = result['message']?.toString() ?? 'تم التفعيل بنجاح';
+        _info = _messageOrDefault(result['message'], 'تم التفعيل بنجاح');
       });
       _goToLogin();
       return;
     }
 
     setState(() {
-      _error = result['message']?.toString() ?? 'فشلت عملية التفعيل';
+      _error = _messageOrDefault(result['message'], 'فشلت عملية التفعيل');
     });
   }
 
@@ -266,6 +424,16 @@ class _ActivationPageState extends State<ActivationPage> {
   }
 
   String _statusText() {
+    if (_checkingServerActivation) {
+      return 'جاري فحص التفعيل من السيرفر';
+    }
+
+    if (_requestStatus == 'completed') {
+      return _hasActivationCode
+          ? 'Activation code received, ready to activate'
+          : 'Request approved, waiting for code';
+    }
+
     switch (_requestStatus) {
       case 'pending':
         return 'بانتظار موافقة الإدارة';
@@ -297,11 +465,16 @@ class _ActivationPageState extends State<ActivationPage> {
 
   @override
   Widget build(BuildContext context) {
-    final canEnterCode = _requestStatus == 'approved' || _hasActivationCode;
+    final canEnterCode =
+        _requestStatus == 'approved' ||
+        _requestStatus == 'completed' ||
+        _hasActivationCode;
     final canSendRequest =
         !_sendingRequest &&
+        !_checkingServerActivation &&
         _requestStatus != 'pending' &&
-        _requestStatus != 'approved';
+        _requestStatus != 'approved' &&
+        _requestStatus != 'completed';
 
     return Scaffold(
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -324,19 +497,26 @@ class _ActivationPageState extends State<ActivationPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      'تفعيل برنامج المتميز',
+                    Text(
+                      widget.renewalMode
+                          ? 'تجديد اشتراك برنامج المتميز'
+                          : 'تفعيل برنامج المتميز',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'أرسل طلب تفعيل، وبعد موافقة الإدارة سيتم عرض الكود بشكل مخفي ثم يمكنك الضغط على تفعيل.',
+                    Text(
+                      widget.renewalMode
+                          ? 'أرسل طلب تجديد، وبعد موافقة الإدارة يمكنك إدخال الكود الجديد ثم الضغط على تفعيل.'
+                          : 'أرسل طلب تفعيل، وبعد موافقة الإدارة يمكنك إدخال الكود ثم الضغط على تفعيل.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.black54, height: 1.5),
+                      style: const TextStyle(
+                        color: Colors.black54,
+                        height: 1.5,
+                      ),
                     ),
                     const SizedBox(height: 20),
                     Container(
@@ -353,7 +533,16 @@ class _ActivationPageState extends State<ActivationPage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.info_outline, color: _statusColor()),
+                          _checkingServerActivation
+                              ? SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: _statusColor(),
+                                ),
+                              )
+                              : Icon(Icons.info_outline, color: _statusColor()),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -389,7 +578,9 @@ class _ActivationPageState extends State<ActivationPage> {
                                 : const Icon(Icons.send_rounded),
                         label: Text(
                           _requestId == null
-                              ? 'إرسال طلب تفعيل'
+                              ? widget.renewalMode
+                                  ? 'إرسال طلب تجديد'
+                                  : 'إرسال طلب تفعيل'
                               : 'تم إرسال الطلب',
                         ),
                       ),
@@ -397,7 +588,9 @@ class _ActivationPageState extends State<ActivationPage> {
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
                       onPressed:
-                          (_requestId == null || _checkingStatus)
+                          (_requestId == null ||
+                                  _checkingStatus ||
+                                  _checkingServerActivation)
                               ? null
                               : () => _refreshRequestStatus(),
                       icon:
@@ -455,7 +648,9 @@ class _ActivationPageState extends State<ActivationPage> {
                       height: 46,
                       child: ElevatedButton(
                         onPressed:
-                            (_loading || !_canAttemptActivation)
+                            (_loading ||
+                                    _checkingServerActivation ||
+                                    !_canAttemptActivation)
                                 ? null
                                 : _activate,
                         style: ElevatedButton.styleFrom(

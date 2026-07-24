@@ -9,6 +9,7 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
+  "security_native.cpp"
   "utils.cpp"
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
@@ -30,6 +31,12 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTT
 
 # Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
+target_compile_definitions(${BINARY_NAME} PRIVATE "$<$<CONFIG:Release>:NDEBUG>")
+
+if (MSVC)
+  target_compile_options(${BINARY_NAME} PRIVATE "$<$<CONFIG:Release>:/O2>" "$<$<CONFIG:Release>:/GL>")
+  target_link_options(${BINARY_NAME} PRIVATE "$<$<CONFIG:Release>:/OPT:REF>" "$<$<CONFIG:Release>:/OPT:ICF>" "$<$<CONFIG:Release>:/LTCG>")
+endif()
 
 # Add dependency libraries and include directories. Add any application-specific
 # dependencies here.

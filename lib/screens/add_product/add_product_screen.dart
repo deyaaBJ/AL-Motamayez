@@ -48,7 +48,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final screenType =
-                constraints.maxWidth < 1200
+                constraints.maxWidth < 900
                     ? ScreenType.tablet
                     : ScreenType.desktop;
             final formData = {

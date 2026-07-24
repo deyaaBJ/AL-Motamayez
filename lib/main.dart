@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:motamayez/constant/constant.dart';
 import 'package:motamayez/providers/debt_provider.dart';
 import 'package:motamayez/providers/cashier_activity_provider.dart';
 import 'package:motamayez/screens/purchase_invoices_list_page.dart';
@@ -39,10 +40,13 @@ import 'screens/purchase_invoice_page.dart';
 
 import 'screens/expenses_page.dart';
 import 'screens/activation_page.dart';
+import 'screens/internet_connection_check_screen.dart';
+import 'screens/activation_validation_required_screen.dart';
 import 'screens/batches_screen.dart';
 import 'screens/opening_balance_screen.dart';
 import 'services/activation_service.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'widgets/license_session_warning_banner.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final RouteObserver<ModalRoute<void>> routeObserver =
@@ -174,6 +178,19 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
         fontFamily: 'Poppins',
         useMaterial3: true,
       ),
+      builder: (context, child) {
+        return Stack(
+          children: [
+            if (child != null) child,
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: LicenseSessionWarningBanner(),
+            ),
+          ],
+        );
+      },
       home: const AppEntry(),
       routes: {
         '/login': (_) => const LoginScreen(),
@@ -210,48 +227,174 @@ class AppEntry extends StatefulWidget {
 }
 
 class _AppEntryState extends State<AppEntry> {
-  late Future<Map<String, dynamic>> _activationCheck;
+  late Future<Map<String, dynamic>> _activationCheck = Future.value({
+    'status': 'loading',
+  });
+  bool _showConnectivityCheck = false;
 
   @override
   void initState() {
     super.initState();
-    _activationCheck = _checkActivation();
+    _bootstrapActivationFlow();
+  }
+
+  Future<void> _bootstrapActivationFlow() async {
+    final hasInternet = await _hasInternetConnection();
+    if (!mounted) return;
+
+    if (!hasInternet) {
+      setState(() {
+        _showConnectivityCheck = true;
+      });
+      return;
+    }
+
+    setState(() {
+      _showConnectivityCheck = false;
+      _activationCheck = _checkActivation(forceServerValidation: true);
+    });
   }
 
   // main.dart - AppEntry
-  Future<Map<String, dynamic>> _checkActivation() async {
+  Future<Map<String, dynamic>> _checkActivation({
+    bool forceServerValidation = false,
+  }) async {
     try {
       final activationService = ActivationService();
-      final info = await activationService.getActivationInfo();
+      var info = await activationService.getActivationInfo(
+        forceServerValidation: forceServerValidation,
+      );
 
-      final status = info['status'];
+      var status = info['status'];
+      var signatureDetails = info['signature_details']?.toString();
+
+      var hasActivation = info['has_activation'] == true;
+
+      if (!forceServerValidation &&
+          status is String &&
+          (status == 'session_only' ||
+              status == 'needs_revalidation' ||
+              status == 'clock_tampering_detected' ||
+              status == 'runtime_suspicious')) {
+        final serverInfo = await activationService.getActivationInfo(
+          forceServerValidation: true,
+        );
+        final serverStatus = serverInfo['status'];
+        if (serverStatus == 'valid' || serverStatus == 'grace_period') {
+          return {
+            'status': serverStatus,
+            'activation_type': serverInfo['activation_type'],
+            'remaining_days': serverInfo['remaining_days'],
+            'message': serverInfo['signature_details']?.toString(),
+          };
+        }
+
+        info = serverInfo;
+        status = info['status'];
+        signatureDetails = info['signature_details']?.toString();
+        hasActivation = info['has_activation'] == true;
+      }
+
+      if (!hasActivation) {
+        return {'status': 'not_activated'};
+      }
 
       switch (status) {
         case 'valid':
+        case 'grace_period':
           return {
-            'status': 'valid',
+            'status': status,
             'activation_type': info['activation_type'],
             'remaining_days': info['remaining_days'],
+            'message': signatureDetails,
           };
+
+        case 'session_only':
+        case 'needs_revalidation':
+        case 'clock_tampering_detected':
+          if (signatureDetails == 'license_expired' ||
+              signatureDetails == 'temporary_license_expired') {
+            return {
+              'status': 'expired',
+              'message':
+                  'انتهت مدة الاشتراك. يرجى إرسال طلب تجديد ثم إدخال كود التفعيل الجديد بعد الموافقة.',
+            };
+          }
+
+          if (signatureDetails == 'missing_signed_license_blob') {
+            return {'status': 'not_activated'};
+          }
+
+          return {'status': status, 'message': signatureDetails};
+
+        case 'runtime_suspicious':
+          return {'status': 'not_activated'};
 
         case 'invalid':
         case 'expired':
-          await activationService.clearActivation();
-          return {'status': 'not_activated'};
+          return {
+            'status': 'expired',
+            'message':
+                'انتهت مدة الاشتراك. يرجى إرسال طلب تجديد ثم إدخال كود التفعيل الجديد بعد الموافقة.',
+          };
 
         case 'not_activated':
           return {'status': 'not_activated'};
 
+        case 'error':
+          return {
+            'status': hasActivation ? 'error' : 'not_activated',
+            'error': info['error'] ?? signatureDetails ?? status?.toString(),
+          };
+
         default:
-          return {'status': 'error', 'error': info['error']};
+          return {
+            'status': 'error',
+            'error': info['error'] ?? signatureDetails ?? status?.toString(),
+          };
       }
     } catch (e) {
       return {'status': 'error', 'error': e.toString()};
     }
   }
 
+  Future<bool> _hasInternetConnection() async {
+    try {
+      final uri = Uri.parse(AppConstants.activationBaseUrl);
+      final host = uri.host;
+      if (host.isEmpty) return false;
+
+      final addresses = await InternetAddress.lookup(host);
+      return addresses.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _retryConnectivityAndActivation() async {
+    final hasInternet = await _hasInternetConnection();
+    if (!mounted) return false;
+
+    if (!hasInternet) {
+      return false;
+    }
+
+    setState(() {
+      _showConnectivityCheck = false;
+      _activationCheck = _checkActivation(forceServerValidation: true);
+    });
+
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_showConnectivityCheck) {
+      return InternetConnectionCheckScreen(
+        onRetry: _retryConnectivityAndActivation,
+      );
+    }
+
     return FutureBuilder<Map<String, dynamic>>(
       future: _activationCheck,
       builder: (context, snapshot) {
@@ -268,13 +411,39 @@ class _AppEntryState extends State<AppEntry> {
 
         switch (status) {
           case 'valid':
+          case 'grace_period':
             return const LoginScreen();
+
+          case 'session_only':
+          case 'needs_revalidation':
+          case 'clock_tampering_detected':
+            return ActivationValidationRequiredScreen(
+              message: data['message']?.toString(),
+              onRetry: () {
+                setState(() {
+                  _activationCheck = _checkActivation(
+                    forceServerValidation: true,
+                  );
+                });
+              },
+            );
 
           case 'not_activated':
             return const ActivationPage();
 
+          case 'expired':
+            return ActivationPage(
+              initialMessage: data['message']?.toString(),
+              renewalMode: true,
+            );
+
+          case 'error':
+            return _buildErrorScreen(
+              data['error']?.toString() ?? 'تعذر قراءة حالة التفعيل',
+            );
+
           default:
-            return _buildErrorScreen('حالة غير معروفة: $status');
+            return const ActivationPage();
         }
       },
     );

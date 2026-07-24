@@ -124,8 +124,7 @@ class ProductInfoSection extends StatelessWidget {
           onClear: formData['onOfferClear'],
         ),
         const SizedBox(height: 16),
-        _buildOpeningBalanceHint(),
-        const SizedBox(height: 16),
+
         UnitsSection(
           showUnitsSection: formData['showUnitsSection'],
           unitControllers: formData['unitControllers'],
@@ -190,8 +189,7 @@ class ProductInfoSection extends StatelessWidget {
           onClear: formData['onOfferClear'],
         ),
         const SizedBox(height: 16),
-        _buildOpeningBalanceHint(),
-        const SizedBox(height: 16),
+
         UnitsSection(
           showUnitsSection: formData['showUnitsSection'],
           unitControllers: formData['unitControllers'],
@@ -203,33 +201,6 @@ class ProductInfoSection extends StatelessWidget {
           baseUnit: formData['selectedUnit'],
         ),
       ],
-    );
-  }
-
-  Widget _buildOpeningBalanceHint() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF7E8),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFFD79A)),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.info_outline, color: Color(0xFFB7791F)),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'إضافة الكمية لم تعد من شاشة المنتج. استخدم شاشة الرصيد الافتتاحي لتسجيل أي مخزون حالي بشكل رسمي.',
-              style: TextStyle(
-                color: Color(0xFF8A5A12),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

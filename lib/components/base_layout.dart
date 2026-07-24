@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:motamayez/providers/auth_provider.dart';
+import 'package:motamayez/services/license_session_guard.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 
@@ -35,11 +36,10 @@ class _BaseLayoutState extends State<BaseLayout> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () =>
-          // ignore: use_build_context_synchronously
-          Provider.of<SettingsProvider>(context, listen: false).loadSettings(),
-    );
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    if (!settings.isLoaded) {
+      Future.microtask(() => settings.loadSettings());
+    }
   }
 
   void _handlePageChange(String page) {
@@ -93,6 +93,7 @@ class _BaseLayoutState extends State<BaseLayout> {
         Navigator.pushReplacementNamed(context, '/settings');
         break;
       case 'logout':
+        LicenseSessionGuard.instance.stop();
         authProvider.logout();
         Navigator.pushReplacementNamed(context, '/login');
         break;

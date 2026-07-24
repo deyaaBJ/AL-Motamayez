@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:motamayez/widgets/main_screen/notification_card.dart';
 import 'package:motamayez/models/batch.dart';
+import 'package:motamayez/widgets/main_screen/notification_card.dart';
 
 class NotificationsSection extends StatelessWidget {
   final int expiredBatches;
@@ -27,91 +27,94 @@ class NotificationsSection extends StatelessWidget {
     final textScaler = MediaQuery.textScalerOf(context);
     final hasAlerts = expiredBatches > 0 || expiringSoonBatches > 0;
 
-    Widget alertsList =
+    final Widget body =
         hasAlerts
-            ? Column(
-              mainAxisSize: MainAxisSize.min,
+            ? ListView(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              padding: EdgeInsets.zero,
               children: [
-                if (expiredBatches > 0)
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      NotificationCard(
-                        title: "منتجات منتهية",
-                        description: "$expiredBatches منتج منتهي الصلاحية",
-                        icon: Icons.dangerous,
-                        color: const Color(0xFFEF4444),
-                        count: expiredBatches,
-                        onTap: () => onTapFilter('expired'),
-                      ),
-                      if (expiredBatchList.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12.0),
-                          child: _buildBatchesList(
-                            expiredBatchList,
-                            const Color(0xFFEF4444),
-                            context,
-                          ),
-                        ),
-                    ],
+                if (expiredBatches > 0) ...[
+                  NotificationCard(
+                    title: "منتجات منتهية",
+                    description: "$expiredBatches منتج منتهي الصلاحية",
+                    icon: Icons.dangerous,
+                    color: const Color(0xFFEF4444),
+                    count: expiredBatches,
+                    onTap: () => onTapFilter('expired'),
                   ),
+                  if (expiredBatchList.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12.0),
+                      child: _buildBatchesList(
+                        expiredBatchList,
+                        const Color(0xFFEF4444),
+                        context,
+                      ),
+                    ),
+                ],
                 if (expiredBatches > 0 && expiringSoonBatches > 0)
                   const SizedBox(height: 16),
-                if (expiringSoonBatches > 0)
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      NotificationCard(
-                        title: "قريبة من الانتهاء",
-                        description:
-                            "$expiringSoonBatches منتج خلال $nearExpiryDays يوم",
-                        icon: Icons.timer,
-                        color: const Color(0xFFF59E0B),
-                        count: expiringSoonBatches,
-                        onTap: () => onTapFilter('expiring_soon'),
-                      ),
-                      if (expiringBatchList.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12.0),
-                          child: _buildBatchesList(
-                            expiringBatchList,
-                            const Color(0xFFF59E0B),
-                            context,
-                          ),
-                        ),
-                    ],
+                if (expiringSoonBatches > 0) ...[
+                  NotificationCard(
+                    title: "قريبة من الانتهاء",
+                    description:
+                        "$expiringSoonBatches منتج خلال $nearExpiryDays يوم",
+                    icon: Icons.timer,
+                    color: const Color(0xFFF59E0B),
+                    count: expiringSoonBatches,
+                    onTap: () => onTapFilter('expiring_soon'),
                   ),
+                  if (expiringBatchList.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12.0),
+                      child: _buildBatchesList(
+                        expiringBatchList,
+                        const Color(0xFFF59E0B),
+                        context,
+                      ),
+                    ),
+                ],
               ],
             )
             : Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.check_circle,
-                    color: const Color(0xFF10B981),
-                    size: 48,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    "لا توجد تنبيهات",
-                    textScaler: textScaler,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1E1B4B),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.check_circle,
+                      color: Color(0xFF10B981),
+                      size: 48,
                     ),
-                  ),
-                  Text(
-                    "جميع المنتجات سليمة",
-                    textScaler: textScaler,
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    Text(
+                      "لا توجد تنبيهات",
+                      textScaler: textScaler,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E1B4B),
+                      ),
+                    ),
+                    Text(
+                      "جميع المنتجات سليمة",
+                      textScaler: textScaler,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
 
-    Widget content =
+    final Widget content =
         expandToFill
             ? SizedBox(
               width: double.infinity,
@@ -121,12 +124,7 @@ class NotificationsSection extends StatelessWidget {
                 children: [
                   _buildHeader(),
                   const SizedBox(height: 16),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      child: alertsList,
-                    ),
-                  ),
+                  Expanded(child: body),
                 ],
               ),
             )
@@ -136,7 +134,7 @@ class NotificationsSection extends StatelessWidget {
               children: [
                 _buildHeader(),
                 const SizedBox(height: 16),
-                alertsList,
+                body,
               ],
             );
 
@@ -196,16 +194,14 @@ class NotificationsSection extends StatelessWidget {
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children:
-            batches
-                .map((batch) => _buildBatchItem(batch, color, context))
-                .toList(),
+        children: batches.map((batch) => _buildBatchItem(batch, color, context)).toList(),
       ),
     );
   }
 
   Widget _buildBatchItem(Batch batch, Color color, BuildContext context) {
     final textScaler = MediaQuery.textScalerOf(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       child: Row(

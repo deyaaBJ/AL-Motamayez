@@ -30,12 +30,38 @@ class _MainScreenState extends State<MainScreen> {
   String _userName = 'المستخدم';
   List<Batch> _expiredBatchList = [];
   List<Batch> _expiringBatchList = [];
-  String _activationLabel = 'التفعيل الدائم';
+  String? _activationLabel = 'جاري تحميل حالة التفعيل...';
 
   @override
   void initState() {
     super.initState();
+    // حمّل القيمة الأولية من الـ cache بسرعة
+    _loadInitialActivationLabel();
     _loadInitialData();
+  }
+
+  /// تحميل سريع لقيمة التفعيل من الـ cache (بدون انتظار شبكة)
+  void _loadInitialActivationLabel() {
+    final activationService = ActivationService();
+    activationService
+        .getInitialActivationInfo()
+        .then((info) {
+          if (!mounted) return;
+
+          final type = info['activation_type']?.toString() ?? 'permanent';
+          final remainingDays = info['remaining_days'] as int?;
+
+          setState(() {
+            if (type == 'temporary') {
+              _activationLabel = 'متبقي ${remainingDays ?? 0} يوم';
+            } else {
+              _activationLabel = 'التفعيل الدائم';
+            }
+          });
+        })
+        .catchError((_) {
+          // لا تضع قيمة افتراضية في حالة الخطأ
+        });
   }
 
   Future<void> _loadInitialData() async {
@@ -51,11 +77,14 @@ class _MainScreenState extends State<MainScreen> {
       );
       final settings = Provider.of<SettingsProvider>(context, listen: false);
 
+      if (!settings.isLoaded) {
+        await settings.loadSettings();
+      }
+
       await Future.wait([
         salesProvider.refreshHomeDashboardStats(),
         productProvider.loadTotalProducts(),
         productProvider.loadProductsOnOfferCount(),
-        settings.loadSettings(),
       ]);
 
       if (mounted) {
@@ -66,7 +95,6 @@ class _MainScreenState extends State<MainScreen> {
         productProvider.loadStockCounts(settings.lowStockThreshold),
         _loadUserName(),
         _loadBatchAlerts(),
-        _loadActivationLabel(),
       ]);
     } catch (e) {
       appLog('خطأ في تحميل بيانات الشاشة الرئيسية: $e', name: 'MainScreen');
@@ -111,31 +139,6 @@ class _MainScreenState extends State<MainScreen> {
       });
     } catch (e) {
       appLog('خطأ في تحميل تنبيهات الواردات: $e', name: 'MainScreen');
-    }
-  }
-
-  Future<void> _loadActivationLabel() async {
-    try {
-      final activationService = ActivationService();
-      final info = await activationService.getActivationInfo();
-      final type = info['activation_type']?.toString() ?? 'permanent';
-      final remainingDays = info['remaining_days'] as int?;
-
-      if (!mounted) return;
-
-      setState(() {
-        if (type == 'temporary') {
-          _activationLabel = 'متبقي ${remainingDays ?? 0} يوم';
-        } else {
-          _activationLabel = 'التفعيل الدائم';
-        }
-      });
-    } catch (e) {
-      appLog('خطأ في تحميل حالة التفعيل: $e', name: 'MainScreen');
-      if (!mounted) return;
-      setState(() {
-        _activationLabel = 'التفعيل الدائم';
-      });
     }
   }
 

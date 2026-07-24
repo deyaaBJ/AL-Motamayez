@@ -199,6 +199,7 @@ class BatchItem extends StatelessWidget {
                           ],
                         ),
                       ),
+
                       PopupMenuItem(
                         value: 'dispose',
                         child: Row(

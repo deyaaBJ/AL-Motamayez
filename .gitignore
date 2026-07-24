@@ -43,4 +43,23 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local configuration and secrets
+.env
+.env.*
+config.json
+android/local.properties
+android/key.properties
+**/*.jks
+**/*.keystore
+**/*.p12
+**/*.pem
+**/*.mobileprovision
 assets/service_account.json
+
+# Local app data and backups
+data/
+Backups/
+*.db
+*.sqlite
+*.sqlite3

@@ -11,6 +11,8 @@ class CustomTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
   final void Function(String)? onChanged;
+  final void Function(String)? onSubmitted;
+  final TextInputAction? textInputAction;
 
   // ✅ الجديد (اختياري)
   final List<TextInputFormatter>? inputFormatters;
@@ -26,6 +28,8 @@ class CustomTextField extends StatelessWidget {
     this.keyboardType,
     this.validator,
     this.onChanged,
+    this.onSubmitted,
+    this.textInputAction,
     this.inputFormatters, // ✅
   });
 
@@ -39,6 +43,8 @@ class CustomTextField extends StatelessWidget {
         keyboardType: keyboardType,
         validator: validator,
         onChanged: onChanged,
+        onFieldSubmitted: onSubmitted,
+        textInputAction: textInputAction,
         inputFormatters: inputFormatters, // ✅
         decoration: _decoration(),
       );
@@ -49,6 +55,8 @@ class CustomTextField extends StatelessWidget {
         readOnly: readOnly,
         keyboardType: keyboardType,
         onChanged: onChanged,
+        onSubmitted: onSubmitted,
+        textInputAction: textInputAction,
         inputFormatters: inputFormatters, // ✅
         decoration: _decoration(),
       );

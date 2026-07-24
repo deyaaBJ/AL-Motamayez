@@ -50,7 +50,7 @@ class _LoginCardState extends State<LoginCard> {
       child: Column(
         children: [
           const Text(
-            'تسجيل الدخول',
+            '\u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062F\u062E\u0648\u0644',
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -58,22 +58,24 @@ class _LoginCardState extends State<LoginCard> {
             ),
           ),
           const SizedBox(height: 30),
-
-          // ✅ حقل الإيميل - معبأ تلقائياً
           CustomTextField(
             controller: widget.emailController,
-            label: 'اسم المستخدم',
+            label: '\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645',
             prefixIcon: Icons.person,
+            textInputAction: TextInputAction.next,
           ),
-
           const SizedBox(height: 20),
-
-          // ✅ حقل الباسورد - معبأ تلقائياً
           CustomTextField(
             controller: widget.passwordController,
-            label: 'كلمة المرور',
+            label: '\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631',
             prefixIcon: Icons.lock,
             obscureText: !_isPasswordVisible,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) {
+              if (!widget.isLoading) {
+                widget.onLogin();
+              }
+            },
             suffixIcon: IconButton(
               icon: Icon(
                 _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
@@ -86,10 +88,7 @@ class _LoginCardState extends State<LoginCard> {
               },
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // ✅ تذكرني
           Row(
             children: [
               Checkbox(
@@ -100,15 +99,12 @@ class _LoginCardState extends State<LoginCard> {
                 activeColor: const Color(0xFF8B5FBF),
               ),
               const Text(
-                'تذكرني',
+                '\u062A\u0630\u0643\u0631\u0646\u064A',
                 style: TextStyle(fontSize: 14, color: Color(0xFF6A3093)),
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // ✅ زر تسجيل الدخول - أنت بس بتكبس
           SizedBox(
             width: double.infinity,
             height: 56,
@@ -137,7 +133,7 @@ class _LoginCardState extends State<LoginCard> {
                         ),
                       )
                       : const Text(
-                        'تسجيل الدخول',
+                        '\u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062F\u062E\u0648\u0644',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
