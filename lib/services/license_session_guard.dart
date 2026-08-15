@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:motamayez/constant/constant.dart';
 import 'package:motamayez/providers/auth_provider.dart';
 import 'package:motamayez/screens/activation_page.dart';
-import 'package:motamayez/screens/activation_validation_required_screen.dart';
+import 'package:motamayez/screens/internet_connection_check_screen.dart';
 import 'package:motamayez/services/activation_service.dart';
+import 'package:motamayez/services/local_backup_service.dart';
 import 'package:motamayez/utils/app_logger.dart';
 
 class LicenseSessionGuard {
@@ -42,13 +46,24 @@ class LicenseSessionGuard {
   }) async {
     if (!authProvider.isLoggedIn) return;
 
-    final info = await _activationService.getActivationInfo(
-      forceServerValidation: false,
-    );
+    Map<String, dynamic> info;
+    try {
+      info = await _activationService.getActivationInfo(
+        forceServerValidation: false,
+      );
+    } catch (error, stackTrace) {
+      appLog(
+        'License session guard could not read activation info locally.',
+        name: 'LicenseSessionGuard',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      info = await _activationService.getInitialActivationInfo();
+    }
     if (!authProvider.isLoggedIn) return;
 
     final status = info['status']?.toString();
-    if (status != 'valid' && status != 'grace_period') {
+    if (status != null && status != 'valid' && status != 'grace_period') {
       await _endSession(
         authProvider: authProvider,
         navigator: navigator,
@@ -126,7 +141,7 @@ class LicenseSessionGuard {
     warning.value = null;
 
     final warningAt = deadline.time.subtract(_warningLeadTime);
-    if (!warningAt.isAfter(now)) {
+    if (warningAt.isBefore(now) || warningAt.isAtSameMomentAs(now)) {
       _showWarning(deadline);
       return;
     }
@@ -161,6 +176,31 @@ class LicenseSessionGuard {
     _warningTimer = null;
     warning.value = null;
     try {
+      final hasInternet = await _hasInternetConnection();
+      if (!hasInternet) {
+        _checking = false;
+        if (!navigator.mounted) return;
+        navigator.pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder:
+                (_) => InternetConnectionCheckScreen(                  onRetry: () async {
+                    final retryHasInternet = await _hasInternetConnection();
+                    if (!retryHasInternet) {
+                      return false;
+                    }
+                    await _handleDueTime(
+                      authProvider: authProvider,
+                      navigator: navigator,
+                    );
+                    return true;
+                  },
+                ),
+          ),
+          (route) => false,
+        );
+        return;
+      }
+
       final localInfo = await _activationService.getActivationInfo(
         forceServerValidation: false,
       );
@@ -214,6 +254,26 @@ class LicenseSessionGuard {
         stackTrace: stackTrace,
       );
       _checking = false;
+      try {
+        final fallbackInfo =
+            await _activationService.getInitialActivationInfo();
+        final deadline = _nextImportantDeadline(fallbackInfo);
+        if (deadline != null) {
+          final now = DateTime.now();
+          _scheduleWarning(deadline: deadline, now: now);
+          final warningAt = deadline.time.subtract(_warningLeadTime);
+          final delay =
+              warningAt.isAfter(now)
+                  ? warningAt.difference(now)
+                  : const Duration(seconds: 1);
+          _timer = Timer(delay, () {
+            unawaited(
+              _handleDueTime(authProvider: authProvider, navigator: navigator),
+            );
+          });
+          return;
+        }
+      } catch (_) {}
       await _scheduleNext(authProvider: authProvider, navigator: navigator);
     }
   }
@@ -226,7 +286,13 @@ class LicenseSessionGuard {
     stop();
     if (!authProvider.isLoggedIn) return;
 
-    await authProvider.logout();
+    await authProvider.logout(
+      beforeLogoutBackup: () async {
+        final localBackup = LocalBackupService();
+        await localBackup.init();
+        await localBackup.backupNow();
+      },
+    );
     if (!navigator.mounted) return;
 
     final status = info['status']?.toString();
@@ -239,17 +305,26 @@ class LicenseSessionGuard {
     navigator.pushAndRemoveUntil(
       MaterialPageRoute(
         builder:
-            (_) =>
-                expired
-                    ? const ActivationPage(
-                      initialMessage:
-                          'انتهت مدة الاشتراك. يرجى إرسال طلب تجديد ثم إدخال كود التفعيل الجديد بعد الموافقة.',
-                      renewalMode: true,
-                    )
-                    : ActivationValidationRequiredScreen(message: reason),
+            (_) => ActivationPage(
+              initialMessage:
+                  expired
+                      ? 'انتهت مدة الاشتراك. يرجى إرسال طلب تجديد ثم إدخال كود التفعيل الجديد بعد الموافقة.'
+                      : reason ?? 'تحتاج عملية التفعيل إلى إعادة تحقق من السيرفر.',
+              renewalMode: expired,
+            ),
       ),
       (route) => false,
     );
+  }
+
+  Future<bool> _hasInternetConnection() async {
+    try {
+      final host = Uri.parse(AppConstants.activationBaseUrl).host;
+      final addresses = await InternetAddress.lookup(host);
+      return addresses.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 }
 
@@ -279,18 +354,19 @@ class _LicenseSessionDeadline {
         return 'تنبيه الاشتراك';
       case _LicenseSessionDeadlineType.revalidation:
       case _LicenseSessionDeadlineType.offlineGrace:
-        return 'تنبيه التحقق';
+        return 'تنبيه فحص الإنترنت';
     }
   }
 
   String get warningMessage {
     switch (type) {
       case _LicenseSessionDeadlineType.expiration:
-        return 'تبقى أقل من 5 دقائق على انتهاء الاشتراك. احفظ عملك وجهز التجديد.';
+        return 'باقي 5 دقائق على انتهاء الاشتراك. احفظ عملك وجهز التجديد.';
       case _LicenseSessionDeadlineType.revalidation:
-        return 'تبقى أقل من 5 دقائق على فحص التفعيل. تأكد من اتصال الإنترنت لتستمر بدون انقطاع.';
+        return 'باقي 5 دقائق على فحص الإنترنت قبل التفعيل. تأكد من وجود اتصال حتى ننتقل للفحص في وقته.';
       case _LicenseSessionDeadlineType.offlineGrace:
-        return 'ستنتهي فترة السماح خلال أقل من 5 دقائق. اشبك الإنترنت لتستمر بالعمل.';
+        return 'باقي 5 دقائق على فحص الإنترنت قبل التفعيل. إذا رجع الاتصال سيكمل الفحص تلقائيًا.';
     }
   }
 }
+

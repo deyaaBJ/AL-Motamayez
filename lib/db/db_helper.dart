@@ -1,4 +1,6 @@
 import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:developer';
@@ -6,12 +8,24 @@ import 'package:motamayez/services/password_service.dart';
 
 class DBHelper {
   static Database? _db;
-  static const int _version = 14;
+  // ⬅️ تم رفع رقم النسخة لأننا أضفنا عمود debt_added_in_period لجدول sales_archive
+  static const int _version = 15;
+
+  // SQLite لديها حد أقصى افتراضي لعدد الـ bound parameters بالاستعلام الواحد
+  // (عادة 999). نقسم القوائم الطويلة لدفعات أصغر لتفادي فشل الاستعلام بالكامل.
+  static const int _sqliteMaxVariables = 500;
 
   Future<Database> get db async {
     if (_db != null) return _db!;
     _db = await initDb();
     return _db!;
+  }
+
+  Future<void> close() async {
+    if (_db != null) {
+      await _db!.close();
+      _db = null;
+    }
   }
 
   Future<Database> initDb() async {
@@ -20,16 +34,19 @@ class DBHelper {
       databaseFactory = databaseFactoryFfi;
     }
 
-    // 1. الحصول على مسار المجلد الحالي للمشروع
-    // ملحوظة: في بيئة التطوير سيكون مجلد المشروع، وفي الإنتاج سيكون بجانب ملف الـ .exe
-    String projectRoot = Directory.current.path;
-    String folderPath = join(projectRoot, 'data');
+    // ✅ إصلاح مشكلة الصلاحيات: لا نعتمد على working directory (Directory.current)
+    // لأنه قد يكون داخل مجلد نظام محمي مثل C:\Program Files عند التثبيت،
+    // ما يسبب Access Denied. نستخدم مجلد بيانات التطبيق الرسمي المخصص للكتابة.
+    String folderPath = await _resolveDataFolderPath();
 
-    // 2. إنشاء المجلد إذا لم يكن موجوداً
-    Directory(folderPath).createSync(recursive: true);
+    // إنشاء المجلد إذا لم يكن موجوداً
+    await Directory(folderPath).create(recursive: true);
 
     String path = join(folderPath, 'motamayez.db');
-    log('📂 Database path: $path');
+    debugPrint('📂 Database path: $path');
+    debugPrint('📌 Active DB file will be created/opened here: $path');
+    print('📂 Database path: $path');
+    print('📌 Active DB file will be created/opened here: $path');
 
     Database database = await openDatabase(
       path,
@@ -47,6 +64,27 @@ class DBHelper {
     return database;
   }
 
+  /// يحدد مجلد بيانات التطبيق الصحيح والقابل للكتابة على كل منصة.
+  /// - Desktop (Windows/Linux/macOS): مجلد بيانات التطبيق الخاص بالمستخدم
+  ///   (مثال Windows: C:\Users\<user>\AppData\Roaming\<app>), وهو دائماً قابل للكتابة
+  ///   بعكس مجلد التثبيت (Program Files) الذي قد يكون محمياً.
+  /// - في وضع التطوير (لا يوجد getApplicationSupportDirectory متاح لسبب ما)
+  ///   نرجع لمجلد المشروع كخطة بديلة.
+  Future<String> _resolveDataFolderPath() async {
+    try {
+      final supportDir = await getApplicationSupportDirectory();
+      return join(supportDir.path, 'data');
+    } catch (e) {
+      log('⚠️ تعذر الوصول لمجلد بيانات التطبيق، سيتم استخدام مجلد المشروع: $e');
+      return join(Directory.current.path, 'data');
+    }
+  }
+
+  Future<String> getDatabasePath() async {
+    final folderPath = await _resolveDataFolderPath();
+    return join(folderPath, 'motamayez.db');
+  }
+
   // تحديث دالة resetDatabase لتستخدم نفس المسار الجديد
   Future<void> resetDatabase() async {
     try {
@@ -57,8 +95,7 @@ class DBHelper {
         _db = null;
       }
 
-      // استخدام نفس المنطق للوصول للمجلد
-      String folderPath = join(Directory.current.path, 'data');
+      String folderPath = await _resolveDataFolderPath();
       String path = join(folderPath, 'motamayez.db');
 
       final file = File(path);
@@ -75,12 +112,15 @@ class DBHelper {
     }
   }
 
-  // ⬅️ جديد: دالة الترقية بين النسخ
+  // ⬅️ دالة الترقية بين النسخ
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     log('🔄 ترقية قاعدة البيانات من النسخة $oldVersion إلى $newVersion');
 
     if (oldVersion < 14) {
       await _upgradeToVersion14(db);
+    }
+    if (oldVersion < 15) {
+      await _upgradeToVersion15(db);
     }
   }
 
@@ -107,6 +147,33 @@ class DBHelper {
       log('Completed upgrade to version 14');
     } catch (e) {
       log('Upgrade to version 14 failed: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ جديد: ترقية مخصصة لإضافة عمود debt_added_in_period لجدول sales_archive
+  Future<void> _upgradeToVersion15(Database db) async {
+    try {
+      log('Starting upgrade to version 15...');
+
+      final archiveColumns = await db.rawQuery(
+        'PRAGMA table_info(sales_archive)',
+      );
+
+      if (archiveColumns.isNotEmpty) {
+        await _addColumnIfMissing(
+          db,
+          tableName: 'sales_archive',
+          columns: archiveColumns,
+          columnName: 'debt_added_in_period',
+          statement:
+              'ALTER TABLE sales_archive ADD COLUMN debt_added_in_period REAL NOT NULL DEFAULT 0',
+        );
+      }
+
+      log('Completed upgrade to version 15');
+    } catch (e) {
+      log('Upgrade to version 15 failed: $e');
       rethrow;
     }
   }
@@ -273,7 +340,7 @@ class DBHelper {
       );
     ''');
 
-    // ========== ⬅️ جدول سجل خصم الواردات (الجديد) ==========
+    // ========== جدول سجل خصم الواردات ==========
     await db.execute('''
       CREATE TABLE sale_batch_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -291,6 +358,7 @@ class DBHelper {
     ''');
 
     // ========== أرشيف الفواتير ==========
+    // ✅ تمت إضافة debt_added_in_period هنا حتى تتطابق بنية الجدول مع sales تماماً
     await db.execute('''
       CREATE TABLE sales_archive (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -551,6 +619,10 @@ class DBHelper {
     );
   }
 
+  /// ✅ إصلاح مشكلة بطء الإقلاع: كانت UPDATE sales_archive تعمل بكل مرة يفتح
+  /// فيها التطبيق بغض النظر عن وجود تغيير فعلي، ما يسبب مسح كامل للجدول
+  /// (Full Table Scan) في كل تشغيل. الآن: يتم تشغيل الـ backfill فقط إذا تمت
+  /// إضافة أعمدة جديدة فعلاً (أول مرة بعد الترقية)، وإلا يتم تجاهله بالكامل.
   Future<void> _upgradeArchiveSchema(Database db) async {
     final salesArchiveColumns = await db.rawQuery(
       'PRAGMA table_info(sales_archive)',
@@ -558,6 +630,8 @@ class DBHelper {
     final saleItemsArchiveColumns = await db.rawQuery(
       'PRAGMA table_info(sale_items_archive)',
     );
+
+    bool needsBackfill = false;
 
     if (salesArchiveColumns.isEmpty) {
       await db.execute('''
@@ -570,13 +644,15 @@ class DBHelper {
           payment_type TEXT NOT NULL DEFAULT 'cash',
           paid_amount REAL NOT NULL DEFAULT 0,
           remaining_amount REAL NOT NULL DEFAULT 0,
+          debt_added_in_period REAL NOT NULL DEFAULT 0,
           show_for_tax INTEGER,
           user_id INTEGER,
           archived_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
       ''');
+      // جدول جديد بالكامل، لا حاجة لـ backfill لأنه فاضي
     } else {
-      await _addColumnIfMissing(
+      final addedPaid = await _addColumnIfMissing(
         db,
         tableName: 'sales_archive',
         columns: salesArchiveColumns,
@@ -584,7 +660,7 @@ class DBHelper {
         statement:
             'ALTER TABLE sales_archive ADD COLUMN paid_amount REAL NOT NULL DEFAULT 0',
       );
-      await _addColumnIfMissing(
+      final addedRemaining = await _addColumnIfMissing(
         db,
         tableName: 'sales_archive',
         columns: salesArchiveColumns,
@@ -592,14 +668,14 @@ class DBHelper {
         statement:
             'ALTER TABLE sales_archive ADD COLUMN remaining_amount REAL NOT NULL DEFAULT 0',
       );
-      await _addColumnIfMissing(
+      final addedUserId = await _addColumnIfMissing(
         db,
         tableName: 'sales_archive',
         columns: salesArchiveColumns,
         columnName: 'user_id',
         statement: 'ALTER TABLE sales_archive ADD COLUMN user_id INTEGER',
       );
-      await _addColumnIfMissing(
+      final addedArchivedAt = await _addColumnIfMissing(
         db,
         tableName: 'sales_archive',
         columns: salesArchiveColumns,
@@ -607,6 +683,21 @@ class DBHelper {
         statement:
             'ALTER TABLE sales_archive ADD COLUMN archived_at TEXT DEFAULT CURRENT_TIMESTAMP',
       );
+      final addedDebt = await _addColumnIfMissing(
+        db,
+        tableName: 'sales_archive',
+        columns: salesArchiveColumns,
+        columnName: 'debt_added_in_period',
+        statement:
+            'ALTER TABLE sales_archive ADD COLUMN debt_added_in_period REAL NOT NULL DEFAULT 0',
+      );
+
+      needsBackfill =
+          addedPaid ||
+          addedRemaining ||
+          addedUserId ||
+          addedArchivedAt ||
+          addedDebt;
     }
 
     if (saleItemsArchiveColumns.isEmpty) {
@@ -629,22 +720,29 @@ class DBHelper {
       ''');
     }
 
-    await db.execute('''
-      UPDATE sales_archive
-      SET
-        paid_amount = CASE
-          WHEN payment_type = 'cash' AND COALESCE(paid_amount, 0) = 0 THEN total_amount
-          ELSE COALESCE(paid_amount, total_amount - COALESCE(remaining_amount, 0))
-        END,
-        remaining_amount = CASE
-          WHEN payment_type = 'credit' THEN COALESCE(remaining_amount, 0)
-          ELSE 0
-        END,
-        archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP)
-    ''');
+    // ⬅️ هذا الاستعلام الثقيل الآن يعمل فقط لما فعلاً تمت إضافة أعمدة جديدة
+    // (أي مرة واحدة عند الترقية)، وليس بكل فتح للتطبيق.
+    if (needsBackfill) {
+      log('🔧 تنفيذ backfill لجدول sales_archive بعد إضافة أعمدة جديدة...');
+      await db.execute('''
+        UPDATE sales_archive
+        SET
+          paid_amount = CASE
+            WHEN payment_type = 'cash' AND COALESCE(paid_amount, 0) = 0 THEN total_amount
+            ELSE COALESCE(paid_amount, total_amount - COALESCE(remaining_amount, 0))
+          END,
+          remaining_amount = CASE
+            WHEN payment_type = 'credit' THEN COALESCE(remaining_amount, 0)
+            ELSE 0
+          END,
+          archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP)
+      ''');
+      log('✅ اكتمل backfill جدول sales_archive');
+    }
   }
 
-  Future<void> _addColumnIfMissing(
+  /// يرجع true إذا تمت إضافة العمود فعلاً (أي كان مفقوداً)، و false إذا كان موجوداً أصلاً.
+  Future<bool> _addColumnIfMissing(
     Database db, {
     required String tableName,
     required List<Map<String, Object?>> columns,
@@ -655,7 +753,21 @@ class DBHelper {
     if (!hasColumn) {
       log('Adding missing column $columnName to $tableName');
       await db.execute(statement);
+      return true;
     }
+    return false;
+  }
+
+  /// يقسم قائمة معرفات طويلة إلى دفعات أصغر لتفادي تجاوز حد SQLite
+  /// لعدد الـ bound parameters بالاستعلام الواحد (خصوصاً بأول أرشفة لبيانات قديمة كثيرة).
+  List<List<int>> _chunkIds(List<int> ids, int chunkSize) {
+    final chunks = <List<int>>[];
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      chunks.add(
+        ids.sublist(i, i + chunkSize > ids.length ? ids.length : i + chunkSize),
+      );
+    }
+    return chunks;
   }
 
   Future<int> archiveHistoricalSales({Database? database}) async {
@@ -679,83 +791,96 @@ class DBHelper {
       }
 
       final ids = eligibleSales.map((row) => row['id'] as int).toList();
-      final placeholders = List.filled(ids.length, '?').join(',');
 
-      await txn.rawInsert('''
-        INSERT OR REPLACE INTO sales_archive (
-          id,
-          date,
-          total_amount,
-          total_profit,
-          customer_id,
-          payment_type,
-          paid_amount,
-          remaining_amount,
-          show_for_tax,
-          user_id,
-          archived_at
-        )
-        SELECT
-          id,
-          date,
-          total_amount,
-          total_profit,
-          customer_id,
-          payment_type,
-          COALESCE(paid_amount, CASE WHEN payment_type = 'cash' THEN total_amount ELSE 0 END),
-          COALESCE(remaining_amount, CASE WHEN payment_type = 'credit' THEN total_amount ELSE 0 END),
-          show_for_tax,
-          user_id,
-          CURRENT_TIMESTAMP
-        FROM sales
-        WHERE id IN ($placeholders)
-        ''', ids);
+      // ✅ إصلاح مشكلة تجاوز حد الـ parameters: نقسم المعرفات لدفعات
+      // بدل تمريرها كلها دفعة واحدة باستعلام قد يفشل مع أعداد كبيرة.
+      final chunks = _chunkIds(ids, _sqliteMaxVariables);
 
-      await txn.rawInsert('''
-        INSERT OR REPLACE INTO sale_items_archive (
-          id,
-          sale_id,
-          item_type,
-          product_id,
-          unit_id,
-          quantity,
-          unit_type,
-          custom_unit_name,
-          price,
-          cost_price,
-          subtotal,
-          profit,
-          batch_details
-        )
-        SELECT
-          id,
-          sale_id,
-          item_type,
-          product_id,
-          unit_id,
-          quantity,
-          unit_type,
-          custom_unit_name,
-          price,
-          cost_price,
-          subtotal,
-          profit,
-          batch_details
-        FROM sale_items
-        WHERE sale_id IN ($placeholders)
-        ''', ids);
+      for (final chunk in chunks) {
+        final placeholders = List.filled(chunk.length, '?').join(',');
 
-      await txn.delete(
-        'sale_batch_log',
-        where: 'sale_id IN ($placeholders)',
-        whereArgs: ids,
-      );
-      await txn.delete(
-        'sale_items',
-        where: 'sale_id IN ($placeholders)',
-        whereArgs: ids,
-      );
-      await txn.delete('sales', where: 'id IN ($placeholders)', whereArgs: ids);
+        await txn.rawInsert('''
+          INSERT OR REPLACE INTO sales_archive (
+            id,
+            date,
+            total_amount,
+            total_profit,
+            customer_id,
+            payment_type,
+            paid_amount,
+            remaining_amount,
+            debt_added_in_period,
+            show_for_tax,
+            user_id,
+            archived_at
+          )
+          SELECT
+            id,
+            date,
+            total_amount,
+            total_profit,
+            customer_id,
+            payment_type,
+            COALESCE(paid_amount, CASE WHEN payment_type = 'cash' THEN total_amount ELSE 0 END),
+            COALESCE(remaining_amount, CASE WHEN payment_type = 'credit' THEN total_amount ELSE 0 END),
+            COALESCE(debt_added_in_period, 0),
+            show_for_tax,
+            user_id,
+            CURRENT_TIMESTAMP
+          FROM sales
+          WHERE id IN ($placeholders)
+          ''', chunk);
+
+        await txn.rawInsert('''
+          INSERT OR REPLACE INTO sale_items_archive (
+            id,
+            sale_id,
+            item_type,
+            product_id,
+            unit_id,
+            quantity,
+            unit_type,
+            custom_unit_name,
+            price,
+            cost_price,
+            subtotal,
+            profit,
+            batch_details
+          )
+          SELECT
+            id,
+            sale_id,
+            item_type,
+            product_id,
+            unit_id,
+            quantity,
+            unit_type,
+            custom_unit_name,
+            price,
+            cost_price,
+            subtotal,
+            profit,
+            batch_details
+          FROM sale_items
+          WHERE sale_id IN ($placeholders)
+          ''', chunk);
+
+        await txn.delete(
+          'sale_batch_log',
+          where: 'sale_id IN ($placeholders)',
+          whereArgs: chunk,
+        );
+        await txn.delete(
+          'sale_items',
+          where: 'sale_id IN ($placeholders)',
+          whereArgs: chunk,
+        );
+        await txn.delete(
+          'sales',
+          where: 'id IN ($placeholders)',
+          whereArgs: chunk,
+        );
+      }
 
       archivedSalesCount = ids.length;
     });
@@ -772,7 +897,6 @@ class DBHelper {
       final database = await db;
       log('🔍 التحقق من هيكل قاعدة البيانات...');
 
-      // التحقق من الجداول الرئيسية
       final tables = [
         'products',
         'product_batches',
@@ -792,7 +916,6 @@ class DBHelper {
         if (result.isNotEmpty) {
           log('✅ جدول $table موجود');
 
-          // عرض أعمدة الجدول
           final columns = await database.rawQuery('PRAGMA table_info($table)');
 
           log('   أعمدة جدول $table:');
@@ -811,12 +934,10 @@ class DBHelper {
   }
 
   /// 🔧 إصلاح الواردات بدون تاريخ انتهاء التي لديها active = 0
-  /// تحديث active=1 للواردات بدون تاريخ انتهاء والتي لديها remaining_quantity > 0
   Future<int> fixInactiveNoExpiryBatches() async {
     try {
       final database = await db;
 
-      // تحديث الواردات التي بدون تاريخ انتهاء وactive=0 إلى active=1
       final result = await database.rawUpdate('''
         UPDATE product_batches 
         SET active = 1
@@ -838,13 +959,11 @@ class DBHelper {
     try {
       final database = await db;
 
-      // إجمالي الواردات النشطة
       final totalResult = await database.rawQuery('''
         SELECT COUNT(*) as count FROM product_batches WHERE active = 1
       ''');
       final totalActive = (totalResult.first['count'] as int?) ?? 0;
 
-      // عدد الواردات بدون تاريخ انتهاء النشطة
       final noExpiryResult = await database.rawQuery('''
         SELECT COUNT(*) as count FROM product_batches 
         WHERE active = 1 
@@ -852,7 +971,6 @@ class DBHelper {
       ''');
       final noExpiryActive = (noExpiryResult.first['count'] as int?) ?? 0;
 
-      // عدد الواردات بدون تاريخ انتهاء غير النشطة
       final noExpiryInactiveResult = await database.rawQuery('''
         SELECT COUNT(*) as count FROM product_batches 
         WHERE active = 0 

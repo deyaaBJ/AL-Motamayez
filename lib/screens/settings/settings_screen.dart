@@ -1,14 +1,12 @@
 // screens/settings/settings_screen.dart
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:motamayez/utils/app_config.dart';
-import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/constant/constant.dart';
 import 'package:motamayez/helpers/helpers.dart';
 import 'package:motamayez/providers/auth_provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/services/local_backup_service.dart';
 import 'package:motamayez/widgets/settings/settings_main_card.dart';
 import 'package:motamayez/screens/settings/admin_detail_screen.dart';
 import 'package:motamayez/screens/settings/cashiers_management_screen.dart';
@@ -39,8 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _currentPasswordTaxController = TextEditingController();
   final _logerIpController = TextEditingController();
   final _logerPortController = TextEditingController();
-
-  String? _backupFolderPath;
+  final _backupFolderController = TextEditingController();
 
   @override
   void initState() {
@@ -52,11 +49,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final localBackupService = Provider.of<LocalBackupService>(
+        context,
+        listen: false,
+      );
 
       await settings.loadSettings();
       _marketNameController.text = settings.marketName ?? '';
       _logerIpController.text = settings.logerIp ?? '';
       _logerPortController.text = (settings.logerPort ?? 9100).toString();
+      await localBackupService.init();
+      _backupFolderController.text = localBackupService.backupFolderPath ?? '';
 
       await _loadUserData(
         auth,
@@ -83,7 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _currentPasswordTaxController,
       );
 
-      await _loadBackupPath();
+      if (!mounted) return;
       setState(() {});
     } catch (e) {
       log('Error loading data: $e');
@@ -109,26 +112,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nameCtrl.text = role;
       emailCtrl.text = '$role@gmail.com';
       passCtrl.text = '********';
-    }
-  }
-
-  Future<void> _loadBackupPath() async {
-    final appConfig = AppConfig(
-      configFilePath: p.join(p.current, 'config.json'),
-    );
-    _backupFolderPath = await appConfig.getBackupFolderPath();
-  }
-
-  Future<void> _selectBackupFolder() async {
-    final selectedDir = await FilePicker.platform.getDirectoryPath();
-    if (selectedDir != null) {
-      final appConfig = AppConfig(
-        configFilePath: p.join(p.current, 'config.json'),
-      );
-      await appConfig.setBackupFolderPath(selectedDir);
-      setState(() => _backupFolderPath = selectedDir);
-      // ignore: use_build_context_synchronously
-      showAppToast(context, 'تم حفظ مكان النسخ الاحتياطي', ToastType.success);
     }
   }
 
@@ -224,8 +207,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           () => _navigate(
             StoreSettingsScreen(
               marketNameController: _marketNameController,
-              backupFolderPath: _backupFolderPath,
-              onSelectBackupFolder: _selectBackupFolder,
+              backupFolderController: _backupFolderController,
               onSaveMarketName: _saveMarketName,
             ),
           ),
@@ -460,6 +442,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _currentPasswordTaxController.dispose();
     _logerIpController.dispose();
     _logerPortController.dispose();
+    _backupFolderController.dispose();
     super.dispose();
   }
 }

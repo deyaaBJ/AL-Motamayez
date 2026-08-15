@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:motamayez/components/base_layout.dart';
 import 'package:motamayez/models/batch.dart';
@@ -23,6 +25,8 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  static const Duration _refreshInterval = Duration(minutes: 1);
+  Timer? _refreshTimer;
   int _expiredBatches = 0;
   int _expiringSoonBatches = 0;
   int _nearExpiryAlertDays = 7;
@@ -31,13 +35,34 @@ class _MainScreenState extends State<MainScreen> {
   List<Batch> _expiredBatchList = [];
   List<Batch> _expiringBatchList = [];
   String? _activationLabel = 'جاري تحميل حالة التفعيل...';
+  late final VoidCallback _activationInfoListener;
 
   @override
   void initState() {
     super.initState();
+    _activationInfoListener = _handleActivationInfoChanged;
+    ActivationService.activationInfoChanged.addListener(_activationInfoListener);
     // حمّل القيمة الأولية من الـ cache بسرعة
     _loadInitialActivationLabel();
     _loadInitialData();
+    _refreshTimer = Timer.periodic(_refreshInterval, (_) {
+      if (!mounted) return;
+      _refreshBatchAlerts();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    ActivationService.activationInfoChanged.removeListener(
+      _activationInfoListener,
+    );
+    super.dispose();
+  }
+
+  void _handleActivationInfoChanged() {
+    if (!mounted) return;
+    _loadInitialActivationLabel();
   }
 
   /// تحميل سريع لقيمة التفعيل من الـ cache (بدون انتظار شبكة)
@@ -53,7 +78,10 @@ class _MainScreenState extends State<MainScreen> {
 
           setState(() {
             if (type == 'temporary') {
-              _activationLabel = 'متبقي ${remainingDays ?? 0} يوم';
+              _activationLabel =
+                  remainingDays == null
+                      ? 'التفعيل المؤقت'
+                      : 'متبقي ${remainingDays} يوم';
             } else {
               _activationLabel = 'التفعيل الدائم';
             }
@@ -139,6 +167,29 @@ class _MainScreenState extends State<MainScreen> {
       });
     } catch (e) {
       appLog('خطأ في تحميل تنبيهات الواردات: $e', name: 'MainScreen');
+    }
+  }
+
+  Future<void> _refreshBatchAlerts() async {
+    try {
+      final batchProvider = Provider.of<BatchProvider>(context, listen: false);
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final alerts = await batchProvider.getBatchesAlertsWithDetails(
+        nearExpiryDays: settings.nearExpiryAlertDays,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _expiredBatches = alerts['expired'] ?? 0;
+        _expiringSoonBatches = alerts['expiring_soon'] ?? 0;
+        _nearExpiryAlertDays = settings.nearExpiryAlertDays;
+        _expiredBatchList = (alerts['expired_list'] as List<Batch>?) ?? [];
+        _expiringBatchList =
+            (alerts['expiring_soon_list'] as List<Batch>?) ?? [];
+      });
+    } catch (e) {
+      appLog('Ø®Ø·Ø£ ÙÙŠ ØªØ­Ø¯ÙŠØ« ØªÙ†Ø¨ÙŠÙ‡Ø§Øª Ø§Ù„ÙˆØ§Ø±Ø¯Ø§Øª: $e', name: 'MainScreen');
     }
   }
 

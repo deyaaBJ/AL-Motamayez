@@ -60,7 +60,7 @@ final class LicenseStateManager {
   final DeviceFingerprintResolver _resolveDeviceFingerprint;
   final SecurityRuntimeService _securityRuntime;
 
-static const Duration permanentRevalidationInterval = Duration(days: 5);
+  static const Duration permanentRevalidationInterval = Duration(days: 5);
   static const Duration permanentOfflineGrace = Duration.zero;
   static const Duration temporaryRevalidationInterval = Duration(hours: 24);
   static const Duration temporaryOfflineGrace = Duration(hours: 12);

@@ -238,9 +238,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               () => _navigateToDetail(
                 StoreSettingsScreen(
                   marketNameController: _marketNameController,
+                  onSaveMarketName: _saveMarketName,
                   backupFolderPath: _backupFolderPath,
                   onSelectBackupFolder: _selectBackupFolder,
-                  onSaveMarketName: _saveMarketName,
                 ),
               ),
         ),
@@ -1549,14 +1549,14 @@ class _TaxDetailScreenState extends State<TaxDetailScreen> {
 class StoreSettingsScreen extends StatelessWidget {
   final TextEditingController marketNameController;
   final String? backupFolderPath;
-  final VoidCallback onSelectBackupFolder;
+  final VoidCallback? onSelectBackupFolder;
   final Function(String) onSaveMarketName;
 
   const StoreSettingsScreen({
     super.key,
     required this.marketNameController,
-    required this.backupFolderPath,
-    required this.onSelectBackupFolder,
+    this.backupFolderPath,
+    this.onSelectBackupFolder,
     required this.onSaveMarketName,
   });
 

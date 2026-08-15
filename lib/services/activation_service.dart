@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:motamayez/db/db_helper.dart';
+import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -58,7 +61,10 @@ class ActivationService {
   final LicenseStateManager _stateManager;
   final ActivationApiClient _apiClient;
 
- static const String _criticalOperationDepthKey = 'license_critical_depth';
+  static final ValueNotifier<Map<String, dynamic>?> activationInfoChanged =
+      ValueNotifier<Map<String, dynamic>?>(null);
+
+  static const String _criticalOperationDepthKey = 'license_critical_depth';
   static const String _sessionStartedAtKey = 'license_session_started_at';
   static const String _activationBlockStatusKey = 'activation_block_status';
   static const String _activationBlockRecordedAtKey =
@@ -371,10 +377,26 @@ class ActivationService {
   }
 
   static Future<String?> _resolveHardwareDeviceFingerprint() async {
-    if (Platform.isWindows) {
-      return _getWindowsDeviceFingerprint();
+    final prefs = await SharedPreferences.getInstance();
+    const key = 'cached_device_fingerprint';
+
+    // لو محفوظ من قبل، استخدمه مباشرة - ما تعيد الحساب أبداً
+    final cached = prefs.getString(key);
+    if (cached != null && cached.isNotEmpty) {
+      return cached;
     }
-    return null;
+
+    // أول مرة بس: احسب واحفظ
+    String? fingerprint;
+    if (Platform.isWindows) {
+      fingerprint = await _getWindowsDeviceFingerprint();
+    }
+
+    if (fingerprint != null && fingerprint.isNotEmpty) {
+      await prefs.setString(key, fingerprint);
+    }
+
+    return fingerprint;
   }
 
   Future<String?> getDeviceId() {
@@ -385,8 +407,50 @@ class ActivationService {
     return _resolveHardwareDeviceFingerprint();
   }
 
- Future<Map<String, dynamic>?> _readSavedLicenseState() {
+  Future<Map<String, dynamic>?> _readSavedLicenseState() {
     return _storage.readLicenseCache();
+  }
+
+  Future<Map<String, dynamic>?> _readSavedDatabaseFingerprint() {
+    return _storage.readDatabaseFingerprint();
+  }
+
+  Future<Map<String, dynamic>> _buildDatabaseFingerprint() async {
+    final path = await DBHelper().getDatabasePath();
+    final file = File(path);
+    if (!await file.exists()) {
+      return {'exists': false, 'path': path};
+    }
+
+    final bytes = await file.readAsBytes();
+    final stat = await file.stat();
+    return {
+      'exists': true,
+      'path': path,
+      'name': p.basename(path),
+      'size': bytes.length,
+      'sha256': sha256.convert(bytes).toString(),
+      'modified': stat.modified.toIso8601String(),
+    };
+  }
+
+  Future<bool> _isDatabaseFingerprintChanged() async {
+    final savedFingerprint = await _readSavedDatabaseFingerprint();
+    if (savedFingerprint == null || savedFingerprint.isEmpty) return false;
+
+    final currentFingerprint = await _buildDatabaseFingerprint();
+    if (currentFingerprint['exists'] != true) return true;
+
+    final savedHash = savedFingerprint['sha256']?.toString();
+    final currentHash = currentFingerprint['sha256']?.toString();
+    final savedSize = savedFingerprint['size']?.toString();
+    final currentSize = currentFingerprint['size']?.toString();
+    final savedModified = savedFingerprint['modified']?.toString();
+    final currentModified = currentFingerprint['modified']?.toString();
+
+    return savedHash != currentHash ||
+        savedSize != currentSize ||
+        savedModified != currentModified;
   }
 
   Future<String?> _readActivationBlockStatus() async {
@@ -410,7 +474,7 @@ class ActivationService {
     await prefs.remove(_activationBlockRecordedAtKey);
   }
 
- Map<String, dynamic>? _blockedActivationInfo(String? status) {
+  Map<String, dynamic>? _blockedActivationInfo(String? status) {
     if (!_shouldClearLocalActivationForServerStatus(status)) return null;
     return {
       'has_activation': false,
@@ -427,11 +491,18 @@ class ActivationService {
       if (blockStatus != null) {
         final blocked = _blockedActivationInfo(blockStatus);
         if (blocked != null) {
-          return {
-            ...blocked,
-            'activation_type': 'permanent',
-          };
+          return {...blocked, 'activation_type': 'permanent'};
         }
+      }
+
+      if (await _isDatabaseFingerprintChanged()) {
+        await clearActivation();
+        return {
+          'has_activation': false,
+          'activation_type': 'permanent',
+          'status': 'not_activated',
+          'signature_details': 'database_file_changed',
+        };
       }
 
       final savedState = await _storage.readLicenseCache();
@@ -439,8 +510,8 @@ class ActivationService {
         return {'has_activation': false, 'activation_type': 'permanent'};
       }
 
-      final result = await _evaluateLicenseState();
-      final cache = result['cache'] as Map<String, dynamic>?;
+      final evaluationResult = await _evaluateLicenseState();
+      final cache = evaluationResult['cache'] as Map<String, dynamic>?;
 
       if (cache == null) {
         return {'has_activation': false, 'activation_type': 'permanent'};
@@ -452,23 +523,35 @@ class ActivationService {
               ? null
               : _calculateRemainingDays(expiresAt);
 
-      return {
+      final result = {
         'has_activation': true,
         'license_id': cache['licenseId'],
         'activation_type': cache['licenseType'] ?? 'permanent',
         'expires_at': expiresAt,
         'remaining_days': remainingDays,
       };
+      activationInfoChanged.value = Map<String, dynamic>.from(result);
+      return result;
     } catch (_) {
       return {'has_activation': false, 'activation_type': 'permanent'};
     }
   }
 
   Future<Map<String, dynamic>> _activationInfoFromLocalEvaluation() async {
-    final result = await _evaluateLicenseState();
-    final status = result['status']?.toString() ?? 'not_activated';
-    final cache = result['cache'] as Map<String, dynamic>?;
-    final evaluation = result['evaluation'] as LicenseEvaluationResult?;
+    if (await _isDatabaseFingerprintChanged()) {
+      await clearActivation();
+      return {
+        'has_activation': false,
+        'status': 'not_activated',
+        'signature_details': 'database_file_changed',
+      };
+    }
+
+    final evaluationResult = await _evaluateLicenseState();
+    final status = evaluationResult['status']?.toString() ?? 'not_activated';
+    final cache = evaluationResult['cache'] as Map<String, dynamic>?;
+    final evaluation =
+        evaluationResult['evaluation'] as LicenseEvaluationResult?;
 
     if (status == 'not_activated' || cache == null) {
       return {'has_activation': false, 'status': 'not_activated'};
@@ -480,7 +563,7 @@ class ActivationService {
             ? null
             : _calculateRemainingDays(expiresAt);
 
-    return {
+    final result = {
       'has_activation': true,
       'status': evaluation?.publicStatus ?? status,
       'license_id': cache['licenseId'],
@@ -498,6 +581,8 @@ class ActivationService {
       'can_use_current_session': evaluation?.canUseCurrentSession == true,
       'allow_login': evaluation?.allowLogin == true,
     };
+    activationInfoChanged.value = Map<String, dynamic>.from(result);
+    return result;
   }
 
   Future<void> _saveActivatedLicense({
@@ -571,6 +656,7 @@ class ActivationService {
     // تفعيل ناجح فعليًا => أي حظر/رفض قديم محفوظ يروح من هنا.
     await _clearActivationBlockStatus();
   }
+
   String? _licenseTokenFromCache(Map<String, dynamic>? cache) {
     final token = cache?['licenseToken']?.toString().trim();
     return token == null || token.isEmpty ? null : token;
@@ -682,13 +768,13 @@ class ActivationService {
   Map<String, dynamic> _buildLicenseEnvelope({
     required Map<String, dynamic> activationData,
     required String signature,
+    required String deviceId,
     String? token,
   }) {
     final license = _extractActivationLicense(activationData) ?? activationData;
     return {
       'license': {
-        'deviceId':
-            license['deviceId']?.toString() ?? activationData['deviceId']?.toString(),
+        'deviceId': deviceId,
         'activationCode':
             license['activationCode']?.toString() ??
             license['code']?.toString() ??
@@ -705,8 +791,11 @@ class ActivationService {
             license['id']?.toString() ??
             activationData['licenseId']?.toString() ??
             activationData['id']?.toString(),
-        'status': license['status']?.toString() ?? activationData['status']?.toString(),
-        'type': license['type']?.toString() ?? activationData['type']?.toString(),
+        'status':
+            license['status']?.toString() ??
+            activationData['status']?.toString(),
+        'type':
+            license['type']?.toString() ?? activationData['type']?.toString(),
       },
       'signature': signature,
       if (token != null && token.isNotEmpty) 'token': token,
@@ -776,7 +865,7 @@ class ActivationService {
     await _storage.clearLegacySensitiveState();
   }
 
- Future<void> _completeLocalActivation({
+  Future<void> _completeLocalActivation({
     required Map<String, dynamic> activationData,
     required String signature,
     String? token,
@@ -790,6 +879,7 @@ class ActivationService {
     final envelope = _buildLicenseEnvelope(
       activationData: activationData,
       signature: signature,
+      deviceId: deviceId,
       token: token,
     );
 
@@ -818,12 +908,13 @@ class ActivationService {
     };
 
     await _persistCache(state);
+    await _storage.saveDatabaseFingerprint(await _buildDatabaseFingerprint());
     await _storage.clearLegacySensitiveState();
     await _storage.clearPendingRequest();
     await _clearActivationBlockStatus();
   }
 
- Future<void> _completeServerTokenActivation({
+  Future<void> _completeServerTokenActivation({
     required Map<String, dynamic> activationData,
     required String token,
   }) async {
@@ -841,6 +932,7 @@ class ActivationService {
     final envelope = _buildLicenseEnvelope(
       activationData: activationData,
       signature: '',
+      deviceId: deviceId,
       token: token,
     );
 
@@ -869,11 +961,11 @@ class ActivationService {
     };
 
     await _persistCache(state);
+    await _storage.saveDatabaseFingerprint(await _buildDatabaseFingerprint());
     await _storage.clearLegacySensitiveState();
     await _storage.clearPendingRequest();
     await _clearActivationBlockStatus();
   }
-
 
   Future<Map<String, dynamic>> _evaluateLicenseState() async {
     await _migrateLegacyStateIfNeeded();
@@ -887,7 +979,8 @@ class ActivationService {
       'evaluation': evaluation,
     };
   }
-Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
+
+  Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
     try {
       final deviceId = await getDeviceId();
       final deviceFingerprint = await getDeviceFingerprint();
@@ -1126,6 +1219,7 @@ Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
       };
     }
   }
+
   Future<Map<String, dynamic>> getRequestStatus({String? requestId}) async {
     try {
       final savedRequest = await _storage.getSavedPendingRequest();
@@ -1226,10 +1320,19 @@ Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
               'تعذر قراءة بصمة الجهاز. لا يمكن إكمال التفعيل قبل إعادة التحقق.',
         };
       }
+      final deviceFingerprint = await getDeviceFingerprint();
+      if (deviceFingerprint == null || deviceFingerprint.isEmpty) {
+        return {
+          'success': false,
+          'status': 'needs_revalidation',
+          'message':
+              'تعذر قراءة بصمة الجهاز. لا يمكن إكمال التفعيل قبل إعادة التحقق.',
+        };
+      }
       final response = await _apiClient.activate(
         activationCode: normalizedCode,
         deviceId: deviceId,
-        deviceFingerprint: deviceId,
+        deviceFingerprint: deviceFingerprint,
         requestId: effectiveRequestId,
       );
       final statusCode = response['statusCode'] as int;
@@ -1316,6 +1419,7 @@ Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
           licenseEnvelope: _buildLicenseEnvelope(
             activationData: activation,
             signature: signature,
+            deviceId: deviceId,
             token: token,
           ),
           now: DateTime.now(),
@@ -1345,10 +1449,12 @@ Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
         } else {
           final now = DateTime.now();
           final type =
-              activation['type']?.toString() ?? _classifyLicenseType(activation);
+              activation['type']?.toString() ??
+              _classifyLicenseType(activation);
           final envelope = _buildLicenseEnvelope(
             activationData: activation,
             signature: '',
+            deviceId: deviceId,
           );
           final state = <String, dynamic>{
             'licenseBlob': jsonEncode(envelope),
@@ -1437,6 +1543,10 @@ Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
       await _storage.clearPendingRequest();
       await prefs.remove(_criticalOperationDepthKey);
       await prefs.remove(_sessionStartedAtKey);
+      activationInfoChanged.value = <String, dynamic>{
+        'has_activation': false,
+        'status': 'not_activated',
+      };
     } catch (_) {}
   }
 
@@ -1454,6 +1564,15 @@ Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
         if (blocked != null) {
           return blocked;
         }
+      }
+
+      if (await _isDatabaseFingerprintChanged()) {
+        await clearActivation();
+        return {
+          'has_activation': false,
+          'status': 'not_activated',
+          'signature_details': 'database_file_changed',
+        };
       }
 
       savedState = await _readSavedLicenseState();
@@ -1546,6 +1665,17 @@ Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
       updatedState['licenseStatus'] = 'valid';
       await _storage.saveLicenseCache(updatedState);
       await _clearActivationBlockStatus();
+      activationInfoChanged.value = {
+        'has_activation': true,
+        'status': 'valid',
+        'activation_type': claims?['type']?.toString() ?? 'permanent',
+        'license_id': claims?['licenseId']?.toString(),
+        'expires_at': updatedState['expiresAt']?.toString(),
+        'remaining_days':
+            updatedState['expiresAt']?.toString() == null
+                ? null
+                : _calculateRemainingDays(updatedState['expiresAt'].toString()),
+      };
 
       return {
         'has_activation': true,
@@ -1619,8 +1749,7 @@ Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
               evaluation?.nextRevalidationAt?.toIso8601String(),
           'signature_details':
               cache['failureReason']?.toString() ?? evaluation?.reason,
-          'verification_status':
-              evaluation?.verificationStatus.name ?? status,
+          'verification_status': evaluation?.verificationStatus.name ?? status,
           'security_trust': evaluation?.trustScore?.toPublicMap(),
           'can_use_current_session': evaluation?.canUseCurrentSession == true,
           'allow_login': evaluation?.allowLogin == true,
@@ -1635,7 +1764,7 @@ Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
       }
     }
   }
-  
+
   Future<void> beginCriticalOperation() async {
     final prefs = await SharedPreferences.getInstance();
     final current = prefs.getInt(_criticalOperationDepthKey) ?? 0;
@@ -1735,6 +1864,17 @@ Future<Map<String, dynamic>> checkDeviceActivationOnServer() async {
       updated['lastValidationTime'] = DateTime.now().toIso8601String();
       updated['licenseStatus'] = 'valid';
       await _storage.saveLicenseCache(updated);
+      activationInfoChanged.value = {
+        'has_activation': true,
+        'status': 'valid',
+        'activation_type': updated['licenseType']?.toString() ?? 'permanent',
+        'license_id': updated['licenseId']?.toString(),
+        'expires_at': updated['expiresAt']?.toString(),
+        'remaining_days':
+            updated['expiresAt']?.toString() == null
+                ? null
+                : _calculateRemainingDays(updated['expiresAt'].toString()),
+      };
 
       return {
         'success': true,

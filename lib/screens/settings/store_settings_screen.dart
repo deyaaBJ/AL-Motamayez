@@ -1,20 +1,21 @@
-// screens/settings/store_settings_screen.dart (المصحح)
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import 'package:motamayez/providers/settings_provider.dart';
+import 'package:motamayez/services/local_backup_service.dart';
 import 'package:motamayez/widgets/settings/settings_section.dart';
+import 'package:motamayez/widgets/settings/settings_text_field.dart';
 
 class StoreSettingsScreen extends StatelessWidget {
   final TextEditingController marketNameController;
-  final String? backupFolderPath;
-  final VoidCallback onSelectBackupFolder;
+  final TextEditingController backupFolderController;
   final Function(String) onSaveMarketName;
 
   const StoreSettingsScreen({
     super.key,
     required this.marketNameController,
-    required this.backupFolderPath,
-    required this.onSelectBackupFolder,
+    required this.backupFolderController,
     required this.onSaveMarketName,
   });
 
@@ -42,7 +43,7 @@ class StoreSettingsScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    _buildStoreInfoSection(settings),
+                    _buildStoreInfoSection(),
                     const SizedBox(height: 24),
                     _buildCurrencySection(settings),
                     const SizedBox(height: 24),
@@ -52,7 +53,7 @@ class StoreSettingsScreen extends StatelessWidget {
                     const SizedBox(height: 24),
                     _buildAlertsSection(settings),
                     const SizedBox(height: 24),
-                    _buildBackupSection(settings),
+                    _buildLocalBackupSection(context),
                   ],
                 ),
               ),
@@ -61,7 +62,7 @@ class StoreSettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStoreInfoSection(SettingsProvider settings) {
+  Widget _buildStoreInfoSection() {
     return SettingsSection(
       title: 'معلومات المتجر',
       icon: Icons.store,
@@ -102,11 +103,11 @@ class StoreSettingsScreen extends StatelessWidget {
       icon: Icons.currency_exchange,
       color: const Color(0xFF9C27B0),
       child: _buildDropdown<String>(
-        value: settings.currency ?? 'USD', // ✅ تم التصليح هنا
+        value: settings.currency ?? 'USD',
         items: const [
-          DropdownMenuItem(value: 'USD', child: Text("🇺🇸 الدولار الأمريكي")),
-          DropdownMenuItem(value: 'JOD', child: Text("🇯🇴 الدينار الأردني")),
-          DropdownMenuItem(value: 'ILS', child: Text("🇮🇱 الشيكل الإسرائيلي")),
+          DropdownMenuItem(value: 'USD', child: Text('🇺🇸 الدولار الأمريكي')),
+          DropdownMenuItem(value: 'JOD', child: Text('🇯🇴 الدينار الأردني')),
+          DropdownMenuItem(value: 'ILS', child: Text('🇮🇱 الشيكل الإسرائيلي')),
         ],
         onChanged: (v) => settings.updateCurrency(v!),
       ),
@@ -118,46 +119,38 @@ class StoreSettingsScreen extends StatelessWidget {
       title: 'إعدادات الضريبة',
       icon: Icons.receipt,
       color: const Color(0xFF9C27B0),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[300]!),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'المبيعات مضمنة الضريبة',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'المبيعات مضمونة الضريبة',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                settings.defaultTaxSetting == 1
+                    ? '✓ المبيعات الجديدة ستكون مضمونة الضريبة'
+                    : '✗ المبيعات الجديدة ستكون غير مضمونة الضريبة',
+                style: TextStyle(
+                  fontSize: 13,
+                  color:
+                      settings.defaultTaxSetting == 1
+                          ? Colors.green
+                          : Colors.orange,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  settings.defaultTaxSetting == 1
-                      ? '✓ المبيعات الجديدة ستكون مضمنة الضريبة'
-                      : '✗ المبيعات الجديدة ستكون غير مضمنة الضريبة',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color:
-                        settings.defaultTaxSetting == 1
-                            ? Colors.green
-                            : Colors.orange,
-                  ),
-                ),
-              ],
-            ),
-            Switch(
-              value: settings.defaultTaxSetting == 1,
-              onChanged:
-                  (value) => settings.updateDefaultTaxSetting(value ? 1 : 0),
-              activeThumbColor: const Color(0xFF9C27B0),
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+          Switch(
+            value: settings.defaultTaxSetting == 1,
+            onChanged:
+                (value) => settings.updateDefaultTaxSetting(value ? 1 : 0),
+            activeThumbColor: const Color(0xFF9C27B0),
+          ),
+        ],
       ),
     );
   }
@@ -170,9 +163,7 @@ class StoreSettingsScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'الحد الأدنى الافتراضي للمخزون: ${settings.lowStockThreshold}',
-          ),
+          Text('الحد الأدنى الافتراضي للمخزون: ${settings.lowStockThreshold}'),
           const SizedBox(height: 4),
           Text(
             'يُستخدم هذا الرقم إذا لم يتم تخصيص حد خاص داخل المنتج.',
@@ -185,42 +176,6 @@ class StoreSettingsScreen extends StatelessWidget {
             divisions: 49,
             activeColor: const Color(0xFF9C27B0),
             onChanged: (v) => settings.updateLowStockThreshold(v.round()),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBackupSection(SettingsProvider settings) {
-    return SettingsSection(
-      title: 'النسخ الاحتياطي',
-      icon: Icons.backup,
-      color: const Color(0xFF9C27B0),
-      child: Column(
-        children: [
-          _buildBackupPathDisplay(),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: onSelectBackupFolder,
-              icon: const Icon(Icons.folder_open),
-              label: const Text(
-                'اختيار المجلد',
-                style: TextStyle(color: Colors.white),
-              ),
-              style: _buttonStyle(),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildDropdown<int>(
-            value: settings.numberOfCopies ?? 5,
-            items: List.generate(
-              7,
-              (i) =>
-                  DropdownMenuItem(value: i + 1, child: Text('${i + 1} نسخة')),
-            ),
-            onChanged: (v) => settings.updateNumberOfCopies(v!),
           ),
         ],
       ),
@@ -257,33 +212,126 @@ class StoreSettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildBackupPathDisplay() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.folder,
-            color: backupFolderPath != null ? Colors.green : Colors.grey,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              backupFolderPath ?? 'لم يتم تحديد مكان',
-              style: TextStyle(
-                color: backupFolderPath != null ? Colors.green : Colors.grey,
+  Widget _buildLocalBackupSection(BuildContext context) {
+    return Consumer<LocalBackupService>(
+      builder: (context, backup, child) {
+        final isEnabled = backup.isEnabled;
+        return SettingsSection(
+          title: 'النسخ المحلي',
+          icon: Icons.backup,
+          color: const Color(0xFF9C27B0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'الحالة:',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          isEnabled
+                              ? 'مفعل — سيتم إنشاء نسخ تلقائية كل ساعة'
+                              : 'غير مفعل — اختر مجلدًا لتفعيل النسخ',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color:
+                                isEnabled
+                                    ? Colors.green.shade700
+                                    : Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: isEnabled,
+                    onChanged: (value) async {
+                      if (value) {
+                        final selected = backupFolderController.text.trim();
+                        if (selected.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('اختر مجلد النسخ أولًا'),
+                            ),
+                          );
+                          return;
+                        }
+                        await backup.setBackupFolderPath(selected);
+                      } else {
+                        await backup.disable();
+                      }
+                    },
+                  ),
+                ],
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+              const SizedBox(height: 16),
+              SettingsTextField(
+                controller: backupFolderController,
+                label: 'مجلد النسخ المحلي',
+                icon: Icons.folder_open,
+                color: const Color(0xFF9C27B0),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final selected = await FilePicker.platform.getDirectoryPath(
+                      dialogTitle: 'اختر مجلد النسخ الاحتياطي',
+                    );
+                    if (selected == null || selected.isEmpty) return;
+                    backupFolderController.text = selected;
+                    await backup.setBackupFolderPath(selected);
+                  },
+                  icon: const Icon(Icons.folder_open),
+                  label: const Text(
+                    'اختيار مجلد',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: _buttonStyle(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final selected = backupFolderController.text.trim();
+                    if (selected.isEmpty) return;
+                    await backup.setBackupFolderPath(selected);
+                    await backup.backupNow();
+                  },
+                  icon: const Icon(Icons.save),
+                  label: const Text(
+                    'تشغيل نسخة الآن',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: _buttonStyle(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                backup.backupFolderPath == null ||
+                        backup.backupFolderPath!.isEmpty
+                    ? 'لم يتم اختيار مجلد للنسخ بعد.'
+                    : 'سيتم حفظ النسخ داخل: ${backup.backupFolderPath}',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'سيتم النسخ تلقائيًا كل ساعة وعند تسجيل الخروج من التطبيق.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

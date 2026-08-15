@@ -578,7 +578,7 @@ class _PurchaseInvoicePageState extends State<PurchaseInvoicePage> {
                         await context.read<ProductProvider>().loadProducts(
                           reset: true,
                         );
-                        _showSuccess('تم حفظ الرصيد الافتتاحي بنجاح');
+                        _showSuccess('تم حفظ المخزون الحالي بنجاح');
                       },
                       tooltip: 'إضافة رصيد افتتاحي',
                     ),

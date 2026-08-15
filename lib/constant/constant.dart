@@ -3,8 +3,8 @@
 class AppConstants {
   static const developerName = 'ضياء بني جابر';
   static const developerEmail = 'deyaa.banijaber@gmail.com';
-  static const developerPhone = '+970595352667';
-  static const supportWhatsAppPhone = '+970595352667';
+  static const developerPhone = '+972549573779';
+  static const supportWhatsAppPhone = '+972549573779';
   static const supportWhatsAppMessage =
       'مرحباً، أحتاج مساعدة في تفعيل الكود في نظام المتمايز (AL Motamayez POS)، و أحيث أنني أحتاج إلى مساعدة في إصلاح الخطأ.';
 

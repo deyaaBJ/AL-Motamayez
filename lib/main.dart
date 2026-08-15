@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -28,6 +29,8 @@ import 'providers/expense_provider.dart';
 import 'providers/temporary_invoice_provider.dart';
 import 'providers/batch_provider.dart';
 import 'providers/opening_balance_provider.dart';
+import 'services/local_backup_service.dart';
+import 'services/update_service.dart';
 
 import 'screens/auth/login.dart';
 import 'screens/home.dart';
@@ -41,7 +44,6 @@ import 'screens/purchase_invoice_page.dart';
 import 'screens/expenses_page.dart';
 import 'screens/activation_page.dart';
 import 'screens/internet_connection_check_screen.dart';
-import 'screens/activation_validation_required_screen.dart';
 import 'screens/batches_screen.dart';
 import 'screens/opening_balance_screen.dart';
 import 'services/activation_service.dart';
@@ -123,6 +125,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => BatchProvider()),
         ChangeNotifierProvider(create: (_) => OpeningBalanceProvider()),
         ChangeNotifierProvider(create: (_) => CashierActivityProvider()),
+        ChangeNotifierProvider(create: (_) => LocalBackupService()),
       ],
       child: const MotamayezApp(),
     ),
@@ -142,6 +145,65 @@ class _MotamayezAppState extends State<MotamayezApp> with WindowListener {
     super.initState();
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       windowManager.addListener(this);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<LocalBackupService>().init();
+      unawaited(_checkForAppUpdate());
+    });
+  }
+
+  Future<void> _checkForAppUpdate() async {
+    if (!Platform.isWindows) return;
+
+    try {
+      final info = await UpdateService().checkForUpdate();
+      if (!mounted || info == null || !info.hasUpdate) return;
+
+      final shouldUpdate = await showDialog<bool>(
+        context: navigatorKey.currentContext ?? context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              title: const Text('تحديث جديد متوفر'),
+              content: Text(
+                'يوجد إصدار أحدث للتطبيق.\n'
+                'الإصدار الحالي: ${info.currentVersion}\n'
+                'الإصدار الجديد: ${info.tagName}',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('تحديث لاحقاً'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('تحديث الآن'),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      if (shouldUpdate == true) {
+        final messenger = ScaffoldMessenger.maybeOf(
+          navigatorKey.currentContext ?? context,
+        );
+        messenger?.showSnackBar(
+          const SnackBar(content: Text('جارٍ تنزيل التحديث وتثبيته...')),
+        );
+
+        final installed = await UpdateService().downloadAndInstall(info);
+        if (installed && mounted) {
+          Future.delayed(const Duration(seconds: 1), () {
+            exit(0);
+          });
+        }
+      }
+    } catch (_) {
+      // فشل التحديث لا يجب أن يمنع فتح التطبيق.
     }
   }
 
@@ -230,7 +292,12 @@ class _AppEntryState extends State<AppEntry> {
   late Future<Map<String, dynamic>> _activationCheck = Future.value({
     'status': 'loading',
   });
-  bool _showConnectivityCheck = false;
+  String? _activationWarningLabel;
+  bool _showActivationWarning = false;
+  DateTime? _warningDeadline;
+  bool _lastKnownInternet = true;
+  bool _requiresActivationCheckGate = false;
+  Timer? _activationDeadlineTimer;
 
   @override
   void initState() {
@@ -238,21 +305,187 @@ class _AppEntryState extends State<AppEntry> {
     _bootstrapActivationFlow();
   }
 
+  @override
+  void dispose() {
+    _activationDeadlineTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _bootstrapActivationFlow() async {
+    final localInfo = await ActivationService().getInitialActivationInfo();
+    if (!mounted) return;
+    _updateActivationWarning(localInfo);
+    _requiresActivationCheckGate = _needsActivationGate(localInfo);
     final hasInternet = await _hasInternetConnection();
     if (!mounted) return;
+    _lastKnownInternet = hasInternet;
+
+    setState(() {
+      _activationCheck = Future.value(_activationInfoForStartup(localInfo));
+    });
+  }
+
+  bool _needsActivationGate(Map<String, dynamic> info) {
+    final status = info['status']?.toString();
+    return status == 'session_only' ||
+        status == 'needs_revalidation' ||
+        status == 'clock_tampering_detected' ||
+        status == 'runtime_suspicious';
+  }
+
+  void _updateActivationWarning(Map<String, dynamic> info) {
+    _activationDeadlineTimer?.cancel();
+    _activationDeadlineTimer = null;
+
+    final status = info['status']?.toString();
+    final now = DateTime.now();
+
+    DateTime? deadline;
+    if (status == 'expired') {
+      final expiresAt = info['expires_at']?.toString();
+      deadline = expiresAt == null ? null : DateTime.tryParse(expiresAt);
+    } else {
+      final nextRevalidationAt = info['next_revalidation_at']?.toString();
+      deadline =
+          nextRevalidationAt == null
+              ? null
+              : DateTime.tryParse(nextRevalidationAt);
+      final offlineGraceUntil = info['offline_grace_until']?.toString();
+      final graceDeadline =
+          offlineGraceUntil == null
+              ? null
+              : DateTime.tryParse(offlineGraceUntil);
+      if (deadline == null ||
+          (graceDeadline != null && graceDeadline.isBefore(deadline))) {
+        deadline = graceDeadline;
+      }
+    }
+
+    final warningAt =
+        deadline == null ? null : deadline.subtract(const Duration(minutes: 5));
+    final shouldShowWarning =
+        deadline != null &&
+        warningAt != null &&
+        !warningAt.isAfter(now) &&
+        deadline.isAfter(now);
+
+    if (!mounted) return;
+    setState(() {
+      _warningDeadline = deadline;
+      _showActivationWarning = shouldShowWarning;
+      _activationWarningLabel =
+          shouldShowWarning
+              ? 'تنبيه: متبقي 5 دقائق على فحص الإنترنت قبل التفعيل'
+              : null;
+    });
+
+    if (deadline != null && _activationDeadlineTimer == null) {
+      final delay =
+          warningAt != null && warningAt.isAfter(now)
+              ? warningAt.difference(now)
+              : const Duration(seconds: 1);
+      _activationDeadlineTimer = Timer(delay, () {
+        if (!mounted) return;
+        setState(() {
+          _showActivationWarning = false;
+          _activationWarningLabel = null;
+        });
+        _activationDeadlineTimer?.cancel();
+        _activationDeadlineTimer = null;
+        _activationCheck = _checkActivation(forceServerValidation: true);
+      });
+    }
+  }
+
+  Map<String, dynamic> _offlineActivationResult(Map<String, dynamic> info) {
+    final status = info['status']?.toString() ?? 'not_activated';
+    if (status == 'valid' || status == 'grace_period') {
+      return {
+        'status': status,
+        'activation_type': info['activation_type'],
+        'remaining_days': info['remaining_days'],
+        'message': info['signature_details']?.toString(),
+      };
+    }
+
+    if (status == 'expired') {
+      return {
+        'status': 'expired',
+        'message':
+            'انتهت مدة الاشتراك. يرجى إرسال طلب تجديد ثم إدخال كود التفعيل الجديد بعد الموافقة.',
+      };
+    }
+
+    if (status == 'needs_revalidation' ||
+        status == 'session_only' ||
+        status == 'clock_tampering_detected' ||
+        status == 'runtime_suspicious') {
+      return {
+        'status': status,
+        'message': info['signature_details']?.toString(),
+      };
+    }
+
+    return {'status': status};
+  }
+
+  Map<String, dynamic> _activationInfoForStartup(
+    Map<String, dynamic> localInfo,
+  ) {
+    final status = localInfo['status']?.toString();
+
+    if (status == 'valid' || status == 'grace_period') {
+      return {
+        'status': status,
+        'activation_type': localInfo['activation_type'],
+        'remaining_days': localInfo['remaining_days'],
+        'message': localInfo['signature_details']?.toString(),
+      };
+    }
+
+    if (status == 'not_activated') {
+      return {'status': 'not_activated'};
+    }
+
+    if (status == 'expired') {
+      return {
+        'status': 'expired',
+        'message': localInfo['signature_details']?.toString(),
+      };
+    }
+
+    if (status == 'session_only' ||
+        status == 'needs_revalidation' ||
+        status == 'clock_tampering_detected' ||
+        status == 'runtime_suspicious') {
+      return {
+        'status': status,
+        'message': localInfo['signature_details']?.toString(),
+      };
+    }
+
+    return {
+      'status': status ?? 'not_activated',
+      'message': localInfo['signature_details']?.toString(),
+    };
+  }
+
+  Future<bool> _retryConnectivityAndActivation() async {
+    final hasInternet = await _hasInternetConnection();
+    if (!mounted) return false;
 
     if (!hasInternet) {
       setState(() {
-        _showConnectivityCheck = true;
+        _lastKnownInternet = false;
       });
-      return;
+      return false;
     }
 
     setState(() {
-      _showConnectivityCheck = false;
+      _lastKnownInternet = true;
       _activationCheck = _checkActivation(forceServerValidation: true);
     });
+    return true;
   }
 
   // main.dart - AppEntry
@@ -296,64 +529,95 @@ class _AppEntryState extends State<AppEntry> {
       }
 
       if (!hasActivation) {
+        _updateActivationWarning(info);
         return {'status': 'not_activated'};
       }
 
       switch (status) {
         case 'valid':
         case 'grace_period':
+          _updateActivationWarning(info);
           return {
             'status': status,
             'activation_type': info['activation_type'],
             'remaining_days': info['remaining_days'],
-            'message': signatureDetails,
+            'message': signatureDetails ?? info['message']?.toString(),
           };
 
         case 'session_only':
         case 'needs_revalidation':
         case 'clock_tampering_detected':
-          if (signatureDetails == 'license_expired' ||
-              signatureDetails == 'temporary_license_expired') {
-            return {
-              'status': 'expired',
-              'message':
-                  'انتهت مدة الاشتراك. يرجى إرسال طلب تجديد ثم إدخال كود التفعيل الجديد بعد الموافقة.',
-            };
-          }
-
-          if (signatureDetails == 'missing_signed_license_blob') {
-            return {'status': 'not_activated'};
-          }
-
-          return {'status': status, 'message': signatureDetails};
-
         case 'runtime_suspicious':
-          return {'status': 'not_activated'};
+        case 'not_activated':
+          _updateActivationWarning(info);
+          return {
+            'status': status,
+            'message': signatureDetails ?? info['message']?.toString(),
+          };
 
         case 'invalid':
         case 'expired':
+          _updateActivationWarning(info);
+          return {
+            'status': 'expired',
+            'message':
+                info['message']?.toString() ??
+                signatureDetails ??
+                'انتهت مدة الاشتراك. يرجى إرسال طلب تجديد ثم إدخال كود التفعيل الجديد بعد الموافقة.',
+          };
+
+        case 'error':
+          _updateActivationWarning(info);
+          return {
+            'status': hasActivation ? 'error' : 'not_activated',
+            'error':
+                info['error']?.toString() ??
+                signatureDetails ??
+                status?.toString(),
+          };
+
+        default:
+          _updateActivationWarning(info);
+          return {
+            'status': 'error',
+            'error':
+                info['error']?.toString() ??
+                signatureDetails ??
+                status?.toString(),
+          };
+      }
+    } catch (e) {
+      try {
+        final fallback = await ActivationService().getInitialActivationInfo();
+        _updateActivationWarning(fallback);
+        final fallbackStatus = fallback['status']?.toString();
+        if (fallbackStatus == 'valid' || fallbackStatus == 'grace_period') {
+          return {
+            'status': fallbackStatus,
+            'activation_type': fallback['activation_type'],
+            'remaining_days': fallback['remaining_days'],
+            'message': fallback['signature_details']?.toString(),
+          };
+        }
+
+        if (fallbackStatus == 'expired') {
           return {
             'status': 'expired',
             'message':
                 'انتهت مدة الاشتراك. يرجى إرسال طلب تجديد ثم إدخال كود التفعيل الجديد بعد الموافقة.',
           };
+        }
 
-        case 'not_activated':
-          return {'status': 'not_activated'};
-
-        case 'error':
+        if (fallbackStatus == 'needs_revalidation' ||
+            fallbackStatus == 'session_only' ||
+            fallbackStatus == 'clock_tampering_detected' ||
+            fallbackStatus == 'runtime_suspicious') {
           return {
-            'status': hasActivation ? 'error' : 'not_activated',
-            'error': info['error'] ?? signatureDetails ?? status?.toString(),
+            'status': fallbackStatus,
+            'message': fallback['signature_details']?.toString(),
           };
-
-        default:
-          return {
-            'status': 'error',
-            'error': info['error'] ?? signatureDetails ?? status?.toString(),
-          };
-      }
-    } catch (e) {
+        }
+      } catch (_) {}
       return {'status': 'error', 'error': e.toString()};
     }
   }
@@ -371,81 +635,92 @@ class _AppEntryState extends State<AppEntry> {
     }
   }
 
-  Future<bool> _retryConnectivityAndActivation() async {
-    final hasInternet = await _hasInternetConnection();
-    if (!mounted) return false;
-
-    if (!hasInternet) {
-      return false;
-    }
-
-    setState(() {
-      _showConnectivityCheck = false;
-      _activationCheck = _checkActivation(forceServerValidation: true);
-    });
-
-    return true;
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_showConnectivityCheck) {
-      return InternetConnectionCheckScreen(
-        onRetry: _retryConnectivityAndActivation,
-      );
-    }
+    final content =
+        !_lastKnownInternet && _requiresActivationCheckGate
+            ? InternetConnectionCheckScreen(
+              onRetry: _retryConnectivityAndActivation,
+            )
+            : FutureBuilder<Map<String, dynamic>>(
+              future: _activationCheck,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return _buildLoadingScreen();
+                }
 
-    return FutureBuilder<Map<String, dynamic>>(
-      future: _activationCheck,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingScreen();
-        }
+                if (snapshot.hasError) {
+                  return _buildErrorScreen(snapshot.error.toString());
+                }
 
-        if (snapshot.hasError) {
-          return _buildErrorScreen(snapshot.error.toString());
-        }
+                final data = snapshot.data!;
+                final status = data['status'];
 
-        final data = snapshot.data!;
-        final status = data['status'];
+                switch (status) {
+                  case 'valid':
+                  case 'grace_period':
+                    return const LoginScreen();
 
-        switch (status) {
-          case 'valid':
-          case 'grace_period':
-            return const LoginScreen();
+                  case 'session_only':
+                  case 'needs_revalidation':
+                  case 'clock_tampering_detected':
+                  case 'runtime_suspicious':
+                    return _lastKnownInternet
+                        ? ActivationPage(
+                          initialMessage: data['message']?.toString(),
+                        )
+                        : InternetConnectionCheckScreen(
+                          onRetry: _retryConnectivityAndActivation,
+                        );
 
-          case 'session_only':
-          case 'needs_revalidation':
-          case 'clock_tampering_detected':
-            return ActivationValidationRequiredScreen(
-              message: data['message']?.toString(),
-              onRetry: () {
-                setState(() {
-                  _activationCheck = _checkActivation(
-                    forceServerValidation: true,
-                  );
-                });
+                  case 'not_activated':
+                    return _lastKnownInternet
+                        ? ActivationPage(
+                          initialMessage: data['message']?.toString(),
+                        )
+                        : InternetConnectionCheckScreen(
+                          onRetry: _retryConnectivityAndActivation,
+                        );
+
+                  case 'expired':
+                    return ActivationPage(
+                      initialMessage: data['message']?.toString(),
+                      renewalMode: true,
+                    );
+
+                  case 'error':
+                    return _lastKnownInternet
+                        ? ActivationPage(
+                          initialMessage:
+                              data['error']?.toString() ??
+                              'تعذر قراءة حالة التفعيل',
+                        )
+                        : InternetConnectionCheckScreen(
+                          onRetry: _retryConnectivityAndActivation,
+                        );
+
+                  default:
+                    return ActivationPage(
+                      initialMessage: data['message']?.toString(),
+                    );
+                }
               },
             );
 
-          case 'not_activated':
-            return const ActivationPage();
-
-          case 'expired':
-            return ActivationPage(
-              initialMessage: data['message']?.toString(),
-              renewalMode: true,
-            );
-
-          case 'error':
-            return _buildErrorScreen(
-              data['error']?.toString() ?? 'تعذر قراءة حالة التفعيل',
-            );
-
-          default:
-            return const ActivationPage();
-        }
-      },
+    return Stack(
+      children: [
+        content,
+        if (_showActivationWarning && _activationWarningLabel != null)
+          Positioned(
+            top: 12,
+            left: 16,
+            right: 16,
+            child: _ActivationWarningStrip(
+              label: _activationWarningLabel!,
+              deadline: _warningDeadline,
+            ),
+          ),
+      ],
     );
   }
 
@@ -502,3 +777,51 @@ class _AppEntryState extends State<AppEntry> {
     );
   }
 }
+
+class _ActivationWarningStrip extends StatelessWidget {
+  const _ActivationWarningStrip({required this.label, required this.deadline});
+
+  final String label;
+  final DateTime? deadline;
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Material(
+        elevation: 10,
+        borderRadius: BorderRadius.circular(14),
+        color: const Color(0xFFFFF7ED),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFF59E0B)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.notifications_active_rounded,
+                color: Color(0xFFC2410C),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  deadline == null ? label : '$label',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF9A3412),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+

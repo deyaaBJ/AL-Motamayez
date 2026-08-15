@@ -52,50 +52,51 @@ class MainScreenHeader extends StatelessWidget {
               ),
             ],
           ),
-          if (activationLabel != null && activationLabel!.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    // ignore: deprecated_member_use
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 15,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-                border: Border.all(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
                   // ignore: deprecated_member_use
-                  color: const Color(0xFF7C3AED).withOpacity(0.2),
-                  width: 1,
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 15,
+                  offset: const Offset(0, 3),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF7C3AED), Color(0xFFA78BFA)],
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    activationLabel!,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF4C1D95),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+              ],
+              border: Border.all(
+                // ignore: deprecated_member_use
+                color: const Color(0xFF7C3AED).withOpacity(0.2),
+                width: 1,
               ),
             ),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF7C3AED), Color(0xFFA78BFA)],
+                    ),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  activationLabel?.isNotEmpty == true
+                      ? activationLabel!
+                      : 'ليبل تجريبي',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF4C1D95),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

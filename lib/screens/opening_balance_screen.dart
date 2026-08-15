@@ -313,7 +313,7 @@ class _OpeningBalanceScreenState extends State<OpeningBalanceScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: BaseLayout(
-        currentPage: 'الرصيد الافتتاحي',
+        currentPage: 'المخزون الحالي',
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -788,7 +788,7 @@ class _OpeningBalanceScreenState extends State<OpeningBalanceScreen> {
                             )
                             : const Icon(Icons.save),
                     label: Text(
-                      _isSaving ? 'جارٍ الحفظ...' : 'حفظ الرصيد الافتتاحي',
+                      _isSaving ? 'جارٍ الحفظ...' : 'حفظ المخزون الحالي',
                       style: const TextStyle(fontSize: 16),
                     ),
                     style: ElevatedButton.styleFrom(

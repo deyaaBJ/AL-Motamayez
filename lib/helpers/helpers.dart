@@ -10,6 +10,8 @@ void showAppToast(BuildContext context, String message, ToastType type) {
         description: Text(message),
         animationType: AnimationType.slideInFromTop,
         toastAlignment: Alignment.topCenter,
+        toastDuration: const Duration(seconds: 3),
+        dismissable: true,
       ).show(context);
       break;
 
@@ -18,6 +20,8 @@ void showAppToast(BuildContext context, String message, ToastType type) {
         description: Text(message),
         animationType: AnimationType.slideInFromTop,
         toastAlignment: Alignment.topCenter,
+        toastDuration: const Duration(seconds: 3),
+        dismissable: true,
       ).show(context);
       break;
 
@@ -26,6 +30,8 @@ void showAppToast(BuildContext context, String message, ToastType type) {
         description: Text(message),
         animationType: AnimationType.slideInFromTop,
         toastAlignment: Alignment.topCenter,
+        toastDuration: const Duration(seconds: 3),
+        dismissable: true,
       ).show(context);
       break;
   }

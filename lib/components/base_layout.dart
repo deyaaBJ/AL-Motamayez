@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:motamayez/providers/auth_provider.dart';
 import 'package:motamayez/services/license_session_guard.dart';
+import 'package:motamayez/services/local_backup_service.dart';
 import 'package:provider/provider.dart';
 import 'package:motamayez/providers/settings_provider.dart';
 
@@ -80,7 +83,7 @@ class _BaseLayoutState extends State<BaseLayout> {
       case 'الواردات':
         Navigator.pushReplacementNamed(context, '/batches');
         break;
-      case 'الرصيد الافتتاحي':
+      case 'المخزون الحالي':
         Navigator.pushReplacementNamed(context, '/openingBalance');
         break;
       case 'cashier':
@@ -94,8 +97,20 @@ class _BaseLayoutState extends State<BaseLayout> {
         break;
       case 'logout':
         LicenseSessionGuard.instance.stop();
-        authProvider.logout();
-        Navigator.pushReplacementNamed(context, '/login');
+        final localBackup = Provider.of<LocalBackupService>(
+          context,
+          listen: false,
+        );
+        unawaited(
+          authProvider.logout(
+            beforeLogoutBackup: () async {
+              await localBackup.backupNow();
+              if (mounted) {
+                Navigator.pushReplacementNamed(context, '/login');
+              }
+            },
+          ),
+        );
         break;
     }
   }
@@ -120,12 +135,12 @@ class _BaseLayoutState extends State<BaseLayout> {
     },
     {
       'icon': Icons.playlist_add_check_circle_rounded,
-      'label': 'الرصيد الافتتاحي',
-      'page': 'الرصيد الافتتاحي',
+      'label': 'المخزون الحالي',
+      'page': 'المخزون الحالي',
     },
     {
       'icon': Icons.receipt_long_rounded,
-      'label': 'نشاط الكاشير',
+      'label': 'نقاط الكاشير',
       'page': 'cashier',
     },
   ];
@@ -156,7 +171,7 @@ class _BaseLayoutState extends State<BaseLayout> {
     {'icon': Icons.analytics_rounded, 'label': 'التقارير', 'page': 'التقارير'},
   ];
 
-  // ✅ بناء الشريط الجانبي الأيمن - items أصغر
+  // بناء الشريط الجانبي الأيمن - items أصغر
   Widget _buildRightSidebar() {
     return Container(
       width: 110,
@@ -225,9 +240,7 @@ class _BaseLayoutState extends State<BaseLayout> {
                 ),
                 itemCount:
                     _rightSidebarItems
-                        .where(
-                          (item) => _hasPermission(item['page']),
-                        ) // ✅ فلترة
+                        .where((item) => _hasPermission(item['page'])) // فلترة
                         .length,
                 separatorBuilder:
                     (context, index) => const SizedBox(height: 10),
@@ -258,7 +271,7 @@ class _BaseLayoutState extends State<BaseLayout> {
                 if (_hasPermission('settings')) ...[
                   _buildSidebarItem(
                     icon: Icons.settings_rounded,
-                    label: 'الإعدادات',
+                    label: 'الاعدادات',
                     isSelected: widget.currentPage == 'settings',
                     onTap: () => _handlePageChange('settings'),
                   ),
@@ -279,7 +292,7 @@ class _BaseLayoutState extends State<BaseLayout> {
     );
   }
 
-  // ✅ items أصغر في السايد بار
+  // items أصغر في السايد بار
   Widget _buildSidebarItem({
     required IconData icon,
     required String label,
@@ -328,7 +341,7 @@ class _BaseLayoutState extends State<BaseLayout> {
     );
   }
 
-  // ✅ بناء عنصر في الشريط العلوي
+  // بناء عنصر في الشريط العلوي
   Widget _buildTopSidebarItem({
     required Map<String, dynamic> item,
     required bool isSelected,
@@ -428,7 +441,7 @@ class _BaseLayoutState extends State<BaseLayout> {
     );
   }
 
-  // ✅ بناء الشريط العلوي
+  // بناء الشريط العلوي
   Widget _buildTopSidebar() {
     return Container(
       height: 65,
@@ -465,14 +478,14 @@ class _BaseLayoutState extends State<BaseLayout> {
                 child: _buildFancyTitle(screenWidth),
               ),
 
-              // ✅ تصفية العناصر حسب الدور
+              // تصفية العناصر حسب الدور
               Expanded(
                 child: Row(
                   children:
                       _topSidebarItems
                           .where(
                             (item) => _hasPermission(item['page']),
-                          ) // ✅ فلترة حسب الصلاحية
+                          ) // فلترة حسب الصلاحية
                           .map((item) {
                             final isSelected =
                                 widget.currentPage == item['page'];
@@ -503,26 +516,26 @@ class _BaseLayoutState extends State<BaseLayout> {
     );
   }
 
-  // ✅ "المتميز" فاخر بدون container - نص عادي بستايل مميز
+  // "المتميز" فاخر بدون container - نص عادي بس ستايل مميز
   Widget _buildFancyTitle(double screenWidth) {
     final double fontSize =
         screenWidth < 400
-            ? 20 // ✅ أكبر
-            : (screenWidth < 600 ? 24 : 28); // ✅ أكبر وأوضح
+            ? 20 // أكبر
+            : (screenWidth < 600 ? 24 : 28); // أكبر وأوضح
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // ✅ أيقونة صغيرة قبل الاسم (اختياري)
+        // أيقونة صغيرة قبل الاسم (اختياري)
         const SizedBox(width: 4),
-        // ✅ النص بستايل فاخر
+        // النص بستايل فاخر
         Text(
           'المتميز',
           style: TextStyle(
             fontSize: fontSize,
             fontWeight: FontWeight.w900,
             fontFamily: 'Amiri',
-            // ✅ gradient text بدون container
+            // gradient text بدون container
             foreground:
                 Paint()
                   ..shader = const LinearGradient(
@@ -562,7 +575,6 @@ class _BaseLayoutState extends State<BaseLayout> {
       backgroundColor: const Color(0xFFF8F9FF),
       body: Row(
         children: [
-          // الشريط الجانبي الأيمن
           _buildRightSidebar(),
 
           // المحتوى الرئيسي
@@ -604,15 +616,12 @@ class _BaseLayoutState extends State<BaseLayout> {
     );
   }
 
-  // في BaseLayout - أضف هذه الدالة للتحقق من الصلاحيات
   bool _hasPermission(String page) {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final role = auth.role;
 
-    // Admin يرى كل شيء
     if (role == 'admin') return true;
 
-    // Cashier - يُسمح له فقط بـ: نقاط البيع، الزبائن
     if (role == 'cashier') {
       final blockedPages = [
         'التقارير', // التقارير
@@ -621,7 +630,7 @@ class _BaseLayoutState extends State<BaseLayout> {
         'فاتورة شراء', // فواتير الشراء
         'الفواتير', // الفواتير
         'الموردين', // الموردين
-        'الرصيد الافتتاحي',
+        'المخزون الحالي',
       ];
       return !blockedPages.contains(page);
     }
@@ -634,7 +643,7 @@ class _BaseLayoutState extends State<BaseLayout> {
         'فاتورة شراء', // فواتير الشراء
         'الفواتير', // الفواتير
         'الموردين', // الموردين
-        'الرصيد الافتتاحي',
+        'المخزون الحالي',
       ];
       return !blockedPages.contains(page);
     }
